@@ -18,6 +18,15 @@ build:
 preview: build
     npm run preview
 
+# Build and start the production container on an available port.
+up:
+    docker compose up --build --detach
+    @port=$(docker compose port web 80 | head -n 1 | sed 's/.*://'); echo "herdr web: http://localhost:$port"
+
+# Stop and remove the production container.
+down:
+    docker compose down
+
 # Run reducer and component tests once.
 test:
     npm test

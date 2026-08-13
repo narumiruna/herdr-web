@@ -45,6 +45,32 @@ npm run preview
 
 You can use the equivalent `just install`, `just run`, and `just build` commands when [just](https://github.com/casey/just) is installed.
 
+## Run with Docker
+
+Build and start the production container with `just`:
+
+```sh
+just up
+```
+
+Docker selects an available host port, and `just up` prints the URL to open.
+
+Set `HERDR_WEB_PORT` when you need a fixed host port:
+
+```sh
+HERDR_WEB_PORT=4173 just up
+```
+
+Stop and remove the container with:
+
+```sh
+just down
+```
+
+The equivalent commands without `just` are `docker compose up --build -d` and `docker compose down`.
+
+The image uses Node.js to build the Vite app, then serves the static bundle from Nginx with SPA route fallback and a `/healthz` health check.
+
 ## Verification
 
 ```sh
