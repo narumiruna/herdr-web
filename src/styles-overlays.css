@@ -386,6 +386,117 @@
 }
 
 /* Collapse contextual activity before compressing the terminal. */
+.connection-screen {
+  display: grid;
+  width: 100%;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 15%, var(--amber-3), transparent 34%),
+    var(--canvas);
+}
+
+.connection-card {
+  display: flex;
+  width: min(440px, 100%);
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 42px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-raised);
+  box-shadow: var(--shadow-dialog);
+  text-align: center;
+}
+
+.connection-card .brand-mark {
+  width: 54px;
+  height: 54px;
+}
+
+.connection-eyebrow {
+  color: var(--amber-11);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.connection-card h1,
+.connection-card p {
+  margin: 0;
+}
+
+.connection-card h1 {
+  font-size: clamp(24px, 5vw, 34px);
+  letter-spacing: -0.04em;
+}
+
+.connection-card p {
+  max-width: 34ch;
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+
+.connection-card code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.88em;
+}
+
+.connection-form {
+  display: flex;
+  width: 100%;
+  gap: 9px;
+}
+
+.connection-form .rt-TextFieldRoot {
+  flex: 1;
+}
+
+.connection-lock,
+.connection-spinner {
+  width: 24px;
+  height: 24px;
+  color: var(--amber-10);
+}
+
+.connection-spinner {
+  animation: working-spin 1.6s linear infinite;
+}
+
+.connection-error,
+.session-form-error {
+  color: var(--red-11);
+  font-size: 12px;
+}
+
+.runtime-error {
+  display: flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--red-6);
+  background: var(--red-3);
+  color: var(--red-11);
+  font-size: 12px;
+}
+
+.runtime-error button {
+  display: grid;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  place-items: center;
+}
+
 @media (max-width: 1180px) {
   .workspace-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -439,6 +550,10 @@
   .app-shell {
     display: block;
     min-height: 560px;
+  }
+  .app-surface {
+    height: 100dvh;
+    overflow: hidden;
   }
   .desktop-sidebar {
     display: none;

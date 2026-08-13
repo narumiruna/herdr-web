@@ -22,6 +22,7 @@ lib-cov
 coverage
 test-results/
 playwright-report/
+.herdr-web-runtime/
 *.lcov
 
 # nyc test coverage
@@ -83,6 +84,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist-server
 .output
 
 # Gatsby files

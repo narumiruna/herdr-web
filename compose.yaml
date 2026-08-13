@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      HERDR_TCP_HOST: host.docker.internal
+      HERDR_TCP_PORT: "${HERDR_TCP_PORT:-0}"
+      HERDR_WEB_TOKEN: "${HERDR_WEB_TOKEN:-}"
     ports:
-      - "${HERDR_WEB_PORT:-0}:80"
+      - "${HERDR_WEB_PORT:-0}:8080"
     restart: unless-stopped

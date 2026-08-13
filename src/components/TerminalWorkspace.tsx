@@ -22,11 +22,11 @@ import { StatusPill } from "./StatusPill";
 interface TerminalWorkspaceProps {
   agent: Agent;
   workspace: Workspace;
-  onMessage: (message: string) => void;
+  onMessage: (message: string) => void | Promise<void>;
   onNewSession: () => void;
-  onSplitPane: () => void;
+  onSplitPane: () => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
-  onClosePane: (paneId: string) => void;
+  onClosePane: (paneId: string) => void | Promise<void>;
   onShowActivity: () => void;
 }
 
@@ -58,7 +58,7 @@ interface TerminalPaneViewProps {
   focused: boolean;
   canClose: boolean;
   onFocus: () => void;
-  onClose: () => void;
+  onClose: () => void | Promise<void>;
 }
 
 function TerminalPaneView({
@@ -91,7 +91,7 @@ function TerminalPaneView({
             aria-label={`Close ${pane.title} pane`}
             onClick={(event) => {
               event.stopPropagation();
-              onClose();
+              void Promise.resolve(onClose()).catch(() => undefined);
             }}
           >
             <Cross2Icon />
@@ -138,12 +138,21 @@ export function TerminalWorkspace({
   onShowActivity,
 }: TerminalWorkspaceProps) {
   const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const canPrompt = agent.canPrompt !== false;
 
-  const submitMessage = (event: FormEvent) => {
+  const submitMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if (!message.trim()) return;
-    onMessage(message);
-    setMessage("");
+    if (!message.trim() || !canPrompt || sending) return;
+    setSending(true);
+    try {
+      await onMessage(message);
+      setMessage("");
+    } catch {
+      // The runtime-level alert presents the bridge error and keeps the draft.
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -178,7 +187,9 @@ export function TerminalWorkspace({
               color="gray"
               aria-label="Split terminal"
               disabled={agent.panes.length >= 2}
-              onClick={onSplitPane}
+              onClick={() =>
+                void Promise.resolve(onSplitPane()).catch(() => undefined)
+              }
             >
               <ColumnsIcon /> Split
             </Button>
@@ -308,10 +319,13 @@ export function TerminalWorkspace({
             value={message}
             aria-label={`Message ${agent.label}`}
             placeholder={
-              agent.status === "blocked"
-                ? "Type a decision or instruction…"
-                : `Send a follow-up to ${agent.label}…`
+              !canPrompt
+                ? "This pane is not a detected agent"
+                : agent.status === "blocked"
+                  ? "Type a decision or instruction…"
+                  : `Send a follow-up to ${agent.label}…`
             }
+            disabled={!canPrompt || sending}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -325,7 +339,7 @@ export function TerminalWorkspace({
             color="amber"
             variant={message.trim() ? "solid" : "soft"}
             aria-label="Send message"
-            disabled={!message.trim()}
+            disabled={!canPrompt || !message.trim() || sending}
           >
             <PaperPlaneIcon />
             <span>Send</span>

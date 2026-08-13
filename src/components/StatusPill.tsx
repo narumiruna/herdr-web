@@ -10,6 +10,7 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
   blocked: "Needs you",
   done: "Done",
   idle: "Idle",
+  unknown: "Terminal",
   working: "Working",
 };
 

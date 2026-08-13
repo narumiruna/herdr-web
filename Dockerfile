@@ -10,14 +10,22 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
-FROM nginx:1.28-alpine AS runtime
+FROM node:22-alpine AS runtime
 
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-EXPOSE 80
+ENV BRIDGE_HOST=0.0.0.0 \
+    HERDR_SOCKET_PATH=/run/herdr/herdr.sock \
+    HERDR_WEB_STATIC_ROOT=/app/dist \
+    PORT=8080
+
+COPY package.json ./
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/dist-server ./dist-server
+
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://127.0.0.1/healthz || exit 1
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "dist-server/index.js"]

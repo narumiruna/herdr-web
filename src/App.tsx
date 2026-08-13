@@ -1,5 +1,6 @@
 import {
   ActivityLogIcon,
+  Cross2Icon,
   HamburgerMenuIcon,
   MagnifyingGlassIcon,
   MoonIcon,
@@ -7,34 +8,39 @@ import {
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { IconButton, Theme } from "@radix-ui/themes";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityRail } from "./components/ActivityRail";
 import { CommandPalette, NewSessionDialog } from "./components/AppDialogs";
+import { ConnectionScreen } from "./components/ConnectionScreen";
 import { FlockRail } from "./components/FlockRail";
 import { HerdrLogo } from "./components/HerdrLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalWorkspace } from "./components/TerminalWorkspace";
-import {
-  appReducer,
-  createDemoState,
-  type RuntimeName,
-  selectedAgent,
-  selectedWorkspace,
-} from "./state";
+import type { RuntimeName } from "./state";
+import { useHerdrRuntime } from "./use-herdr-runtime";
 
-export function App() {
-  const [state, dispatch] = useReducer(appReducer, undefined, createDemoState);
+interface AppProps {
+  live?: boolean;
+}
+
+export function App({
+  live = import.meta.env.VITE_DEMO_MODE !== "true",
+}: AppProps) {
+  const runtime = useHerdrRuntime(live);
+  const { state } = runtime;
   const [appearance, setAppearance] = useState<"light" | "dark">("light");
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileActivityOpen, setMobileActivityOpen] = useState(false);
-  const sessionCounter = useRef(1);
-  const paneCounter = useRef(1);
-  const workspace = selectedWorkspace(state);
-  const agent = selectedAgent(state);
+  const workspace =
+    state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
+    state.workspaces[0];
+  const agent =
+    state.agents.find(({ id }) => id === state.selectedAgentId) ??
+    state.agents[0];
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -47,20 +53,58 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  if (runtime.status !== "ready") {
+    return (
+      <Theme
+        appearance={appearance}
+        accentColor="amber"
+        grayColor="sand"
+        radius="medium"
+        className="herdr-theme"
+      >
+        <ConnectionScreen
+          error={runtime.error}
+          status={runtime.status}
+          onRetry={() => void runtime.refresh()}
+          onToken={runtime.setAccessToken}
+        />
+      </Theme>
+    );
+  }
+
+  if (!workspace || !agent) {
+    return (
+      <Theme
+        appearance={appearance}
+        accentColor="amber"
+        grayColor="sand"
+        radius="medium"
+        className="herdr-theme"
+      >
+        <main className="connection-screen">
+          <section className="connection-card">
+            <HerdrLogo />
+            <span className="connection-eyebrow">herdr live bridge</span>
+            <h1>No terminal sessions</h1>
+            <p>Open a workspace in herdr, then refresh this page.</p>
+          </section>
+        </main>
+      </Theme>
+    );
+  }
+
   const selectWorkspace = (workspaceId: string) => {
-    dispatch({ type: "workspace.selected", workspaceId });
+    runtime.dispatch({ type: "workspace.selected", workspaceId });
   };
   const selectAgent = (agentId: string) => {
-    dispatch({ type: "agent.selected", agentId });
+    runtime.dispatch({ type: "agent.selected", agentId });
   };
-  const createSession = (details: {
+  const createSession = async (details: {
     label: string;
     runtime: RuntimeName;
     command: string;
   }) => {
-    dispatch({
-      type: "session.created",
-      id: `agent-web-${sessionCounter.current++}`,
+    await runtime.createSession({
       workspaceId: workspace.id,
       ...details,
     });
@@ -100,7 +144,7 @@ export function App() {
                 <strong>herdr</strong>
               </div>
               <div className="runtime-stamp">
-                <span>runtime 01</span>
+                <span>runtime {live ? "live" : "demo"}</span>
                 <strong>local / persistent</strong>
               </div>
               <FlockRail agents={state.agents} onSelect={selectAgent} />
@@ -149,31 +193,36 @@ export function App() {
               </div>
             </header>
 
+            {runtime.actionError && (
+              <div className="runtime-error" role="alert">
+                <span>{runtime.actionError}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss action error"
+                  onClick={runtime.clearActionError}
+                >
+                  <Cross2Icon />
+                </button>
+              </div>
+            )}
+
             <div className="workspace-grid">
               <TerminalWorkspace
                 agent={agent}
                 workspace={workspace}
-                onMessage={(message) =>
-                  dispatch({
-                    type: "agent.replied",
-                    agentId: agent.id,
-                    message,
-                  })
-                }
+                onMessage={(message) => runtime.promptAgent(agent.id, message)}
                 onNewSession={() => setSessionOpen(true)}
                 onSplitPane={() =>
-                  dispatch({
-                    type: "pane.split",
-                    agentId: agent.id,
-                    paneId: `pane-web-${paneCounter.current++}`,
-                  })
+                  runtime.splitPane(agent.id, agent.activePaneId)
                 }
                 onSelectPane={(paneId) =>
-                  dispatch({ type: "pane.selected", agentId: agent.id, paneId })
+                  runtime.dispatch({
+                    type: "pane.selected",
+                    agentId: agent.id,
+                    paneId,
+                  })
                 }
-                onClosePane={(paneId) =>
-                  dispatch({ type: "pane.closed", agentId: agent.id, paneId })
-                }
+                onClosePane={(paneId) => runtime.closePane(agent.id, paneId)}
                 onShowActivity={() => setMobileActivityOpen(true)}
               />
               <div className="desktop-activity">

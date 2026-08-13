@@ -5,7 +5,7 @@ import { App } from "../src/App";
 
 function renderApp() {
   const user = userEvent.setup();
-  render(<App />);
+  render(<App live={false} />);
   return user;
 }
 

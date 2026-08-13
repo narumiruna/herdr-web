@@ -159,7 +159,7 @@ interface NewSessionDialogProps {
     label: string;
     runtime: RuntimeName;
     command: string;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 const RUNTIME_COMMAND: Record<RuntimeName, string> = {
@@ -178,20 +178,33 @@ export function NewSessionDialog({
   const [label, setLabel] = useState("");
   const [runtime, setRuntime] = useState<RuntimeName>("Claude Code");
   const [command, setCommand] = useState(RUNTIME_COMMAND["Claude Code"]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     if (!open) {
       setLabel("");
       setRuntime("Claude Code");
       setCommand(RUNTIME_COMMAND["Claude Code"]);
+      setSubmitting(false);
+      setSubmitError("");
     }
   }, [open]);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!label.trim() || !command.trim()) return;
-    onCreate({ label, runtime, command });
-    onOpenChange(false);
+    if (!label.trim() || !command.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      await onCreate({ label, runtime, command });
+      onOpenChange(false);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Could not start the session",
+      );
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -263,6 +276,11 @@ export function NewSessionDialog({
             client.
           </span>
         </div>
+        {submitError && (
+          <span className="session-form-error" role="alert">
+            {submitError}
+          </span>
+        )}
         <div className="form-actions">
           <Button
             type="button"
@@ -275,7 +293,7 @@ export function NewSessionDialog({
           <Button
             type="submit"
             color="amber"
-            disabled={!label.trim() || !command.trim()}
+            disabled={!label.trim() || !command.trim() || submitting}
           >
             <RocketIcon /> Start session
           </Button>

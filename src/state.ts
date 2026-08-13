@@ -1,4 +1,4 @@
-export type AgentStatus = "working" | "blocked" | "idle" | "done";
+export type AgentStatus = "working" | "blocked" | "idle" | "done" | "unknown";
 
 export type RuntimeName = "Claude Code" | "Codex" | "Pi" | "OpenCode";
 
@@ -23,8 +23,9 @@ export interface Agent {
   id: string;
   workspaceId: string;
   label: string;
-  runtime: RuntimeName;
+  runtime: string;
   model: string;
+  canPrompt?: boolean;
   status: AgentStatus;
   summary: string;
   currentStep: string;
@@ -65,6 +66,7 @@ export interface HerdrState {
 }
 
 export type HerdrAction =
+  | { type: "runtime.synced"; state: HerdrState }
   | { type: "workspace.selected"; workspaceId: string }
   | { type: "agent.selected"; agentId: string }
   | {
@@ -85,10 +87,11 @@ export type HerdrAction =
   | { type: "pane.closed"; agentId: string; paneId: string };
 
 const STATUS_PRIORITY: Record<AgentStatus, number> = {
-  blocked: 4,
-  done: 3,
-  working: 2,
-  idle: 1,
+  blocked: 5,
+  done: 4,
+  working: 3,
+  idle: 2,
+  unknown: 1,
 };
 
 export function agentsForWorkspace(
@@ -136,6 +139,30 @@ function updateAgent(
 
 export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
   switch (action.type) {
+    case "runtime.synced": {
+      const agents = action.state.agents.map((agent) => {
+        const previous = state.agents.find(({ id }) => id === agent.id);
+        return previous &&
+          agent.panes.some(({ id }) => id === previous.activePaneId)
+          ? { ...agent, activePaneId: previous.activePaneId }
+          : agent;
+      });
+      const selectedAgent = agents.find(
+        ({ id }) => id === state.selectedAgentId,
+      );
+      const selectedWorkspace = action.state.workspaces.find(
+        ({ id }) => id === state.selectedWorkspaceId,
+      );
+      return {
+        ...action.state,
+        agents,
+        selectedAgentId: selectedAgent?.id ?? action.state.selectedAgentId,
+        selectedWorkspaceId:
+          selectedAgent?.workspaceId ??
+          selectedWorkspace?.id ??
+          action.state.selectedWorkspaceId,
+      };
+    }
     case "workspace.selected": {
       const workspace = state.workspaces.find(
         ({ id }) => id === action.workspaceId,
