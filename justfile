@@ -6,17 +6,25 @@ default:
 install:
     npm install
 
-# Build the TypeScript project.
+# Start the Vite development server.
+run:
+    npm run dev
+
+# Build the production application.
 build:
     npm run build
 
-# Build and run the application.
-run: build
-    npm start
+# Preview the production build.
+preview: build
+    npm run preview
 
-# Run tests once.
+# Run reducer and component tests once.
 test:
     npm test
+
+# Run desktop and mobile browser checks.
+e2e:
+    npm run test:e2e
 
 # Check formatting and lint rules.
 check:
