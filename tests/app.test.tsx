@@ -198,9 +198,10 @@ describe("herdr terminal-first workbench", () => {
     expect(within(dialog).getByText("Sonnet 4.6")).toBeVisible();
   });
 
-  test("does not make retained terminal output a live region", () => {
+  test("keeps the read-only terminal from looking like a second input", () => {
     renderApp();
 
+    expect(document.querySelector(".terminal-cursor")).not.toBeInTheDocument();
     expect(
       screen.getByRole("document", { name: "api-review output" }),
     ).not.toHaveAttribute("aria-live");

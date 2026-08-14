@@ -39,7 +39,7 @@
 .terminal-pane + .terminal-pane {
   border-left: 1px solid var(--terminal-border);
 }
-.terminal-pane[data-focused="true"] {
+.pane-grid[data-split="true"] .terminal-pane[data-focused="true"] {
   box-shadow: inset 0 0 0 1px
     color-mix(in srgb, var(--amber-9) 60%, transparent);
 }
@@ -123,15 +123,6 @@
 .terminal-empty {
   margin: 0;
   color: var(--terminal-muted);
-}
-.terminal-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  margin-top: 4px;
-  background: var(--terminal-text);
-  vertical-align: text-bottom;
-  animation: cursor-blink 1.15s steps(2, start) infinite;
 }
 .terminal-scrollbar {
   display: flex;

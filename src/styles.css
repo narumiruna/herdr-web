@@ -680,15 +680,8 @@ kbd {
     transform: rotate(360deg);
   }
 }
-@keyframes cursor-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .status-working svg,
-  .terminal-cursor {
+  .status-working svg {
     animation: none;
   }
   .workspace-chevron {

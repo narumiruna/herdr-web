@@ -168,7 +168,6 @@ function TerminalPaneView({
                 </div>
               ))
             )}
-            {focused && <span className="terminal-cursor" aria-hidden="true" />}
           </div>
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar
