@@ -10,6 +10,7 @@ interface RadixDialogProps {
   children: ReactNode;
   className?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  onCloseAutoFocus?: () => void;
 }
 
 export function RadixDialog({
@@ -20,6 +21,7 @@ export function RadixDialog({
   children,
   className = "",
   initialFocusRef,
+  onCloseAutoFocus,
 }: RadixDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -31,6 +33,11 @@ export function RadixDialog({
             if (!initialFocusRef?.current) return;
             event.preventDefault();
             initialFocusRef.current.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!onCloseAutoFocus) return;
+            event.preventDefault();
+            onCloseAutoFocus();
           }}
         >
           <div className="dialog-heading">
