@@ -89,6 +89,58 @@ describe("live herdr app", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("shows a stable loading workbench while reading the first snapshot", () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+
+    render(<App live />);
+
+    expect(
+      screen.getByRole("main", { name: "Connecting to Herdr" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByRole("heading", { name: "Preparing your workbench…" }),
+    ).toBeVisible();
+  });
+
+  test("keeps an empty live workspace navigable and offers New Agent", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const emptyPayload = {
+      reads: {},
+      snapshot: {
+        ...payload.snapshot,
+        agents: [],
+        focused_pane_id: "",
+        layouts: [],
+        panes: [],
+        tabs: [],
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(emptyPayload), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+      ),
+    );
+
+    render(<App live />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Start your first Agent" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Open live-test workspace" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "New agent" })).toBeVisible();
+  });
+
   test("uploads a selected image and prompts the agent with its host path", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     const imagePath = "/repo/.herdr-web/uploads/remote-shot.png";
@@ -154,6 +206,77 @@ describe("live herdr app", () => {
       }),
     );
     expect(screen.queryByText("remote-shot.png")).not.toBeInTheDocument();
+  });
+
+  test("keeps a failed prompt draft and offers inline retry", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prompt")) {
+        return new Response(
+          JSON.stringify({
+            error: { code: "agent_busy", message: "Agent is busy" },
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 409,
+          },
+        );
+      }
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App live />);
+
+    const message = await screen.findByRole("textbox", {
+      name: "Message π - live-test",
+    });
+    await user.type(message, "keep this draft");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByRole("alert", { name: "Message failed" }),
+    ).toHaveTextContent("Agent is busy");
+    expect(message).toHaveValue("keep this draft");
+    expect(screen.getByRole("button", { name: "Retry message" })).toBeVisible();
+  });
+
+  test("keeps the last valid snapshot visible during a transient disconnect", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    let requests = 0;
+    const fetchMock = vi.fn(async () => {
+      requests += 1;
+      if (requests > 1) throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App live />);
+
+    expect(
+      await screen.findByRole("heading", { name: "π - live-test" }),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole(
+        "status",
+        { name: "Connection interrupted" },
+        { timeout: 3_000 },
+      ),
+    ).toHaveTextContent("Showing the last update");
+    expect(
+      screen.getByRole("heading", { name: "π - live-test" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Herdr is unavailable" }),
+    ).not.toBeInTheDocument();
   });
 
   test("loads live state and forwards a prompt with bearer auth", async () => {

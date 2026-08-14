@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   browserAccessToken,
   HerdrApiClient,
@@ -15,10 +22,13 @@ import {
 
 export type ConnectionStatus = "auth" | "error" | "loading" | "ready";
 
+export type RuntimeConnection = "connected" | "reconnecting";
+
 interface HerdrRuntime {
   actionError: string;
   clearActionError: () => void;
   closePane: (agentId: string, paneId: string) => Promise<void>;
+  connection: RuntimeConnection;
   createSession: (input: NewLiveSession) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
@@ -47,6 +57,8 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
   );
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [connection, setConnection] = useState<RuntimeConnection>("connected");
+  const hasSnapshot = useRef(!live);
   const client = useMemo(
     () => (token ? new HerdrApiClient(token) : null),
     [token],
@@ -57,6 +69,8 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
     try {
       const payload = await client.state();
       dispatch({ type: "runtime.synced", state: mapLiveSnapshot(payload) });
+      hasSnapshot.current = true;
+      setConnection("connected");
       setError("");
       setStatus("ready");
     } catch (requestError) {
@@ -65,14 +79,20 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
           ? requestError.message
           : "Cannot reach herdr";
       setError(message);
-      setStatus(
+      const unauthorized =
         typeof requestError === "object" &&
-          requestError !== null &&
-          "status" in requestError &&
-          requestError.status === 401
-          ? "auth"
-          : "error",
-      );
+        requestError !== null &&
+        "status" in requestError &&
+        requestError.status === 401;
+      if (unauthorized) {
+        hasSnapshot.current = false;
+        setStatus("auth");
+      } else if (hasSnapshot.current) {
+        setConnection("reconnecting");
+        setStatus("ready");
+      } else {
+        setStatus("error");
+      }
     }
   }, [client, live]);
 
@@ -116,6 +136,7 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
   return {
     actionError,
     clearActionError: () => setActionError(""),
+    connection,
     closePane: async (agentId, paneId) => {
       if (!live) {
         dispatch({ type: "pane.closed", agentId, paneId });
@@ -160,6 +181,8 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
       const next = value.trim();
       if (!next) return;
       rememberAccessToken(next);
+      hasSnapshot.current = false;
+      setConnection("connected");
       setToken(next);
       setError("");
       setStatus("loading");

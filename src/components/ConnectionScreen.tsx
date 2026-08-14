@@ -22,20 +22,45 @@ export function ConnectionScreen({
     event.preventDefault();
     if (token.trim()) onToken(token);
   };
+
+  if (status === "loading") {
+    return (
+      <main
+        className="loading-workbench"
+        aria-busy="true"
+        aria-label="Connecting to Herdr"
+      >
+        <aside className="loading-sidebar">
+          <HerdrLogo />
+          <span className="skeleton skeleton-heading" />
+          <span className="skeleton" />
+          <span className="skeleton" />
+          <span className="skeleton skeleton-short" />
+        </aside>
+        <section className="loading-surface">
+          <header>
+            <span className="skeleton skeleton-short" />
+            <ReloadIcon className="connection-spinner" aria-hidden="true" />
+          </header>
+          <div>
+            <span className="connection-eyebrow">Connecting to Herdr</span>
+            <h1>Preparing your workbench…</h1>
+            <p>Reading workspaces, detected Agents, and terminal output.</p>
+            <span className="skeleton skeleton-terminal" />
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="connection-screen">
       <section className="connection-card" aria-live="polite">
         <HerdrLogo />
         <span className="connection-eyebrow">herdr live bridge</span>
-        {status === "loading" ? (
+        {status === "auth" ? (
           <>
-            <ReloadIcon className="connection-spinner" />
-            <h1>Connecting to your flock…</h1>
-            <p>Reading the live herdr session and terminal panes.</p>
-          </>
-        ) : status === "auth" ? (
-          <>
-            <LockClosedIcon className="connection-lock" />
+            <LockClosedIcon className="connection-lock" aria-hidden="true" />
             <h1>Enter the access token</h1>
             <p>
               Use the token printed by <code>just run</code> or{" "}
@@ -59,7 +84,7 @@ export function ConnectionScreen({
         ) : (
           <>
             <h1>Herdr is unavailable</h1>
-            <p>{error || "The bridge could not read the herdr socket."}</p>
+            <p>{error || "The bridge could not read the Herdr socket."}</p>
             <Button type="button" onClick={onRetry}>
               <ReloadIcon /> Retry
             </Button>

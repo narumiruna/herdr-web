@@ -1,5 +1,4 @@
 import type {
-  Activity,
   Agent,
   AgentStatus,
   HerdrState,
@@ -95,7 +94,7 @@ function paneTitle(pane: LivePane): string {
 }
 
 function paneLines(read: LiveRead | undefined): string[] {
-  if (!read?.text) return ["Waiting for terminal output…"];
+  if (!read?.text) return [];
   return read.text.replaceAll("\r\n", "\n").split("\n").slice(-240);
 }
 
@@ -123,16 +122,16 @@ function currentStep(pane: LivePane, status: AgentStatus): string {
   return (
     pane.state_labels?.[status] ??
     pane.tokens?.summary ??
-    (pane.agent ? `${pane.agent} is ${status}` : "Interactive terminal session")
+    (pane.agent ? `${pane.agent} is ${status}` : "Interactive terminal")
   );
 }
 
 function mapAgent(
   pane: LivePane,
   allPanes: LivePane[],
-  agentPaneIds: Set<string>,
   reads: Record<string, LiveRead>,
   layouts: LiveLayout[],
+  kind: Agent["kind"],
 ): Agent {
   const status = statusOf(pane.agent_status);
   const layout = layouts.find(({ tab_id: tabId }) => tabId === pane.tab_id);
@@ -145,18 +144,19 @@ function mapAgent(
         ? layout.focused_pane_id
         : pane.pane_id,
     additions: 0,
-    canPrompt: agentPaneIds.has(pane.pane_id) && Boolean(pane.agent),
+    canPrompt: kind === "agent" && Boolean(pane.agent),
     contextPercent:
       Number.parseInt(pane.tokens?.context_percent ?? "0", 10) || 0,
     currentStep: currentStep(pane, status),
     deletions: 0,
     filesChanged: 0,
     id: pane.pane_id,
+    kind,
     label,
-    model: pane.tokens?.model ?? pane.agent ?? "terminal",
+    model: pane.tokens?.model ?? "",
     panes,
     runtime: pane.display_agent ?? pane.agent ?? "Shell",
-    started: "live",
+    started: "",
     status,
     summary: pane.tokens?.summary ?? label,
     updated: `revision ${pane.revision}`,
@@ -176,55 +176,66 @@ function mapWorkspace(
     accent: (["amber", "blue", "grass"] as const)[index % 3] ?? "amber",
     ahead: 0,
     behind: 0,
-    branch:
-      workspace.worktree?.branch ?? workspace.tokens?.branch ?? "live session",
+    branch: workspace.worktree?.branch ?? workspace.tokens?.branch ?? "",
     id: workspace.workspace_id,
     name: workspace.label,
-    path: workspace.worktree?.checkout_path ?? pane?.cwd ?? "Path unavailable",
+    path: workspace.worktree?.checkout_path ?? pane?.cwd ?? "",
   };
 }
 
-function liveActivities(agents: Agent[]): Activity[] {
-  return agents.slice(0, 24).map((agent, index) => ({
-    agentId: agent.id,
-    detail: agent.currentStep,
-    id: `live-${agent.id}-${index}`,
-    kind:
-      agent.status === "blocked"
-        ? "attention"
-        : agent.status === "done"
-          ? "completed"
-          : "started",
-    time: "live",
-    title: `${agent.label} is ${agent.status}`,
-    workspaceId: agent.workspaceId,
-  }));
+function paneFromSnapshot(pane: LivePane, allPanes: LivePane[]): LivePane {
+  const details = allPanes.find(({ pane_id: id }) => id === pane.pane_id);
+  return details ? { ...details, ...pane } : pane;
 }
 
 export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
   const { snapshot, reads } = payload;
-  const agentPaneIds = new Set(snapshot.agents.map(({ pane_id: id }) => id));
   const workspaces = snapshot.workspaces.map((workspace, index) =>
     mapWorkspace(workspace, snapshot.panes, index),
   );
-  const agents = snapshot.panes.map((pane) =>
-    mapAgent(pane, snapshot.panes, agentPaneIds, reads, snapshot.layouts),
+  const agentTabIds = new Set(snapshot.agents.map(({ tab_id: id }) => id));
+  const detectedAgents = snapshot.agents.map((pane) =>
+    mapAgent(
+      paneFromSnapshot(pane, snapshot.panes),
+      snapshot.panes,
+      reads,
+      snapshot.layouts,
+      "agent",
+    ),
   );
+  const standaloneTerminals = snapshot.tabs
+    .filter(({ tab_id: tabId }) => !agentTabIds.has(tabId))
+    .flatMap((tab) => {
+      const layout = snapshot.layouts.find(
+        ({ tab_id: tabId }) => tabId === tab.tab_id,
+      );
+      const paneId =
+        layout?.panes[0]?.pane_id ??
+        snapshot.panes.find(({ tab_id: tabId }) => tabId === tab.tab_id)
+          ?.pane_id;
+      const pane = snapshot.panes.find(({ pane_id: id }) => id === paneId);
+      return pane
+        ? [mapAgent(pane, snapshot.panes, reads, snapshot.layouts, "terminal")]
+        : [];
+    });
+  const agents = [...detectedAgents, ...standaloneTerminals];
   const selectedWorkspaceId = workspaces.some(
     ({ id }) => id === snapshot.focused_workspace_id,
   )
     ? snapshot.focused_workspace_id
     : (workspaces[0]?.id ?? "");
-  const selectedAgentId = agents.some(
-    ({ id }) => id === snapshot.focused_pane_id,
-  )
-    ? snapshot.focused_pane_id
-    : (agents.find(({ workspaceId }) => workspaceId === selectedWorkspaceId)
-        ?.id ??
-      agents[0]?.id ??
-      "");
+  const selectedTarget = agents.find(
+    (agent) =>
+      agent.id === snapshot.focused_pane_id ||
+      agent.panes.some(({ id }) => id === snapshot.focused_pane_id),
+  );
+  const selectedAgentId =
+    selectedTarget?.id ??
+    agents.find(({ workspaceId }) => workspaceId === selectedWorkspaceId)?.id ??
+    agents[0]?.id ??
+    "";
   return {
-    activities: liveActivities(agents),
+    activities: [],
     agents,
     selectedAgentId,
     selectedWorkspaceId,

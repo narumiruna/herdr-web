@@ -2,19 +2,23 @@
 
 A responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
 
-The interface keeps herdr's core job visible: find the agent that needs attention, inspect its live terminal, and send a real prompt without hunting through sessions.
+The Terminal-first Workbench keeps herdr's core job visible: find the Agent that needs attention, inspect its live terminal, and send a real prompt without hunting through sessions.
 
 ## Features
 
-- Live workspace, tab, pane, terminal-output, and agent-state snapshots from herdr 0.8.
+- Terminal-dominant desktop, tablet, and mobile layouts with one persistent navigation rail on wide screens.
+- Detected Agents separated from standalone Terminals so shell panes never inflate the Agent count.
+- A global Needs attention queue before workspace navigation.
+- Live workspace, tab, pane, terminal-output, and Agent-state snapshots from herdr 0.8.
 - Real prompts submitted through herdr's `agent.prompt` API, with responses shown in the terminal.
+- Per-Agent in-memory text and image drafts that survive navigation and failed sends.
 - Remote image paste, drag/drop, and file selection with host-readable Agent attachment paths.
-- Working, blocked, idle, completed, and plain terminal states at a glance.
-- Real pane splitting and closing.
-- New Claude Code, Codex, Pi, and OpenCode sessions with fixed approved commands.
-- A `⌘K` or `Ctrl+K` command palette for jumping between spaces and agents.
+- Real pane splitting and confirmed pane closing.
+- New Claude Code, Codex, Pi, and OpenCode Agents with visible, fixed approved commands.
+- A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
+- On-demand session details without synthetic activity or unsupported runtime metadata.
+- Last-valid-snapshot recovery during transient bridge disconnections.
 - Light and dark appearances.
-- Responsive desktop, tablet, and mobile layouts.
 - Bearer-token protection for every terminal-control API request.
 
 ## Radix UI
@@ -24,7 +28,7 @@ The front end intentionally uses every requested Radix family.
 - **Colors:** semantic Sand, Amber, Blue, Grass, and Red scales from `@radix-ui/colors`.
 - **Icons:** interface symbols from `@radix-ui/react-icons`.
 - **Themes:** buttons, badges, fields, icon buttons, and the appearance provider from `@radix-ui/themes`.
-- **Primitives:** Dialog, Dropdown Menu, Scroll Area, Separator, and Tooltip primitives.
+- **Primitives:** Dialog, Scroll Area, Separator, and Tooltip primitives.
 
 ## Requirements
 
@@ -94,9 +98,31 @@ HERDR_WEB_TOKEN=my-long-random-token npm run dev
 
 Vite prints the network URL, and the page asks for the token when it is not included in the URL.
 
+## Workbench workflow
+
+Needs attention lists blocked Agents across every workspace.
+
+Workspaces then group detected Agents separately from standalone Terminals.
+
+The focused terminal owns the remaining screen, with pane actions in its header and the Agent composer fixed below the output.
+
+Use **New agent** to inspect and launch one of the approved runtime presets.
+
+Use the details button for real workspace, runtime, connection, and focused-pane information.
+
+Closing a split pane requires confirmation, while cancelling leaves the pane unchanged.
+
+Text and image drafts are kept separately per Agent during in-app navigation and clear only after a successful send.
+
+Drafts remain intentionally in memory and do not survive a page reload.
+
+If polling temporarily fails after a successful connection, the workbench keeps the last valid terminal snapshot visible and offers **Retry now**.
+
 ## Send remote images
 
-Paste an image into the message field, drop one onto the composer, or use the image button.
+Press `Ctrl+V` on Windows or Linux, or `Cmd+V` on macOS, anywhere in the workbench to attach a clipboard image.
+
+You can also drop an image onto the composer or use the image button.
 
 The composer accepts one PNG, JPEG, GIF, or WebP file up to 8 MiB and can send it without additional text.
 
@@ -186,10 +212,10 @@ npx playwright install chromium
 
 `server/http-app.ts` validates bearer authentication, request sizes, resource IDs, and action payloads before invoking herdr.
 
-`src/live-state.ts` maps protocol-19 snapshots into the workbench model in `src/state.ts`.
+`src/live-state.ts` maps protocol-19 snapshots into the workbench model in `src/state.ts`, grouping split panes under their detected Agent while retaining shell-only tabs as standalone Terminals.
 
-`src/use-herdr-runtime.ts` polls every 1.5 seconds and refreshes immediately after mutations so real agent output appears without reloading the page.
+`src/use-herdr-runtime.ts` polls every 1.5 seconds, refreshes after mutations, and preserves the last valid snapshot during transient failures.
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 
-Lifecycle event subscriptions and the three session action menu placeholders—copy summary, open branch, and stop session—are not implemented yet.
+Lifecycle event history is not exposed by protocol 19, so the interface does not fabricate an activity feed.

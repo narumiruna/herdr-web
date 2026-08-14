@@ -19,8 +19,11 @@ export interface TerminalPane {
   lines: string[];
 }
 
+export type SessionKind = "agent" | "terminal";
+
 export interface Agent {
   id: string;
+  kind: SessionKind;
   workspaceId: string;
   label: string;
   runtime: string;
@@ -100,10 +103,10 @@ export function agentsForWorkspace(
 ): Agent[] {
   return state.agents
     .filter((agent) => agent.workspaceId === workspaceId)
-    .sort(
-      (left, right) =>
-        STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status],
-    );
+    .sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === "agent" ? -1 : 1;
+      return STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status];
+    });
 }
 
 export function selectedWorkspace(state: HerdrState): Workspace {
@@ -174,7 +177,7 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       return {
         ...state,
         selectedWorkspaceId: workspace.id,
-        selectedAgentId: firstAgent?.id ?? state.selectedAgentId,
+        selectedAgentId: firstAgent?.id ?? "",
       };
     }
     case "agent.selected": {
@@ -244,6 +247,7 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       const paneId = `${action.id}-main`;
       const agent: Agent = {
         id: action.id,
+        kind: "agent",
         workspaceId: workspace.id,
         label,
         runtime: action.runtime,
@@ -377,6 +381,7 @@ export function createDemoState(): HerdrState {
     agents: [
       {
         id: "agent-build",
+        kind: "agent",
         workspaceId: "herdr-core",
         label: "web-bridge",
         runtime: "Codex",
@@ -419,6 +424,7 @@ export function createDemoState(): HerdrState {
       },
       {
         id: "agent-review",
+        kind: "agent",
         workspaceId: "herdr-core",
         label: "api-review",
         runtime: "Claude Code",
@@ -462,6 +468,7 @@ export function createDemoState(): HerdrState {
       },
       {
         id: "agent-tests",
+        kind: "agent",
         workspaceId: "herdr-core",
         label: "integration-tests",
         runtime: "Pi",
@@ -500,6 +507,7 @@ export function createDemoState(): HerdrState {
       },
       {
         id: "agent-docs",
+        kind: "agent",
         workspaceId: "docs-site",
         label: "agent-guide",
         runtime: "OpenCode",
@@ -534,6 +542,7 @@ export function createDemoState(): HerdrState {
       },
       {
         id: "agent-plugin",
+        kind: "agent",
         workspaceId: "marketplace",
         label: "plugin-index",
         runtime: "Claude Code",

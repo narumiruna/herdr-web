@@ -2,11 +2,12 @@ import {
   ChevronRightIcon,
   Component1Icon,
   DesktopIcon,
+  ExclamationTriangleIcon,
   GitHubLogoIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import * as Separator from "@radix-ui/react-separator";
-import { agentsForWorkspace, type HerdrState } from "../state";
+import { type Agent, agentsForWorkspace, type HerdrState } from "../state";
 import { HerdrLogo } from "./HerdrLogo";
 import { StatusPill } from "./StatusPill";
 
@@ -17,13 +18,55 @@ interface SidebarProps {
   onDismiss?: () => void;
 }
 
+function SessionButton({
+  session,
+  selected,
+  onSelect,
+}: {
+  session: Agent;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const isTerminal = session.kind === "terminal";
+  return (
+    <button
+      type="button"
+      className="session-item"
+      data-active={selected}
+      aria-pressed={selected}
+      aria-label={`Open ${session.label} ${isTerminal ? "terminal" : "agent"}`}
+      onClick={onSelect}
+    >
+      <span className="session-kind-icon" aria-hidden="true">
+        {isTerminal ? (
+          <DesktopIcon />
+        ) : (
+          <StatusPill status={session.status} compact />
+        )}
+      </span>
+      <span className="session-copy">
+        <strong>{session.label}</strong>
+        <small>{session.currentStep}</small>
+      </span>
+      {!isTerminal && <StatusPill status={session.status} />}
+    </button>
+  );
+}
+
 export function Sidebar({
   state,
   onSelectWorkspace,
   onSelectAgent,
   onDismiss,
 }: SidebarProps) {
-  const activeAgents = agentsForWorkspace(state, state.selectedWorkspaceId);
+  const sessions = agentsForWorkspace(state, state.selectedWorkspaceId);
+  const visibleAgents = sessions.filter(
+    ({ kind, status }) => kind === "agent" && status !== "blocked",
+  );
+  const terminals = sessions.filter(({ kind }) => kind === "terminal");
+  const attention = state.agents.filter(
+    ({ kind, status }) => kind === "agent" && status === "blocked",
+  );
 
   const selectWorkspace = (workspaceId: string) => {
     onSelectWorkspace(workspaceId);
@@ -42,25 +85,52 @@ export function Sidebar({
       <ScrollArea.Root className="sidebar-scroll">
         <ScrollArea.Viewport className="sidebar-viewport">
           <nav aria-label="Herdr navigation">
-            <section className="nav-section" aria-labelledby="spaces-heading">
+            {attention.length > 0 && (
+              <section
+                className="nav-section attention-section"
+                aria-label="Needs attention"
+              >
+                <div className="section-label-row attention-label">
+                  <h2>Needs attention</h2>
+                  <span>{attention.length}</span>
+                </div>
+                <div className="attention-list">
+                  {attention.map((agent) => (
+                    <button
+                      type="button"
+                      className="attention-item"
+                      data-active={agent.id === state.selectedAgentId}
+                      aria-label={`Open ${agent.label} agent needing attention`}
+                      key={agent.id}
+                      onClick={() => selectAgent(agent.id)}
+                    >
+                      <ExclamationTriangleIcon aria-hidden="true" />
+                      <span>
+                        <strong>{agent.label}</strong>
+                        <small>{agent.currentStep}</small>
+                      </span>
+                      <ChevronRightIcon aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section
+              className="nav-section"
+              aria-labelledby="workspaces-heading"
+            >
               <div className="section-label-row">
-                <h2 id="spaces-heading">Spaces</h2>
-                <span>{String(state.workspaces.length).padStart(2, "0")}</span>
+                <h2 id="workspaces-heading">Workspaces</h2>
+                <span>{state.workspaces.length}</span>
               </div>
               <div className="workspace-list">
                 {state.workspaces.map((workspace) => {
-                  const agents = agentsForWorkspace(state, workspace.id);
-                  const urgent = agents.find(
-                    ({ status }) => status === "blocked",
-                  );
-                  const working = agents.find(
-                    ({ status }) => status === "working",
-                  );
-                  const aggregateStatus = urgent
-                    ? "blocked"
-                    : working
-                      ? "working"
-                      : (agents[0]?.status ?? "idle");
+                  const items = agentsForWorkspace(state, workspace.id);
+                  const agentCount = items.filter(
+                    ({ kind }) => kind === "agent",
+                  ).length;
+                  const terminalCount = items.length - agentCount;
                   const selected = workspace.id === state.selectedWorkspaceId;
                   return (
                     <button
@@ -80,11 +150,12 @@ export function Sidebar({
                       <span className="workspace-copy">
                         <strong>{workspace.name}</strong>
                         <small>
-                          {agents.length}{" "}
-                          {agents.length === 1 ? "agent" : "agents"}
+                          {agentCount} {agentCount === 1 ? "agent" : "agents"}
+                          {terminalCount > 0
+                            ? ` · ${terminalCount} terminal`
+                            : ""}
                         </small>
                       </span>
-                      <StatusPill status={aggregateStatus} compact />
                       <ChevronRightIcon
                         className="workspace-chevron"
                         aria-hidden="true"
@@ -95,44 +166,50 @@ export function Sidebar({
               </div>
             </section>
 
-            <Separator.Root className="sidebar-separator" decorative />
+            {(visibleAgents.length > 0 || terminals.length > 0) && (
+              <Separator.Root className="sidebar-separator" decorative />
+            )}
 
-            <section
-              className="nav-section agent-section"
-              aria-labelledby="agents-heading"
-            >
-              <div className="section-label-row">
-                <h2 id="agents-heading">Agents</h2>
-                <span>by priority</span>
-              </div>
-              <div className="agent-list">
-                {activeAgents.map((agent) => {
-                  const selected = agent.id === state.selectedAgentId;
-                  return (
-                    <button
-                      type="button"
-                      className="agent-item"
+            {visibleAgents.length > 0 && (
+              <section className="nav-section" aria-labelledby="agents-heading">
+                <div className="section-label-row">
+                  <h2 id="agents-heading">Agents</h2>
+                  <span>{visibleAgents.length}</span>
+                </div>
+                <div className="session-list">
+                  {visibleAgents.map((agent) => (
+                    <SessionButton
                       key={agent.id}
-                      data-active={selected}
-                      aria-pressed={selected}
-                      onClick={() => selectAgent(agent.id)}
-                    >
-                      <span className="agent-status-column">
-                        <StatusPill status={agent.status} compact />
-                        <span className="agent-thread" aria-hidden="true" />
-                      </span>
-                      <span className="agent-copy">
-                        <strong>{agent.label}</strong>
-                        <small>{agent.currentStep}</small>
-                        <span className="agent-runtime">
-                          {agent.runtime} · {agent.updated}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+                      session={agent}
+                      selected={agent.id === state.selectedAgentId}
+                      onSelect={() => selectAgent(agent.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {terminals.length > 0 && (
+              <section
+                className="nav-section"
+                aria-labelledby="terminals-heading"
+              >
+                <div className="section-label-row">
+                  <h2 id="terminals-heading">Terminals</h2>
+                  <span>{terminals.length}</span>
+                </div>
+                <div className="session-list">
+                  {terminals.map((terminal) => (
+                    <SessionButton
+                      key={terminal.id}
+                      session={terminal}
+                      selected={terminal.id === state.selectedAgentId}
+                      onSelect={() => selectAgent(terminal.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </nav>
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">
@@ -140,25 +217,15 @@ export function Sidebar({
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
 
-      <div className="server-card">
-        <span className="server-icon">
-          <DesktopIcon aria-hidden="true" />
-        </span>
-        <span>
-          <strong>narumi-mac</strong>
-          <small>
-            <i /> local · connected
-          </small>
-        </span>
-        <a
-          href="https://github.com/herdrdev/herdr"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Open herdr on GitHub"
-        >
-          <GitHubLogoIcon />
-        </a>
-      </div>
+      <a
+        className="sidebar-project-link"
+        href="https://github.com/herdrdev/herdr"
+        target="_blank"
+        rel="noreferrer"
+      >
+        <GitHubLogoIcon aria-hidden="true" />
+        <span>herdr on GitHub</span>
+      </a>
     </aside>
   );
 }

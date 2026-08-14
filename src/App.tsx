@@ -1,21 +1,22 @@
 import {
-  ActivityLogIcon,
   Cross2Icon,
   HamburgerMenuIcon,
+  InfoCircledIcon,
   MagnifyingGlassIcon,
   MoonIcon,
+  PlusIcon,
+  ReloadIcon,
   SunIcon,
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { IconButton, Theme } from "@radix-ui/themes";
-import { useEffect, useState } from "react";
-import { ActivityRail } from "./components/ActivityRail";
+import { Button, IconButton, Theme } from "@radix-ui/themes";
+import { useEffect, useRef, useState } from "react";
 import { CommandPalette, NewSessionDialog } from "./components/AppDialogs";
 import { ConnectionScreen } from "./components/ConnectionScreen";
-import { FlockRail } from "./components/FlockRail";
 import { HerdrLogo } from "./components/HerdrLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
+import { SessionDetails } from "./components/SessionDetails";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalWorkspace } from "./components/TerminalWorkspace";
 import type { RuntimeName } from "./state";
@@ -34,13 +35,29 @@ export function App({
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [mobileActivityOpen, setMobileActivityOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const commandTrigger = useRef<HTMLButtonElement>(null);
+  const commandWasOpen = useRef(false);
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
     state.workspaces[0];
+  const workspaceAgentCount = state.agents.filter(
+    ({ workspaceId, kind }) =>
+      workspaceId === workspace?.id && kind === "agent",
+  ).length;
   const agent =
-    state.agents.find(({ id }) => id === state.selectedAgentId) ??
-    state.agents[0];
+    state.agents.find(
+      ({ id, workspaceId }) =>
+        id === state.selectedAgentId && workspaceId === workspace?.id,
+    ) ??
+    state.agents.find(
+      ({ workspaceId }) => workspace && workspaceId === workspace.id,
+    );
+
+  useEffect(() => {
+    if (commandWasOpen.current && !commandOpen) commandTrigger.current?.focus();
+    commandWasOpen.current = commandOpen;
+  }, [commandOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -72,27 +89,6 @@ export function App({
     );
   }
 
-  if (!workspace || !agent) {
-    return (
-      <Theme
-        appearance={appearance}
-        accentColor="amber"
-        grayColor="sand"
-        radius="medium"
-        className="herdr-theme"
-      >
-        <main className="connection-screen">
-          <section className="connection-card">
-            <HerdrLogo />
-            <span className="connection-eyebrow">herdr live bridge</span>
-            <h1>No terminal sessions</h1>
-            <p>Open a workspace in herdr, then refresh this page.</p>
-          </section>
-        </main>
-      </Theme>
-    );
-  }
-
   const selectWorkspace = (workspaceId: string) => {
     runtime.dispatch({ type: "workspace.selected", workspaceId });
   };
@@ -104,10 +100,9 @@ export function App({
     runtime: RuntimeName;
     command: string;
   }) => {
-    await runtime.createSession({
-      workspaceId: workspace.id,
-      ...details,
-    });
+    if (!workspace)
+      throw new Error("Open a workspace before starting an Agent.");
+    await runtime.createSession({ workspaceId: workspace.id, ...details });
   };
 
   return (
@@ -131,34 +126,63 @@ export function App({
 
           <div className="app-surface">
             <header className="topbar">
-              <div className="mobile-brand">
+              <div className="topbar-context">
                 <IconButton
                   variant="ghost"
                   color="gray"
+                  className="mobile-nav-trigger"
                   aria-label="Open navigation"
                   onClick={() => setMobileNavOpen(true)}
                 >
                   <HamburgerMenuIcon />
                 </IconButton>
-                <HerdrLogo compact />
-                <strong>herdr</strong>
+                <span className="mobile-brand-mark">
+                  <HerdrLogo compact />
+                </span>
+                <div>
+                  <strong>{workspace?.name ?? "herdr"}</strong>
+                  <span>
+                    {workspace
+                      ? `${workspaceAgentCount} ${workspaceAgentCount === 1 ? "Agent" : "Agents"}`
+                      : "No workspace open"}
+                  </span>
+                </div>
               </div>
-              <div className="runtime-stamp">
-                <span>runtime {live ? "live" : "demo"}</span>
-                <strong>local / persistent</strong>
-              </div>
-              <FlockRail agents={state.agents} onSelect={selectAgent} />
+
               <div className="topbar-actions">
+                {workspace && (
+                  <Button
+                    type="button"
+                    color="amber"
+                    onClick={() => setSessionOpen(true)}
+                  >
+                    <PlusIcon /> New agent
+                  </Button>
+                )}
                 <button
+                  ref={commandTrigger}
                   type="button"
                   className="command-button"
                   aria-label="Open command palette"
                   onClick={() => setCommandOpen(true)}
                 >
                   <MagnifyingGlassIcon />
-                  <span>Jump anywhere</span>
+                  <span>Jump</span>
                   <kbd>⌘ K</kbd>
                 </button>
+                {agent && (
+                  <IconTooltip label="Session details">
+                    <IconButton
+                      type="button"
+                      variant="soft"
+                      color="gray"
+                      aria-label="Open details"
+                      onClick={() => setDetailsOpen(true)}
+                    >
+                      <InfoCircledIcon />
+                    </IconButton>
+                  </IconTooltip>
+                )}
                 <IconTooltip
                   label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
                 >
@@ -177,21 +201,40 @@ export function App({
                     {appearance === "light" ? <MoonIcon /> : <SunIcon />}
                   </IconButton>
                 </IconTooltip>
-                <IconButton
-                  type="button"
-                  variant="soft"
-                  color="gray"
-                  className="mobile-activity-top"
-                  aria-label="Open activity"
-                  onClick={() => setMobileActivityOpen(true)}
+                <span
+                  className="connection-state"
+                  data-state={runtime.connection}
                 >
-                  <ActivityLogIcon />
-                </IconButton>
-                <span className="connection-state">
-                  <i /> connected
+                  <i aria-hidden="true" />
+                  {runtime.connection === "connected"
+                    ? "Connected"
+                    : "Reconnecting"}
                 </span>
               </div>
             </header>
+
+            {runtime.connection === "reconnecting" && (
+              <div
+                className="reconnect-banner"
+                role="status"
+                aria-label="Connection interrupted"
+              >
+                <span>
+                  <ReloadIcon aria-hidden="true" />
+                  <strong>Connection interrupted.</strong>
+                  Showing the last update while Herdr reconnects.
+                </span>
+                <Button
+                  type="button"
+                  size="1"
+                  variant="soft"
+                  color="amber"
+                  onClick={() => void runtime.refresh()}
+                >
+                  Retry now
+                </Button>
+              </div>
+            )}
 
             {runtime.actionError && (
               <div className="runtime-error" role="alert">
@@ -206,15 +249,14 @@ export function App({
               </div>
             )}
 
-            <div className="workspace-grid">
+            {workspace && agent ? (
               <TerminalWorkspace
-                key={agent.id}
                 agent={agent}
                 workspace={workspace}
                 onMessage={(message, image) =>
                   runtime.promptAgent(agent.id, message, image)
                 }
-                onNewSession={() => setSessionOpen(true)}
+                onMessageFailure={runtime.clearActionError}
                 onSplitPane={() =>
                   runtime.splitPane(agent.id, agent.activePaneId)
                 }
@@ -226,17 +268,25 @@ export function App({
                   })
                 }
                 onClosePane={(paneId) => runtime.closePane(agent.id, paneId)}
-                onShowActivity={() => setMobileActivityOpen(true)}
               />
-              <div className="desktop-activity">
-                <ActivityRail
-                  state={state}
-                  workspace={workspace}
-                  agent={agent}
-                  onSelectAgent={selectAgent}
-                />
-              </div>
-            </div>
+            ) : (
+              <main className="empty-workbench">
+                <div className="empty-workbench-mark">
+                  <HerdrLogo compact />
+                </div>
+                <span>{workspace ? "Empty workspace" : "No workspaces"}</span>
+                <h1>
+                  {workspace
+                    ? "Start your first Agent"
+                    : "Open a workspace in Herdr"}
+                </h1>
+                <p>
+                  {workspace
+                    ? "This workspace has no Agent or Terminal sessions yet."
+                    : "Create or focus a Herdr workspace, then refresh this workbench."}
+                </p>
+              </main>
+            )}
           </div>
         </div>
 
@@ -247,18 +297,20 @@ export function App({
           onSelectWorkspace={selectWorkspace}
           onSelectAgent={selectAgent}
         />
-        <NewSessionDialog
-          open={sessionOpen}
-          onOpenChange={setSessionOpen}
-          workspace={workspace}
-          onCreate={createSession}
-        />
+        {workspace && (
+          <NewSessionDialog
+            open={sessionOpen}
+            onOpenChange={setSessionOpen}
+            workspace={workspace}
+            onCreate={createSession}
+          />
+        )}
         <RadixDialog
           open={mobileNavOpen}
           onOpenChange={setMobileNavOpen}
-          title="Switch workspace"
-          description="Choose a space or agent to focus."
-          className="mobile-panel-dialog mobile-navigation-dialog"
+          title="Navigate workbench"
+          description="Choose work that needs attention, a workspace, an Agent, or a Terminal."
+          className="mobile-navigation-dialog"
         >
           <Sidebar
             state={state}
@@ -267,24 +319,21 @@ export function App({
             onDismiss={() => setMobileNavOpen(false)}
           />
         </RadixDialog>
-        <RadixDialog
-          open={mobileActivityOpen}
-          onOpenChange={setMobileActivityOpen}
-          title="Runtime activity"
-          description="Live status and recent events across the current space."
-          className="mobile-panel-dialog mobile-activity-dialog"
-        >
-          <ActivityRail
-            state={state}
-            workspace={workspace}
-            agent={agent}
-            onSelectAgent={(agentId) => {
-              selectAgent(agentId);
-              setMobileActivityOpen(false);
-            }}
-            mobile
-          />
-        </RadixDialog>
+        {workspace && agent && (
+          <RadixDialog
+            open={detailsOpen}
+            onOpenChange={setDetailsOpen}
+            title="Session details"
+            description="Real runtime and workspace information for the focused session."
+            className="details-dialog"
+          >
+            <SessionDetails
+              agent={agent}
+              workspace={workspace}
+              connection={runtime.connection}
+            />
+          </RadixDialog>
+        )}
       </Tooltip.Provider>
     </Theme>
   );
