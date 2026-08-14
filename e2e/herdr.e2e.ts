@@ -79,6 +79,7 @@ test("desktop workbench gives the terminal priority", async ({
     0,
   );
   await expect(page.getByText("Focused", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".topbar-context > strong")).toBeHidden();
 
   await page.screenshot({
     path: testInfo.outputPath("herdr-terminal-first-desktop.png"),
@@ -183,6 +184,7 @@ test("tablet layout keeps navigation in a drawer and terminal output usable", as
   await expect(
     page.getByRole("textbox", { name: "Message api-review" }),
   ).toBeVisible();
+  await expect(page.locator(".topbar-context > strong")).toBeVisible();
   await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(
     page.getByRole("dialog", { name: "Navigate workbench" }),

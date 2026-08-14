@@ -641,6 +641,9 @@
   .topbar-context {
     gap: 7px;
   }
+  .topbar-context > strong {
+    display: block;
+  }
   .main-workspace {
     padding: 12px 13px 13px;
   }

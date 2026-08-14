@@ -427,6 +427,7 @@ select:focus-visible,
   gap: 10px;
 }
 .topbar-context strong {
+  display: none;
   overflow: hidden;
   font-size: 14px;
   text-overflow: ellipsis;
@@ -439,6 +440,7 @@ select:focus-visible,
 .topbar-actions {
   display: flex;
   min-width: 0;
+  margin-left: auto;
   align-items: center;
   gap: 8px;
 }
