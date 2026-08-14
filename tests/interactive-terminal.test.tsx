@@ -6,6 +6,7 @@ import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
 const xterm = vi.hoisted(() => ({
   instances: [] as Array<{
     data?: (value: string) => void;
+    options?: unknown;
     reset: ReturnType<typeof vi.fn>;
     write: ReturnType<typeof vi.fn>;
   }>,
@@ -19,7 +20,8 @@ vi.mock("@xterm/xterm", () => ({
       reset: vi.fn(),
       write: vi.fn(),
     };
-    constructor() {
+    constructor(options: unknown) {
+      this.instance.options = options;
       xterm.instances.push(this.instance);
     }
     loadAddon() {}
@@ -132,7 +134,6 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
     actionsEnabled: true,
     agentId: "w5:p1",
     agentLabel: "reviewer",
-    appearance: "dark" as const,
     canPrompt: true,
     controlEnabled: true,
     createTicket,
@@ -163,6 +164,13 @@ describe("InteractiveTerminal", () => {
     });
     expect(socket.url).toContain("ticket=one-use-ticket");
     expect(socket.url).not.toContain("Bearer");
+    expect(xterm.instances[0]?.options).toMatchObject({
+      theme: {
+        background: "#0c0c0c",
+        cursor: "#ffc53d",
+        foreground: "#eeeeec",
+      },
+    });
     rerender(
       <InteractiveTerminal
         {...props}
@@ -255,8 +263,9 @@ describe("InteractiveTerminal", () => {
     await screen.findByText("Interactive");
     const file = new File(["png"], "paste.png", { type: "image/png" });
     const terminal = screen.getByRole("region", {
-      name: "reviewer terminal controls",
+      name: "reviewer interactive terminal",
     });
+    terminal.addEventListener("paste", (event) => event.stopPropagation());
 
     fireEvent.paste(terminal, {
       clipboardData: { files: [file], items: [] },

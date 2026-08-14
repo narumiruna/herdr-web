@@ -518,7 +518,6 @@ export function App({
                     runtime.accessRole === "controller"
                   }
                   agent={agent}
-                  appearance={appearance}
                   createTerminalTicket={runtime.terminalTicket}
                   draft={drafts[agent.id] ?? EMPTY_COMPOSER_DRAFT}
                   isSending={sending[agent.id] === true}

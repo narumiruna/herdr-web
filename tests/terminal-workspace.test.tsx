@@ -47,7 +47,6 @@ function Harness({
       <TerminalWorkspace
         actionsEnabled={actionsEnabled}
         agent={agent}
-        appearance="dark"
         createTerminalTicket={async () => ({
           expiresAt: Date.now() + 30_000,
           path: "/api/herdr/terminal",
