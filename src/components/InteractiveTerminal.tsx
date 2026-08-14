@@ -4,6 +4,7 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   ReloadIcon,
+  UploadIcon,
 } from "@radix-ui/react-icons";
 import { Button } from "@radix-ui/themes";
 import { FitAddon } from "@xterm/addon-fit";
@@ -876,7 +877,10 @@ export function InteractiveTerminal({
             {imagePath ? (
               <Button
                 type="button"
+                size="2"
+                variant="solid"
                 color="amber"
+                highContrast
                 disabled={status !== "live"}
                 onClick={() => insertUploadedPath(imagePath)}
               >
@@ -885,7 +889,10 @@ export function InteractiveTerminal({
             ) : (
               <Button
                 type="button"
+                size="2"
+                variant="solid"
                 color="amber"
+                highContrast
                 disabled={
                   imageUploading ||
                   !structuredActionsEnabled ||
@@ -893,6 +900,7 @@ export function InteractiveTerminal({
                 }
                 onClick={() => void insertImage()}
               >
+                <UploadIcon aria-hidden="true" />
                 {imageUploading ? "Uploading…" : "Upload and insert path"}
               </Button>
             )}

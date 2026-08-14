@@ -285,6 +285,8 @@ describe("InteractiveTerminal", () => {
     const upload = screen.getByRole("button", {
       name: "Upload and insert path",
     });
+    expect(upload).toHaveClass("rt-Button", "rt-variant-solid");
+    expect(upload.closest(".radix-themes")).not.toBeNull();
     expect(upload).toBeDisabled();
     expect(
       screen.getByText(
