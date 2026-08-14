@@ -18,7 +18,7 @@ The Terminal-first Workbench keeps herdr's core job visible: find the Agent that
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery during transient bridge disconnections.
-- Light and dark appearances.
+- Unified light and dark appearances across navigation, terminal output, composer, and dialogs.
 - Bearer-token protection for every terminal-control API request.
 
 ## Radix UI

@@ -1,4 +1,4 @@
-/* Terminal-first shell: quiet wool navigation around a graphite work surface. */
+/* Terminal-first shell: one Radix Sand palette across navigation and terminal. */
 :root {
   font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
   color-scheme: light;
@@ -13,12 +13,13 @@
   --ink: var(--sand-12);
   --ink-secondary: var(--sand-11);
   --ink-muted: var(--sand-10);
-  --terminal: #151815;
-  --terminal-panel: #1d211d;
-  --terminal-elevated: #242924;
-  --terminal-border: #353b35;
-  --terminal-text: #dce2d9;
-  --terminal-muted: #929d90;
+  --terminal: var(--sand-1);
+  --terminal-panel: var(--sand-2);
+  --terminal-elevated: var(--sand-4);
+  --terminal-border: var(--sand-7);
+  --terminal-text: var(--sand-12);
+  --terminal-muted: var(--sand-10);
+  --terminal-shadow: 0 8px 24px rgb(42 38 29 / 7%);
   --brand-cutout: var(--canvas);
   --focus-ring: var(--amber-9);
   --shadow-small: 0 1px 2px rgb(33 30 22 / 7%), 0 8px 24px rgb(33 30 22 / 5%);
@@ -37,8 +38,15 @@
   --ink: var(--sand-12);
   --ink-secondary: var(--sand-11);
   --ink-muted: var(--sand-10);
+  --terminal: var(--sand-1);
+  --terminal-panel: var(--sand-2);
+  --terminal-elevated: var(--sand-4);
+  --terminal-border: var(--sand-7);
+  --terminal-text: var(--sand-12);
+  --terminal-muted: var(--sand-10);
   --brand-cutout: var(--canvas);
   --shadow-small: 0 1px 2px rgb(0 0 0 / 26%), 0 8px 28px rgb(0 0 0 / 12%);
+  --terminal-shadow: 0 8px 28px rgb(0 0 0 / 18%);
 }
 
 * {
@@ -97,7 +105,7 @@ select:focus-visible,
 
 .app-shell {
   display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   width: 100%;
   height: 100dvh;
   background: var(--canvas);
@@ -114,32 +122,22 @@ select:focus-visible,
 .brand-lockup {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
 }
 .brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   color: var(--ink);
 }
 .brand-type {
   display: flex;
-  flex-direction: column;
   line-height: 1;
 }
 .brand-type strong {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 720;
-  letter-spacing: -0.055em;
-}
-.brand-type span {
-  margin-top: 5px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: -0.05em;
 }
 
 /* Single navigation rail */
@@ -159,10 +157,10 @@ select:focus-visible,
 }
 .sidebar-brand {
   display: flex;
-  height: 64px;
+  height: 52px;
   flex: 0 0 auto;
   align-items: center;
-  padding: 0 22px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
 }
 .sidebar-scroll,
@@ -172,10 +170,10 @@ select:focus-visible,
   min-height: 0;
 }
 .sidebar-viewport {
-  padding: 18px 12px 28px;
+  padding: 14px 10px 20px;
 }
 .nav-section + .nav-section {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 .section-label-row {
   display: flex;
@@ -257,11 +255,11 @@ select:focus-visible,
 }
 .workspace-item {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 14px;
+  grid-template-columns: 28px minmax(0, 1fr) 14px;
   gap: 9px;
   align-items: center;
-  min-height: 54px;
-  padding: 7px 8px;
+  min-height: 46px;
+  padding: 5px 7px;
   border-radius: 9px;
 }
 .workspace-item:hover,
@@ -276,8 +274,8 @@ select:focus-visible,
 .workspace-glyph,
 .command-result-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -313,15 +311,6 @@ select:focus-visible,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.workspace-copy small,
-.session-copy small {
-  overflow: hidden;
-  color: var(--ink-muted);
-  font-size: 9.5px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .workspace-chevron {
   color: var(--ink-muted);
   opacity: 0;
@@ -334,16 +323,16 @@ select:focus-visible,
 .sidebar-separator {
   display: block;
   height: 1px;
-  margin: 20px 8px;
+  margin: 14px 8px;
   background: var(--border);
 }
 .session-item {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  min-height: 52px;
-  padding: 7px 8px;
+  min-height: 42px;
+  padding: 6px 8px;
   border-radius: 8px;
 }
 .session-kind-icon {
@@ -358,24 +347,6 @@ select:focus-visible,
 }
 .session-item[data-active="true"] .session-copy strong {
   color: var(--amber-11);
-}
-.sidebar-project-link {
-  display: flex;
-  min-height: 48px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 9px;
-  margin: 0 12px 12px;
-  padding: 0 11px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel-raised);
-  color: var(--ink-muted);
-  font-size: 10px;
-  text-decoration: none;
-}
-.sidebar-project-link:hover {
-  color: var(--ink);
 }
 .scrollbar {
   display: flex;
@@ -440,12 +411,12 @@ select:focus-visible,
 /* Compact global header */
 .topbar {
   display: flex;
-  min-height: 64px;
+  min-height: 52px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 0 20px;
+  gap: 16px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--canvas) 94%, transparent);
 }
@@ -455,20 +426,11 @@ select:focus-visible,
   align-items: center;
   gap: 10px;
 }
-.topbar-context > div:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
 .topbar-context strong {
   overflow: hidden;
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.topbar-context span:not(.mobile-brand-mark) {
-  color: var(--ink-muted);
-  font-size: 9px;
 }
 .mobile-nav-trigger,
 .mobile-brand-mark {
@@ -515,14 +477,11 @@ kbd {
   font-size: 8px;
 }
 .connection-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: grid;
+  width: 28px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
 }
 .connection-state i,
 .details-connection i {
@@ -582,33 +541,19 @@ kbd {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px 18px;
+  gap: 8px;
+  padding: 12px 16px 14px;
   overflow: hidden;
 }
 .workspace-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 18px;
+  gap: 4px 12px;
   flex: 0 0 auto;
   align-items: center;
 }
 .workspace-identity {
   min-width: 0;
-}
-.workspace-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 5px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.workspace-breadcrumb svg {
-  width: 10px;
 }
 .agent-title-line {
   display: flex;
@@ -620,7 +565,7 @@ kbd {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: clamp(22px, 2vw, 29px);
+  font-size: clamp(20px, 1.7vw, 25px);
   font-weight: 690;
   line-height: 1;
   letter-spacing: -0.045em;
@@ -628,9 +573,9 @@ kbd {
   white-space: nowrap;
 }
 .workspace-identity p {
-  margin: 5px 0 0;
+  margin: 3px 0 0;
   color: var(--ink-secondary);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 .workspace-actions {
   display: flex;
@@ -642,11 +587,11 @@ kbd {
   min-width: 0;
   grid-column: 1 / -1;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   overflow: hidden;
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 8.5px;
+  font-size: 8px;
   white-space: nowrap;
 }
 .workspace-metadata > * {

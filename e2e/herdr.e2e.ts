@@ -22,15 +22,63 @@ test("desktop workbench gives the terminal priority", async ({
   ).toBeVisible();
   expect(await hasNoPageOverflow(page)).toBe(true);
 
-  const widths = await page.evaluate(() => ({
-    surface:
-      document.querySelector(".app-surface")?.getBoundingClientRect().width ??
-      0,
-    terminal:
-      document.querySelector(".terminal-shell")?.getBoundingClientRect()
-        .width ?? 0,
-  }));
-  expect(widths.terminal / widths.surface).toBeGreaterThanOrEqual(0.7);
+  const lightMetrics = await page.evaluate(() => {
+    const brightness = (selector: string) => {
+      const color = getComputedStyle(
+        document.querySelector(selector) as Element,
+      ).backgroundColor;
+      const channels =
+        color
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) ?? [];
+      const average =
+        channels.reduce((total, channel) => total + channel, 0) / 3;
+      return Math.max(...channels) <= 1 ? average * 255 : average;
+    };
+    return {
+      brandMark:
+        document
+          .querySelector(".sidebar-brand .brand-mark")
+          ?.getBoundingClientRect().width ?? 0,
+      sidebar:
+        document.querySelector(".desktop-sidebar")?.getBoundingClientRect()
+          .width ?? 0,
+      sidebarBrightness: brightness(".desktop-sidebar"),
+      surface:
+        document.querySelector(".app-surface")?.getBoundingClientRect().width ??
+        0,
+      terminal:
+        document.querySelector(".terminal-shell")?.getBoundingClientRect()
+          .width ?? 0,
+      terminalBrightness: brightness(".terminal-shell"),
+      terminalTop:
+        document.querySelector(".terminal-shell")?.getBoundingClientRect()
+          .top ?? 999,
+      topbarBrightness: brightness(".topbar"),
+      topbarHeight:
+        document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0,
+      workspaceHeaderHeight:
+        document.querySelector(".workspace-header")?.getBoundingClientRect()
+          .height ?? 0,
+    };
+  });
+  expect(lightMetrics.brandMark).toBeLessThanOrEqual(30);
+  expect(lightMetrics.sidebar).toBeLessThanOrEqual(224);
+  expect(lightMetrics.terminal / lightMetrics.surface).toBeGreaterThanOrEqual(
+    0.7,
+  );
+  expect(lightMetrics.sidebarBrightness).toBeGreaterThan(180);
+  expect(lightMetrics.terminalBrightness).toBeGreaterThan(180);
+  expect(lightMetrics.terminalTop).toBeLessThanOrEqual(200);
+  expect(lightMetrics.topbarBrightness).toBeGreaterThan(180);
+  expect(lightMetrics.topbarHeight).toBeLessThanOrEqual(56);
+  expect(lightMetrics.workspaceHeaderHeight).toBeLessThanOrEqual(60);
+  await expect(page.getByText("agent runtime", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("herdr on GitHub", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Focused", { exact: true })).toHaveCount(0);
 
   await page.screenshot({
     path: testInfo.outputPath("herdr-terminal-first-desktop.png"),
@@ -39,6 +87,33 @@ test("desktop workbench gives the terminal priority", async ({
 
   await page.getByRole("button", { name: "Use dark appearance" }).click();
   await expect(page.locator(".herdr-theme")).toHaveClass(/dark/);
+  const darkBrightness = await page.evaluate(() => {
+    const brightness = (selector: string) => {
+      const color = getComputedStyle(
+        document.querySelector(selector) as Element,
+      ).backgroundColor;
+      const channels =
+        color
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) ?? [];
+      const average =
+        channels.reduce((total, channel) => total + channel, 0) / 3;
+      return Math.max(...channels) <= 1 ? average * 255 : average;
+    };
+    return {
+      sidebar: brightness(".desktop-sidebar"),
+      terminal: brightness(".terminal-shell"),
+      topbar: brightness(".topbar"),
+    };
+  });
+  expect(darkBrightness.sidebar).toBeLessThan(80);
+  expect(darkBrightness.terminal).toBeLessThan(80);
+  expect(darkBrightness.topbar).toBeLessThan(80);
+  await page.screenshot({
+    path: testInfo.outputPath("herdr-terminal-first-dark.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "Open details" }).click();
   await expect(
     page.getByRole("dialog", { name: "Session details" }),
@@ -221,6 +296,48 @@ test("mobile composer stages and sends an image attachment", async ({
       () => document.documentElement.scrollHeight <= window.innerHeight,
     ),
   ).toBe(true);
+});
+
+test("terminal follows new output without interrupting scrollback", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.goto("/");
+  const viewport = page.locator(".terminal-viewport");
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+  const distanceFromBottom = () =>
+    viewport.evaluate(
+      (element) =>
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+    );
+
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(1);
+
+  await page
+    .getByRole("textbox", { name: "Message api-review" })
+    .fill("say hi");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("› say hi")).toBeVisible();
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(1);
+
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await page
+    .getByRole("textbox", { name: "Message api-review" })
+    .fill("continue");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("› continue")).toBeVisible();
+  await expect
+    .poll(() => viewport.evaluate((element) => element.scrollTop))
+    .toBe(0);
 });
 
 test("long mobile terminal output stays inside its scroll viewport", async ({

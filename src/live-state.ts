@@ -119,11 +119,7 @@ function terminalPanes(
 }
 
 function currentStep(pane: LivePane, status: AgentStatus): string {
-  return (
-    pane.state_labels?.[status] ??
-    pane.tokens?.summary ??
-    (pane.agent ? `${pane.agent} is ${status}` : "Interactive terminal")
-  );
+  return pane.state_labels?.[status] ?? pane.tokens?.summary ?? "";
 }
 
 function mapAgent(

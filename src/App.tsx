@@ -41,10 +41,6 @@ export function App({
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
     state.workspaces[0];
-  const workspaceAgentCount = state.agents.filter(
-    ({ workspaceId, kind }) =>
-      workspaceId === workspace?.id && kind === "agent",
-  ).length;
   const agent =
     state.agents.find(
       ({ id, workspaceId }) =>
@@ -139,14 +135,7 @@ export function App({
                 <span className="mobile-brand-mark">
                   <HerdrLogo compact />
                 </span>
-                <div>
-                  <strong>{workspace?.name ?? "herdr"}</strong>
-                  <span>
-                    {workspace
-                      ? `${workspaceAgentCount} ${workspaceAgentCount === 1 ? "Agent" : "Agents"}`
-                      : "No workspace open"}
-                  </span>
-                </div>
+                <strong>{workspace?.name ?? "herdr"}</strong>
               </div>
 
               <div className="topbar-actions">
@@ -204,11 +193,18 @@ export function App({
                 <span
                   className="connection-state"
                   data-state={runtime.connection}
+                  title={
+                    runtime.connection === "connected"
+                      ? "Connected"
+                      : "Reconnecting"
+                  }
                 >
                   <i aria-hidden="true" />
-                  {runtime.connection === "connected"
-                    ? "Connected"
-                    : "Reconnecting"}
+                  <span className="sr-only">
+                    {runtime.connection === "connected"
+                      ? "Connected"
+                      : "Reconnecting"}
+                  </span>
                 </span>
               </div>
             </header>

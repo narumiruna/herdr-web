@@ -1,5 +1,4 @@
 import {
-  ChevronRightIcon,
   CodeIcon,
   ColumnsIcon,
   Cross2Icon,
@@ -8,17 +7,19 @@ import {
   PaperPlaneIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { Button } from "@radix-ui/themes";
+import { Button, IconButton } from "@radix-ui/themes";
 import {
   type DragEvent,
   type FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { MAX_ATTACHMENT_BYTES, SUPPORTED_IMAGE_TYPES } from "../herdr-api";
 import type { Agent, TerminalPane, Workspace } from "../state";
+import { IconTooltip } from "./IconTooltip";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
 
@@ -98,6 +99,17 @@ function TerminalPaneView({
   onFocus,
   onClose,
 }: TerminalPaneViewProps) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const followsOutput = useRef(true);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rendered output is the scroll trigger.
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    if (element && followsOutput.current) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [pane.lines]);
+
   return (
     <section
       className="terminal-pane"
@@ -110,7 +122,6 @@ function TerminalPaneView({
           <CodeIcon aria-hidden="true" />
           {pane.title}
         </span>
-        {focused && <span className="pane-focus-label">Focused</span>}
         {canClose && (
           <button
             type="button"
@@ -126,7 +137,16 @@ function TerminalPaneView({
         )}
       </div>
       <ScrollArea.Root className="terminal-scroll">
-        <ScrollArea.Viewport className="terminal-viewport">
+        <ScrollArea.Viewport
+          ref={viewport}
+          className="terminal-viewport"
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            const distanceFromBottom =
+              element.scrollHeight - element.clientHeight - element.scrollTop;
+            followsOutput.current = distanceFromBottom <= 24;
+          }}
+        >
           <div
             className="terminal-lines"
             role="document"
@@ -297,46 +317,43 @@ export function TerminalWorkspace({
     <main className="main-workspace">
       <header className="workspace-header">
         <div className="workspace-identity">
-          <div className="workspace-breadcrumb">
-            <span>{workspace.name}</span>
-            <ChevronRightIcon aria-hidden="true" />
-            <span>{agent.kind === "agent" ? "Agent" : "Terminal"}</span>
-          </div>
           <div className="agent-title-line">
             <h1>{agent.label}</h1>
             <StatusPill status={agent.status} />
           </div>
-          <p>{agent.currentStep}</p>
+          {agent.currentStep && agent.status !== "blocked" && (
+            <p>{agent.currentStep}</p>
+          )}
         </div>
         <div className="workspace-actions">
-          <Button
-            type="button"
-            variant="soft"
-            color="gray"
-            aria-label="Split terminal"
-            title={
-              agent.panes.length >= 2
-                ? "This session already has two panes."
-                : undefined
-            }
-            disabled={agent.panes.length >= 2}
-            onClick={() =>
-              void Promise.resolve(onSplitPane()).catch(() => undefined)
-            }
-          >
-            <ColumnsIcon /> Split terminal
-          </Button>
+          <IconTooltip label="Split terminal">
+            <IconButton
+              type="button"
+              variant="soft"
+              color="gray"
+              aria-label="Split terminal"
+              title={
+                agent.panes.length >= 2
+                  ? "This session already has two panes."
+                  : undefined
+              }
+              disabled={agent.panes.length >= 2}
+              onClick={() =>
+                void Promise.resolve(onSplitPane()).catch(() => undefined)
+              }
+            >
+              <ColumnsIcon />
+            </IconButton>
+          </IconTooltip>
         </div>
-        <div className="workspace-metadata">
-          <span>{agent.runtime}</span>
-          {agent.model && agent.model !== agent.runtime && (
-            <span>{agent.model}</span>
-          )}
-          {workspace.branch && <code>{workspace.branch}</code>}
-          {workspace.path && (
-            <span title={workspace.path}>{workspace.path}</span>
-          )}
-        </div>
+        {(workspace.branch || workspace.path) && (
+          <div className="workspace-metadata">
+            {workspace.branch && <code>{workspace.branch}</code>}
+            {workspace.path && (
+              <span title={workspace.path}>{workspace.path}</span>
+            )}
+          </div>
+        )}
       </header>
 
       {agent.status === "blocked" && (
@@ -472,7 +489,7 @@ export function TerminalWorkspace({
               canPrompt
                 ? agent.status === "blocked"
                   ? "Type a decision or instruction…"
-                  : `Send a follow-up to ${agent.label}…`
+                  : `Message ${agent.label}…`
                 : "This is a read-only terminal"
             }
             disabled={!canPrompt || isSending}

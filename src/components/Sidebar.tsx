@@ -3,7 +3,6 @@ import {
   Component1Icon,
   DesktopIcon,
   ExclamationTriangleIcon,
-  GitHubLogoIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import * as Separator from "@radix-ui/react-separator";
@@ -46,9 +45,7 @@ function SessionButton({
       </span>
       <span className="session-copy">
         <strong>{session.label}</strong>
-        <small>{session.currentStep}</small>
       </span>
-      {!isTerminal && <StatusPill status={session.status} />}
     </button>
   );
 }
@@ -126,11 +123,6 @@ export function Sidebar({
               </div>
               <div className="workspace-list">
                 {state.workspaces.map((workspace) => {
-                  const items = agentsForWorkspace(state, workspace.id);
-                  const agentCount = items.filter(
-                    ({ kind }) => kind === "agent",
-                  ).length;
-                  const terminalCount = items.length - agentCount;
                   const selected = workspace.id === state.selectedWorkspaceId;
                   return (
                     <button
@@ -149,12 +141,6 @@ export function Sidebar({
                       </span>
                       <span className="workspace-copy">
                         <strong>{workspace.name}</strong>
-                        <small>
-                          {agentCount} {agentCount === 1 ? "agent" : "agents"}
-                          {terminalCount > 0
-                            ? ` · ${terminalCount} terminal`
-                            : ""}
-                        </small>
                       </span>
                       <ChevronRightIcon
                         className="workspace-chevron"
@@ -216,16 +202,6 @@ export function Sidebar({
           <ScrollArea.Thumb className="scrollbar-thumb" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
-
-      <a
-        className="sidebar-project-link"
-        href="https://github.com/herdrdev/herdr"
-        target="_blank"
-        rel="noreferrer"
-      >
-        <GitHubLogoIcon aria-hidden="true" />
-        <span>herdr on GitHub</span>
-      </a>
     </aside>
   );
 }

@@ -24,7 +24,6 @@ export function HerdrLogo({ compact = false }: HerdrLogoProps) {
       {!compact && (
         <div className="brand-type">
           <strong>herdr</strong>
-          <span>agent runtime</span>
         </div>
       )}
     </div>
