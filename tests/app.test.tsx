@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../src/App";
 import { createDemoState } from "../src/state";
 
@@ -17,6 +17,30 @@ function renderApp() {
 }
 
 describe("Hedr terminal-first workbench", () => {
+  beforeEach(() => {
+    document.documentElement.classList.remove("dark", "light");
+    const values = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+  });
+
+  test("defaults to dark and restores an explicit light appearance", () => {
+    const dark = render(<App live={false} />);
+    expect(dark.container.querySelector(".hedr-theme")).toHaveClass("dark");
+    expect(document.documentElement).toHaveClass("dark");
+    dark.unmount();
+
+    window.localStorage.setItem("hedr-appearance", "light");
+    const light = render(<App live={false} />);
+    expect(light.container.querySelector(".hedr-theme")).toHaveClass("light");
+    expect(document.documentElement).toHaveClass("light");
+  });
+
   test("shows the Hedr product identity", () => {
     renderApp();
 

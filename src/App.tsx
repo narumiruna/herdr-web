@@ -58,9 +58,7 @@ export function App({
         ? window.localStorage.getItem("hedr-appearance")
         : null;
     if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return "dark";
   });
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -146,6 +144,8 @@ export function App({
     if (typeof window.localStorage?.setItem === "function") {
       window.localStorage.setItem("hedr-appearance", appearance);
     }
+    document.documentElement.classList.toggle("dark", appearance === "dark");
+    document.documentElement.classList.toggle("light", appearance === "light");
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", appearance === "dark" ? "#11110f" : "#f6f3ed");

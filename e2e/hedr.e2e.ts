@@ -6,9 +6,44 @@ async function hasNoPageOverflow(page: Page) {
   );
 }
 
+test("defaults to dark and preserves an explicit light appearance", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator(".hedr-theme")).toHaveClass(/dark/);
+  await expect(
+    page.getByRole("button", { name: "Use light appearance" }),
+  ).toBeVisible();
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    "#11110f",
+  );
+
+  await page.getByRole("button", { name: "Use light appearance" }).click();
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await expect(page.locator(".hedr-theme")).toHaveClass(/light/);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("hedr-appearance")))
+    .toBe("light");
+  await page.reload();
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await expect(page.locator(".hedr-theme")).toHaveClass(/light/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    "#f6f3ed",
+  );
+});
+
 test("desktop workbench gives the terminal priority", async ({
   page,
 }, testInfo) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("hedr-appearance")) {
+      localStorage.setItem("hedr-appearance", "light");
+    }
+  });
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.goto("/");
 
