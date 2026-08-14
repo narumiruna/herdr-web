@@ -48,7 +48,13 @@ herdr status server
 
 ## Project-directory CLI
 
-Install the command from this checkout:
+Install the published command from the public npm registry:
+
+```sh
+npm install --global herdr-web
+```
+
+To link the command from this checkout instead:
 
 ```sh
 just install-cli
@@ -57,15 +63,15 @@ just install-cli
 Open the current directory or an explicit project directory:
 
 ```sh
-hedr .
-hedr /path/to/project
+herdr-web .
+herdr-web /path/to/project
 ```
 
 The command resolves the directory, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
 
-Run `hedr --help` for usage and press `Ctrl+C` to stop the development web processes.
+Run `herdr-web --help` for usage and press `Ctrl+C` to stop the development web processes.
 
-The linked command depends on this checkout, its installed npm dependencies, `herdr`, and `just` remaining available.
+The command requires `herdr` and `just`; a linked development command additionally depends on this checkout and its installed npm dependencies.
 
 ## Run locally
 
@@ -242,11 +248,12 @@ Treat the printed URL like a password, use this directly only on a trusted LAN, 
 ## Verification
 
 ```sh
-npm run check      # Biome formatting and lint rules
-npm test           # Vitest client, bridge, reducer, and interaction tests
-npm run test:e2e   # Playwright desktop and mobile browser checks
-npm run build      # Browser and Node production bundles
-npm run ci         # check, unit tests, and build
+npm run check          # Biome formatting and lint rules
+npm run check:package  # npm package metadata and runtime contents
+npm test               # Vitest client, bridge, reducer, and interaction tests
+npm run test:e2e       # Playwright desktop and mobile browser checks
+npm run build          # Browser and Node production bundles
+npm run ci             # checks, package inspection, tests, and build
 ```
 
 Install Playwright's Chromium once when it is not already available:
@@ -254,6 +261,45 @@ Install Playwright's Chromium once when it is not already available:
 ```sh
 npx playwright install chromium
 ```
+
+## Automation and releases
+
+GitHub Actions runs `.github/workflows/ci.yml` for pull requests, pushes to `main`, and manual dispatches.
+
+CI runs formatting and lint checks, all unit and integration tests, both production builds, Chromium browser tests, and a standalone Docker build.
+
+Add a repository Actions secret named `PAT_TOKEN` before running release automation.
+
+Set `PAT_TOKEN` to an npm access token permitted to publish `herdr-web`.
+
+Version pull requests, GHCR images, and GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
+
+Version bumps, publication, and GitHub Releases use the `release` environment so optional deployment-branch or reviewer protection can be configured in repository settings.
+
+Run **Bump version** from `main` and choose `patch`, `minor`, or `major`.
+
+The workflow updates `package.json` and `package-lock.json` in a GitHub-signed commit and opens a focused version-bump pull request.
+
+After the version pull request passes CI and is merged, create and push a signed tag matching the package version:
+
+```sh
+git switch main
+git pull --ff-only
+git tag -s v0.2.0 -m "Hedr 0.2.0"
+git push origin v0.2.0
+```
+
+The tag starts `.github/workflows/release.yml`, which verifies the tag and lockfile versions, reruns all checks, calls `.github/workflows/publish.yml`, and creates the GitHub Release only after every publication succeeds.
+
+Publish sends `herdr-web` to the public npm registry using `PAT_TOKEN`.
+
+It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, then pushes immutable version, minor, major, commit, and `latest` tags to `ghcr.io/narumiruna/hedr`.
+
+```sh
+docker pull ghcr.io/narumiruna/hedr:latest
+```
+
+The **Publish** workflow can be rerun manually only from a matching `vX.Y.Z` tag and skips an npm version that already exists.
 
 ## Architecture
 

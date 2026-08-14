@@ -6,7 +6,7 @@ default:
 install:
     npm install
 
-# Install the hedr command from this checkout.
+# Install the herdr-web command from this checkout.
 install-cli: install
     npm link
 

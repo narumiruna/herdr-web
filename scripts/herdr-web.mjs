@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const HELP = `Start Hedr for a project directory.
 
-Usage: hedr [directory]
+Usage: herdr-web [directory]
 
 Arguments:
   directory  Project directory to open (default: current directory)
@@ -18,7 +18,7 @@ then starts the authenticated Hedr workbench with the existing just workflow.
 `;
 
 function fail(message) {
-  process.stderr.write(`hedr: ${message}\n`);
+  process.stderr.write(`herdr-web: ${message}\n`);
   process.exitCode = 1;
 }
 
