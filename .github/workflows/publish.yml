@@ -1,0 +1,169 @@
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Stable package version without the v prefix
+        required: true
+        type: string
+    secrets:
+      PAT_TOKEN:
+        description: Token with permission to publish herdr-web to npm
+        required: true
+    outputs:
+      digest:
+        description: Published container image digest
+        value: ${{ jobs.publish.outputs.digest }}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable package version without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish npm package and container image
+    environment: release
+    permissions:
+      contents: read
+      packages: write # Publish the GHCR image with GITHUB_TOKEN.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Require publishing token
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ -z "$PAT_TOKEN" ]; then
+            echo "Repository secret PAT_TOKEN is required for npm publication." >&2
+            exit 1
+          fi
+
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js for npm
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Validate release version and ref
+        id: metadata
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "$GITHUB_REF_NAME is not contained in $DEFAULT_BRANCH." >&2
+            exit 1
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Version must be stable semver without a v prefix: $VERSION" >&2
+            exit 1
+          fi
+          package_version=$(node --print "require('./package.json').version")
+          if [ "$VERSION" != "$package_version" ]; then
+            echo "Input version $VERSION does not match package.json $package_version." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "Publish must run from tag v$VERSION, not $GITHUB_REF." >&2
+            exit 1
+          fi
+
+          image=$(printf 'ghcr.io/%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          minor=${VERSION%.*}
+          major=${VERSION%%.*}
+          short_sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-12)
+          {
+            echo "image=$image"
+            echo "tags<<EOF"
+            echo "$image:$VERSION"
+            echo "$image:$minor"
+            echo "$image:$major"
+            echo "$image:latest"
+            echo "$image:sha-$short_sha"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Inspect npm package contents
+        run: npm pack --dry-run --ignore-scripts
+
+      - name: Check existing npm package
+        id: npm-package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if npm view "herdr-web@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm package
+        if: steps.npm-package.outputs.exists != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: npm publish --ignore-scripts # zizmor: ignore[use-trusted-publishing] PAT_TOKEN authenticates npm publication.
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and publish image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.title=Hedr
+            org.opencontainers.image.description=Browser workbench for Herdr coding-agent sessions
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Summarize publication
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## Published Hedr $VERSION"
+            echo
+            echo "npm: \`herdr-web@$VERSION\`"
+            echo
+            echo "Container: \`$IMAGE@$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

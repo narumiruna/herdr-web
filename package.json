@@ -1,10 +1,37 @@
 {
-  "name": "hedr",
+  "name": "herdr-web",
   "version": "0.1.0",
-  "private": true,
+  "description": "Browser workbench for Herdr coding-agent sessions",
+  "license": "MIT",
   "type": "module",
   "bin": {
-    "hedr": "./scripts/hedr.mjs"
+    "herdr-web": "./scripts/herdr-web.mjs"
+  },
+  "files": [
+    "index.html",
+    "justfile",
+    "public",
+    "scripts/access-token.mjs",
+    "scripts/find-port.mjs",
+    "scripts/herdr-web.mjs",
+    "scripts/lan-address.mjs",
+    "server",
+    "src",
+    "tsconfig.json",
+    "tsconfig.server.json",
+    "vite.config.ts"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/narumiruna/hedr.git"
+  },
+  "homepage": "https://github.com/narumiruna/hedr#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "scripts": {
     "dev": "concurrently --kill-others --names web,bridge \"vite\" \"tsx watch server/index.ts\"",
@@ -12,10 +39,11 @@
     "start": "node dist-server/index.js",
     "preview": "npm start",
     "check": "biome ci .",
+    "check:package": "node scripts/check-package.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
-    "ci": "npm run check && npm test && npm run build",
+    "ci": "npm run check && npm run check:package && npm test && npm run build",
     "prepare": "husky"
   },
   "dependencies": {
@@ -30,10 +58,14 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/themes": "^3.3.0",
     "@xterm/addon-fit": "^0.11.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/xterm": "^6.0.0",
+    "concurrently": "^10.0.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "tsx": "^4.23.12",
+    "vite": "^8.2.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {
@@ -46,13 +78,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^10.0.4",
     "husky": "^9.1.7",
     "jsdom": "^29.0.1",
-    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
     "vitest": "^4.1.10"
   }
 }
