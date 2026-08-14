@@ -26,6 +26,36 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Verify annotated tag signature
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const tagName = context.ref.replace("refs/tags/", "");
+            const ref = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `tags/${tagName}`,
+            });
+            if (ref.data.object.type !== "tag") {
+              throw new Error(`${tagName} must be an annotated, signed tag`);
+            }
+
+            const tag = await github.rest.git.getTag({
+              owner,
+              repo,
+              tag_sha: ref.data.object.sha,
+            });
+            if (tag.data.object.type !== "commit" || tag.data.object.sha !== context.sha) {
+              throw new Error(`${tagName} does not directly reference ${context.sha}`);
+            }
+            if (!tag.data.verification?.verified) {
+              const reason = tag.data.verification?.reason ?? "unknown";
+              throw new Error(`${tagName} signature is not verified: ${reason}`);
+            }
+            core.info(`${tagName} has a verified ${tag.data.verification.reason} signature`);
+
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
