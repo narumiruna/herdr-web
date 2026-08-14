@@ -5,6 +5,12 @@ import { HerdrClient } from "./herdr-client.js";
 import { LiveHerdrService } from "./herdr-service.js";
 import { createHerdrHttpHandler } from "./http-app.js";
 import { createStaticHandler } from "./static-files.js";
+import {
+  LocalTerminalBackend,
+  RemoteTerminalBackend,
+} from "./terminal-session.js";
+import { TerminalTicketStore } from "./terminal-tickets.js";
+import { attachTerminalWebSocket } from "./terminal-websocket.js";
 
 const token = process.env.HEDR_TOKEN?.trim();
 if (!token) {
@@ -30,9 +36,33 @@ const endpoint =
     : socketPath;
 const staticRoot = resolve(process.env.HEDR_STATIC_ROOT ?? "dist");
 const projectsRoot = process.env.HERDR_PROJECTS_ROOT?.trim() || undefined;
+const terminalProxyPort = Number.parseInt(
+  process.env.HERDR_TERMINAL_PROXY_PORT ?? "",
+  10,
+);
+const terminalBackend =
+  Number.isInteger(terminalProxyPort) && terminalProxyPort > 0
+    ? new RemoteTerminalBackend({
+        host: process.env.HERDR_TERMINAL_PROXY_HOST ?? "host.docker.internal",
+        port: terminalProxyPort,
+        token: process.env.HERDR_TERMINAL_PROXY_TOKEN?.trim() ?? "",
+      })
+    : new LocalTerminalBackend({
+        command: process.env.HERDR_BINARY ?? "herdr",
+      });
 const client = new HerdrClient(endpoint);
-const service = new LiveHerdrService(client, { projectsRoot });
-const api = createHerdrHttpHandler({ service, token });
+const service = new LiveHerdrService(client, {
+  projectsRoot,
+  terminalStreamingConfigured: terminalBackend.configured,
+});
+const terminalTickets = new TerminalTicketStore();
+const api = createHerdrHttpHandler({
+  service,
+  terminalConfigured: terminalBackend.configured,
+  terminalTickets,
+  token,
+  viewToken: process.env.HEDR_VIEW_TOKEN?.trim() || undefined,
+});
 const staticFiles = createStaticHandler(staticRoot);
 
 const server = createServer((request, response) => {
@@ -52,6 +82,12 @@ const server = createServer((request, response) => {
   void staticFiles(request, response);
 });
 
+const terminalWebSocket = attachTerminalWebSocket({
+  backend: terminalBackend,
+  server,
+  tickets: terminalTickets,
+});
+
 server.listen(port, host, () => {
   console.log(`Hedr bridge listening on http://${host}:${port}`);
   console.log(
@@ -62,5 +98,8 @@ server.listen(port, host, () => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  process.on(signal, () => {
+    terminalWebSocket.close();
+    server.close(() => process.exit(0));
+  });
 }

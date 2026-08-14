@@ -61,6 +61,13 @@ interface LiveRead {
 }
 
 export interface LiveSnapshotPayload {
+  access?: {
+    role?: "controller" | "viewer";
+  };
+  capabilities?: {
+    terminalReason?: string;
+    terminalStreaming?: boolean;
+  };
   readErrors?: Record<string, string>;
   reads: Record<string, LiveRead>;
   snapshot: {
@@ -272,6 +279,12 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
   return {
     activities: [],
     agents,
+    capabilities: {
+      terminalReason:
+        payload.capabilities?.terminalReason ??
+        "This Herdr version supports snapshot output only.",
+      terminalStreaming: payload.capabilities?.terminalStreaming === true,
+    },
     selectedAgentId,
     selectedSessionByWorkspace,
     selectedWorkspaceId,

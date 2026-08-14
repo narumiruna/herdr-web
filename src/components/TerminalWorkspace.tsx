@@ -26,10 +26,14 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_PROMPT_CHARACTERS,
   SUPPORTED_IMAGE_TYPES,
+  type TerminalTicket,
+  type TerminalTicketInput,
+  type UploadedImage,
 } from "../herdr-api";
 import type { Agent, TerminalPane, Workspace } from "../state";
 import { HerdrMutationError } from "../use-herdr-runtime";
 import { IconTooltip } from "./IconTooltip";
+import { InteractiveTerminal } from "./InteractiveTerminal";
 import { RadixDialog } from "./RadixDialog";
 
 export interface ComposerDraft {
@@ -51,9 +55,14 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
 interface TerminalWorkspaceProps {
   actionsEnabled: boolean;
   agent: Agent;
+  appearance: "dark" | "light";
   draft: ComposerDraft;
   isSending: boolean;
   workspace: Workspace;
+  createTerminalTicket: (
+    paneId: string,
+    input: TerminalTicketInput,
+  ) => Promise<TerminalTicket>;
   onClearDraft: (agentId: string) => void;
   onDraftChange: (agentId: string, update: Partial<ComposerDraft>) => void;
   onMessage: (
@@ -67,6 +76,11 @@ interface TerminalWorkspaceProps {
   onSplitPane: () => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
   onClosePane: (paneId: string) => void | Promise<void>;
+  onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
+  terminalControlEnabled: boolean;
+  terminalEnabled: boolean;
+  terminalReason: string;
+  terminalStreaming: boolean;
 }
 
 function compactPath(path: string): string {
@@ -272,6 +286,8 @@ function TerminalPaneView({
 export function TerminalWorkspace({
   actionsEnabled,
   agent,
+  appearance,
+  createTerminalTicket,
   draft,
   isSending,
   workspace,
@@ -284,6 +300,11 @@ export function TerminalWorkspace({
   onSplitPane,
   onSelectPane,
   onClosePane,
+  onUploadImage,
+  terminalControlEnabled,
+  terminalEnabled,
+  terminalReason,
+  terminalStreaming,
 }: TerminalWorkspaceProps) {
   const [dragging, setDragging] = useState(false);
   const [closingPane, setClosingPane] = useState<TerminalPane>();
@@ -549,10 +570,16 @@ export function TerminalWorkspace({
       )}
 
       <section className="terminal-shell" aria-label={`${agent.label} session`}>
+        {!terminalStreaming && (
+          <div className="snapshot-mode" role="note" title={terminalReason}>
+            Snapshot output
+            <span>Interactive terminal unavailable</span>
+          </div>
+        )}
         {agent.panes.length > 1 && (
           <div
             className="pane-switcher"
-            data-two={agent.panes.length === 2}
+            data-two={!terminalStreaming && agent.panes.length === 2}
             role="tablist"
             aria-label="Session panes"
           >
@@ -573,32 +600,77 @@ export function TerminalWorkspace({
         )}
         <div
           className="pane-grid"
-          data-split={agent.panes.length === 2}
-          data-many={agent.panes.length > 2}
+          data-split={!terminalStreaming && agent.panes.length === 2}
+          data-many={!terminalStreaming && agent.panes.length > 2}
         >
           {agent.panes
-            .filter(
-              (pane) =>
-                agent.panes.length <= 2 || pane.id === agent.activePaneId,
+            .filter((pane) =>
+              terminalStreaming
+                ? pane.id === agent.activePaneId
+                : agent.panes.length <= 2 || pane.id === agent.activePaneId,
             )
-            .map((pane) => (
-              <TerminalPaneView
-                pane={pane}
-                key={pane.id}
-                agentLabel={agent.label}
-                focused={pane.id === agent.activePaneId}
-                canClose={actionsEnabled && agent.panes.length > 1}
-                onFocus={() => onSelectPane(pane.id)}
-                onClose={() => {
-                  setCloseError("");
-                  setClosingPane(pane);
-                }}
-                onRetryOutput={() => void onRetryOutput()}
-              />
-            ))}
+            .map((pane) =>
+              terminalStreaming ? (
+                <section
+                  className="terminal-pane"
+                  data-focused="true"
+                  aria-label={`${pane.title} terminal`}
+                  key={pane.id}
+                >
+                  <div className="pane-titlebar">
+                    <span className="pane-title">
+                      <CodeIcon aria-hidden="true" />
+                      {pane.title}
+                    </span>
+                    {actionsEnabled && agent.panes.length > 1 && (
+                      <button
+                        type="button"
+                        className="pane-close"
+                        aria-label={`Close ${pane.title} pane`}
+                        onClick={() => {
+                          setCloseError("");
+                          setClosingPane(pane);
+                        }}
+                      >
+                        <Cross2Icon />
+                      </button>
+                    )}
+                  </div>
+                  <InteractiveTerminal
+                    actionsEnabled={terminalEnabled}
+                    appearance={appearance}
+                    controlEnabled={terminalControlEnabled}
+                    structuredActionsEnabled={actionsEnabled}
+                    agentId={agent.id}
+                    agentLabel={agent.label}
+                    canPrompt={canPrompt}
+                    createTicket={createTerminalTicket}
+                    draft={draft}
+                    onDraftChange={onDraftChange}
+                    onPrompt={(message) => onMessage(message)}
+                    onUploadImage={onUploadImage}
+                    paneId={pane.id}
+                  />
+                </section>
+              ) : (
+                <TerminalPaneView
+                  pane={pane}
+                  key={pane.id}
+                  agentLabel={agent.label}
+                  focused={pane.id === agent.activePaneId}
+                  canClose={actionsEnabled && agent.panes.length > 1}
+                  onFocus={() => onSelectPane(pane.id)}
+                  onClose={() => {
+                    setCloseError("");
+                    setClosingPane(pane);
+                  }}
+                  onRetryOutput={() => void onRetryOutput()}
+                />
+              ),
+            )}
         </div>
 
-        {canPrompt ? (
+        {!terminalStreaming && canPrompt ? (
           <form
             ref={composerForm}
             className="message-composer"
@@ -764,7 +836,7 @@ export function TerminalWorkspace({
               </span>
             </div>
           </form>
-        ) : (
+        ) : !terminalStreaming ? (
           <div className="terminal-readonly" role="note">
             <LockClosedIcon aria-hidden="true" />
             <span>
@@ -772,7 +844,7 @@ export function TerminalWorkspace({
               Prompts are available only for detected Agents.
             </span>
           </div>
-        )}
+        ) : null}
       </section>
 
       <RadixDialog

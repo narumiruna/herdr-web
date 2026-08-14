@@ -12,6 +12,9 @@ import {
   HerdrBridgeError,
   type NewLiveSession,
   rememberAccessToken,
+  type TerminalTicket,
+  type TerminalTicketInput,
+  type UploadedImage,
 } from "./herdr-api";
 import { mapLiveSnapshot } from "./live-state";
 import {
@@ -24,6 +27,7 @@ import {
 export type ConnectionStatus = "auth" | "error" | "loading" | "ready";
 
 export type RuntimeConnection = "connected" | "reconnecting";
+export type AccessRole = "controller" | "viewer";
 export type MutationOutcome = "rejected" | "unknown";
 
 export class HerdrMutationError extends Error {
@@ -50,6 +54,7 @@ interface PromptResult {
 }
 
 interface HerdrRuntime {
+  accessRole: AccessRole;
   actionError: string;
   clearActionError: () => void;
   closePane: (agentId: string, paneId: string) => Promise<void>;
@@ -70,6 +75,11 @@ interface HerdrRuntime {
   splitPane: (agentId: string, paneId: string) => Promise<void>;
   state: HerdrState;
   status: ConnectionStatus;
+  terminalTicket: (
+    paneId: string,
+    input: TerminalTicketInput,
+  ) => Promise<TerminalTicket>;
+  uploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
 }
 
 export function promptWithImage(message: string, path: string): string {
@@ -92,6 +102,7 @@ export function useHerdrRuntime(
   );
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [accessRole, setAccessRole] = useState<AccessRole>("controller");
   const [connection, setConnection] = useState<RuntimeConnection>("connected");
   const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
   const hasSnapshot = useRef(!live);
@@ -105,6 +116,9 @@ export function useHerdrRuntime(
     try {
       const payload = await client.state();
       dispatch({ type: "runtime.synced", state: mapLiveSnapshot(payload) });
+      setAccessRole(
+        payload.access?.role === "viewer" ? "viewer" : "controller",
+      );
       hasSnapshot.current = true;
       setConnection("connected");
       setError("");
@@ -137,17 +151,60 @@ export function useHerdrRuntime(
     if (!live || !client) return;
     let stopped = false;
     let running = false;
+    let pending = false;
+    let eventRetry = 0;
+    let eventRefresh = 0;
+    let fallbackPoll = 0;
+    const controller = new AbortController();
     const update = async () => {
-      if (stopped || running) return;
+      if (stopped) return;
+      if (running) {
+        pending = true;
+        return;
+      }
       running = true;
       await refresh();
       running = false;
+      if (pending) {
+        pending = false;
+        void update();
+      }
+    };
+    const startFallbackPolling = () => {
+      if (fallbackPoll) return;
+      fallbackPoll = window.setInterval(() => void update(), 1_500);
+    };
+    const subscribe = async () => {
+      try {
+        await client.events(
+          controller.signal,
+          () => {
+            window.clearTimeout(eventRefresh);
+            eventRefresh = window.setTimeout(() => void update(), 75);
+          },
+          () => {
+            window.clearInterval(fallbackPoll);
+            fallbackPoll = 0;
+          },
+        );
+      } catch {
+        if (stopped) return;
+        startFallbackPolling();
+      }
+      if (!stopped) {
+        eventRetry = window.setTimeout(() => void subscribe(), 2_000);
+      }
     };
     void update();
-    const timer = window.setInterval(() => void update(), 1_500);
+    void subscribe();
+    const safetyRefresh = window.setInterval(() => void update(), 30_000);
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      controller.abort();
+      window.clearInterval(fallbackPoll);
+      window.clearInterval(safetyRefresh);
+      window.clearTimeout(eventRefresh);
+      window.clearTimeout(eventRetry);
     };
   }, [client, live, refresh]);
 
@@ -186,6 +243,7 @@ export function useHerdrRuntime(
   );
 
   return {
+    accessRole,
     actionError,
     clearActionError: () => setActionError(""),
     connection,
@@ -270,5 +328,13 @@ export function useHerdrRuntime(
     },
     state,
     status,
+    terminalTicket: async (paneId, input) => {
+      if (!client) throw new Error("A live Herdr connection is required");
+      return client.terminalTicket(paneId, input);
+    },
+    uploadImage: async (paneId, image) => {
+      if (!client) throw new Error("A live Herdr connection is required");
+      return client.uploadImage(paneId, image);
+    },
   };
 }

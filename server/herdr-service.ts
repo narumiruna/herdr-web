@@ -40,6 +40,7 @@ interface PaneInfoResponse {
 
 interface ServiceOptions {
   projectsRoot?: string;
+  terminalStreamingConfigured?: boolean;
 }
 
 export interface CreateSessionInput {
@@ -48,6 +49,33 @@ export interface CreateSessionInput {
   runtime: string;
   workspaceId: string;
 }
+
+const STRUCTURAL_SUBSCRIPTIONS = [
+  "workspace.created",
+  "workspace.updated",
+  "workspace.metadata_updated",
+  "workspace.renamed",
+  "workspace.moved",
+  "workspace.reordered",
+  "workspace.closed",
+  "workspace.focused",
+  "worktree.created",
+  "worktree.opened",
+  "worktree.removed",
+  "tab.created",
+  "tab.closed",
+  "tab.focused",
+  "tab.renamed",
+  "tab.moved",
+  "pane.created",
+  "pane.closed",
+  "pane.updated",
+  "pane.focused",
+  "pane.moved",
+  "pane.exited",
+  "pane.agent_detected",
+  "layout.updated",
+].map((type) => ({ type }));
 
 const RUNTIMES: Record<
   string,
@@ -70,6 +98,10 @@ export class LiveHerdrService {
   ) {}
 
   async getState(): Promise<{
+    capabilities: {
+      terminalReason: string;
+      terminalStreaming: boolean;
+    };
     readErrors: Record<string, string>;
     reads: Record<string, PaneReadResponse["read"]>;
     snapshot: SessionSnapshotResult["snapshot"];
@@ -81,10 +113,18 @@ export class LiveHerdrService {
     if (result.type !== "session_snapshot" || !result.snapshot) {
       throw new Error("Herdr returned an invalid session snapshot");
     }
+    const protocol = Number(result.snapshot.protocol ?? 0);
+    const terminalStreaming =
+      this.options.terminalStreamingConfigured === true && protocol >= 19;
+    const terminalReason = terminalStreaming
+      ? ""
+      : protocol < 19
+        ? `Herdr protocol ${protocol || "unknown"} does not provide terminal sessions; Herdr 0.8 or newer is required.`
+        : "This Hedr bridge is not configured for Herdr terminal sessions.";
     const allPaneIds = (result.snapshot.panes ?? [])
       .map(({ pane_id: paneId }) => paneId)
       .filter((paneId): paneId is string => Boolean(paneId));
-    const paneIds = allPaneIds.slice(0, 64);
+    const paneIds = terminalStreaming ? [] : allPaneIds.slice(0, 64);
     const settled = await Promise.allSettled(
       paneIds.map((paneId) =>
         this.client.request<PaneReadResponse>("pane.read", {
@@ -97,7 +137,7 @@ export class LiveHerdrService {
       ),
     );
     const readErrors: Record<string, string> = Object.fromEntries(
-      allPaneIds
+      (terminalStreaming ? [] : allPaneIds)
         .slice(64)
         .map((paneId) => [
           paneId,
@@ -121,7 +161,73 @@ export class LiveHerdrService {
       }
       reads[paneId] = entry.value.read;
     });
-    return { readErrors, reads, snapshot: result.snapshot };
+    return {
+      capabilities: { terminalReason, terminalStreaming },
+      readErrors,
+      reads,
+      snapshot: result.snapshot,
+    };
+  }
+
+  async subscribeEvents(
+    signal: AbortSignal,
+    onEvent: (event: unknown) => void,
+    onReady?: () => void,
+  ): Promise<void> {
+    let ready = false;
+    while (!signal.aborted) {
+      const snapshot = await this.client.request<SessionSnapshotResult>(
+        "session.snapshot",
+        {},
+      );
+      if (snapshot.type !== "session_snapshot" || !snapshot.snapshot) {
+        throw new Error("Herdr returned an invalid session snapshot");
+      }
+      const agentStatusSubscriptions = (snapshot.snapshot.panes ?? [])
+        .map(({ pane_id: paneId }) => paneId)
+        .filter((paneId): paneId is string => Boolean(paneId))
+        .slice(0, 128)
+        .map((paneId) => ({
+          pane_id: paneId,
+          type: "pane.agent_status_changed",
+        }));
+      const controller = new AbortController();
+      let resubscribe = false;
+      const abort = () => controller.abort();
+      signal.addEventListener("abort", abort, { once: true });
+      try {
+        await this.client.subscribe(
+          "events.subscribe",
+          {
+            subscriptions: [
+              ...STRUCTURAL_SUBSCRIPTIONS,
+              ...agentStatusSubscriptions,
+            ],
+          },
+          {
+            onEvent: (event) => {
+              onEvent(event);
+              const name =
+                event && typeof event === "object" && "event" in event
+                  ? String(event.event)
+                  : "";
+              if (name === "pane_created" || name === "pane_closed") {
+                resubscribe = true;
+                controller.abort();
+              }
+            },
+            onReady: () => {
+              if (!ready) onReady?.();
+              ready = true;
+            },
+            signal: controller.signal,
+          },
+        );
+      } finally {
+        signal.removeEventListener("abort", abort);
+      }
+      if (!resubscribe) return;
+    }
   }
 
   async uploadImage(

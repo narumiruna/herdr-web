@@ -24,6 +24,20 @@ export interface NewLiveSession {
   workspaceId: string;
 }
 
+export interface TerminalTicket {
+  expiresAt: number;
+  path: string;
+  ticket: string;
+  type: "terminal_ticket";
+}
+
+export interface TerminalTicketInput {
+  cols: number;
+  mode: "control" | "observe";
+  rows: number;
+  takeover?: boolean;
+}
+
 export interface UploadedImage {
   mediaType: string;
   path: string;
@@ -79,10 +93,75 @@ export class HerdrApiClient {
     return this.request("/api/herdr/state");
   }
 
+  async events(
+    signal: AbortSignal,
+    onEvent: (event: unknown) => void,
+    onReady?: () => void,
+  ): Promise<void> {
+    const response = await fetch("/api/herdr/events", {
+      headers: { authorization: `Bearer ${this.token}` },
+      signal,
+    });
+    if (!response.ok) {
+      throw new HerdrBridgeError(
+        response.status,
+        "event_stream_failed",
+        `Event stream failed with status ${response.status}`,
+      );
+    }
+    if (
+      !response.headers.get("content-type")?.includes("application/x-ndjson") ||
+      !response.body
+    ) {
+      throw new HerdrBridgeError(
+        502,
+        "invalid_event_stream",
+        "The bridge did not return a Herdr event stream",
+      );
+    }
+    onReady?.();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      if (buffer.length > 1024 * 1024) {
+        throw new Error("Herdr event stream exceeded its buffer limit");
+      }
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf("\n");
+        if (!line) continue;
+        let event: unknown;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          throw new Error("Herdr event stream returned invalid JSON");
+        }
+        onEvent(event);
+      }
+    }
+    if (!signal.aborted) throw new Error("Herdr event stream disconnected");
+  }
+
   promptAgent(paneId: string, message: string): Promise<unknown> {
     return this.request(
       `/api/herdr/agents/${encodeURIComponent(paneId)}/prompt`,
       { body: JSON.stringify({ message }), method: "POST" },
+    );
+  }
+
+  terminalTicket(
+    paneId: string,
+    input: TerminalTicketInput,
+  ): Promise<TerminalTicket> {
+    return this.request(
+      `/api/herdr/panes/${encodeURIComponent(paneId)}/terminal-ticket`,
+      { body: JSON.stringify(input), method: "POST" },
     );
   }
 

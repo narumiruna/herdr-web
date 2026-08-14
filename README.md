@@ -2,15 +2,17 @@
 
 Hedr is a responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
 
-It keeps herdr's core job visible: find the Agent that needs input, inspect its live terminal, and send a real prompt without hunting through sessions.
+It keeps herdr's core job visible: find the Agent that needs input, control its live terminal, and send a real prompt without hunting through sessions.
 
 ## Features
 
 - Terminal-dominant desktop, tablet, and mobile layouts with one persistent navigation rail on wide screens.
 - A workspace tab bar that preserves Herdr tab order across detected Agents and standalone Terminals.
 - A global Needs input queue before workspace navigation, with per-workspace counts.
-- Live workspace, tab, pane, terminal-output, and Agent-state snapshots from herdr 0.8.
-- Real prompts submitted through herdr's `agent.prompt` API, with responses shown in the terminal.
+- Interactive xterm.js terminals backed by Herdr 0.8 terminal control and observation sessions.
+- Exact terminal input, ANSI output, resize, mouse, IME, Unicode, and alternate-screen behavior without snapshot polling.
+- Structural workspace, tab, pane, layout, and Agent updates from Herdr event subscriptions.
+- Real prompts submitted through Herdr's `agent.prompt` API from an optional terminal-side dialog.
 - Per-Agent in-memory text and image drafts that survive empty workspaces, navigation, and failed sends.
 - Remote image paste, drag/drop, and file selection with host-readable Agent attachment paths.
 - Real pane splitting and confirmed pane closing.
@@ -20,7 +22,7 @@ It keeps herdr's core job visible: find the Agent that needs input, inspect its 
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
 - Unified light and dark appearances that follow the initial system preference and persist the user's choice.
 - JetBrains Mono terminal text with bundled Nerd Font symbols and no client-side font install.
-- Bearer-token protection for every terminal-control API request.
+- Controller and optional independent viewer tokens, same-origin WebSockets, and short-lived one-use terminal tickets.
 
 ## Radix UI
 
@@ -34,7 +36,7 @@ The front end intentionally uses every requested Radix family.
 ## Requirements
 
 - Node.js 22 or newer.
-- herdr 0.8 or newer installed and running.
+- Herdr 0.8 or newer installed and running with `herdr terminal session control` and `observe` support.
 - `just` for the recommended startup commands.
 - Docker when using the container workflow.
 
@@ -83,10 +85,11 @@ just run
 
 Open the printed `network` URL from another device on the same trusted network.
 
-For a stable token or a named-session socket:
+For a stable controller token, optional independent viewer token, or a named-session socket:
 
 ```sh
-HEDR_TOKEN=my-long-random-token \
+HEDR_TOKEN=my-long-random-controller-token \
+HEDR_VIEW_TOKEN=my-different-read-only-token \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 just run
 ```
@@ -111,11 +114,17 @@ Split panes stay inside their parent tab, appear side by side on wide screens, a
 
 Each Agent tab keeps its status visible, while a compact context row preserves the current working directory and branch.
 
-The focused terminal owns the remaining screen, with keyboard-selectable pane headers, pane actions, and the Agent composer fixed below the output.
+The focused terminal owns the remaining screen and is the primary interaction surface.
 
-Standalone Terminals use a compact read-only bar instead of disabled prompt controls.
+Typing, paste, mouse input, terminal applications, and resize are forwarded through a dedicated WebSocket to one Herdr terminal session.
 
-The Agent composer grows with multi-line prompts, protects IME input, shows the 20,000-character limit, and distinguishes rejected requests from unknown delivery.
+Use the terminal toolbar to search output, stage an image path, or open the optional Agent prompt dialog.
+
+A controller conflict offers explicit read-only observation or takeover instead of silently stealing control.
+
+Standalone Terminals support the same interactive session when Herdr terminal streaming is available.
+
+If terminal streaming is unavailable, Hedr keeps the bounded snapshot view and Agent composer as an explicit compatibility fallback.
 
 Use **New agent** to review and launch one of the four approved runtime presets.
 
@@ -131,23 +140,35 @@ If delivery cannot be confirmed, inspect the terminal before choosing **Send aga
 
 Drafts remain intentionally in memory and do not survive a page reload.
 
-If polling temporarily fails after a successful connection, the workbench keeps the last valid terminal snapshot visible, shows its age, disables mutations, and offers **Retry now**.
+Herdr structural events refresh the control plane, with a 30-second consistency refresh and temporary 1.5-second fallback only while the event stream is unavailable.
+
+If control-plane refresh temporarily fails after a successful connection, the workbench keeps the live terminal session and last valid workspace snapshot visible, shows its age, disables mutations, and offers **Retry now**.
 
 If an individual pane read fails, other panes remain usable and the failed pane offers **Retry output**.
 
 On mobile, workspace creation, session details, and appearance live in **More actions** so navigation, search, and terminal work remain reachable at 320px.
 
+## Terminal controls
+
+- Type normally to send exact terminal input.
+- Use `Cmd+C` on macOS or `Ctrl+Shift+C` elsewhere to copy a terminal selection.
+- Use `Cmd+V` or `Ctrl+V` for normal text paste or to stage a clipboard image.
+- Use `Cmd+Shift+F` or `Ctrl+Shift+F` to search terminal output.
+- Use the image toolbar button to stage a local image.
+- Use the mobile **Esc**, **Ctrl**, and **Tab** key row when the soft keyboard does not expose terminal modifiers.
+- Use **Prompt Agent** when you intentionally want Herdr's semantic `agent.prompt` action instead of terminal input.
+
 ## Send remote images
 
-Press `Ctrl+V` on Windows or Linux, or `Cmd+V` on macOS, anywhere in the workbench to attach a clipboard image.
+Paste an image while the interactive terminal is focused or use its image button.
 
-You can also drop an image onto the composer or use the image button.
+The staged-image dialog performs no upload until **Upload and insert path** is confirmed.
 
-The composer accepts one PNG, JPEG, GIF, or WebP file up to 8 MiB and can send it without additional text.
+The bridge verifies PNG, JPEG, GIF, or WebP signatures, enforces an 8 MiB limit, writes a random file under the active pane's `.hedr/uploads/` directory, and inserts a shell-escaped absolute path at the terminal cursor.
 
-A staged attachment shows its destination under the active pane's `.hedr/uploads/` directory and must be removed before selecting a replacement.
+If insertion cannot be confirmed, the dialog keeps the uploaded path available for copy or retry without uploading a duplicate.
 
-The bridge verifies the declared type against the file signature, writes a random file under the active pane's `.hedr/uploads/` directory, and sends its absolute path to the Agent.
+The compatibility composer still supports workbench-wide image paste, drag/drop, and file selection when interactive terminal streaming is unavailable.
 
 Remove old attachments manually when they are no longer needed:
 
@@ -168,9 +189,10 @@ just up
 `just up` performs these steps:
 
 1. Creates an access token unless `HEDR_TOKEN` is already set.
-2. Starts a loopback-only TCP forwarder for the host herdr Unix socket.
-3. Builds and starts the Node.js production container.
-4. Selects an available host port and prints local and LAN URLs.
+2. Starts a loopback-only TCP forwarder for the host Herdr Unix socket.
+3. Starts a separately authenticated loopback proxy for host-side Herdr terminal-session processes.
+4. Builds and starts the Node.js production container.
+5. Selects an available host port and prints local and LAN URLs.
 
 Set a fixed web port, custom herdr socket, or narrower project mount when needed:
 
@@ -201,6 +223,12 @@ Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/
 
 The Hedr bridge can submit prompts and control terminal panes, so it fails closed when `HEDR_TOKEN` is empty.
 
+Set a different `HEDR_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, or takeover permissions.
+
+The browser exchanges its bearer token for a random terminal ticket that expires after 30 seconds and can be consumed only once.
+
+Terminal WebSockets require the page's same origin and never place the bearer token in the WebSocket URL.
+
 The token in a printed URL is moved into `sessionStorage` and removed from the address bar after the page loads.
 
 The Docker socket forwarder listens only on host loopback.
@@ -229,14 +257,24 @@ npx playwright install chromium
 
 `server/herdr-client.ts` implements herdr's newline-delimited JSON socket transport.
 
-`server/herdr-service.ts` reads `session.snapshot` and bounded `pane.read` output, and exposes prompt, split, close, and approved agent-start operations.
+`server/herdr-service.ts` reads `session.snapshot`, subscribes to structural Herdr events, and exposes prompt, split, close, upload, and approved agent-start operations.
 
-`server/http-app.ts` validates bearer authentication, request sizes, resource IDs, and action payloads before invoking herdr.
+`server/terminal-session.ts` launches Herdr terminal control or observation sessions locally or through the authenticated Docker host proxy, validates ordered NDJSON frames, and applies bounded browser-input backpressure.
+
+`server/terminal-websocket.ts` consumes one-use tickets, validates origin, and bridges browser messages to one terminal process without replay.
+
+`server/http-app.ts` validates controller or viewer authentication, request sizes, resource IDs, and action payloads before invoking Herdr.
 
 `src/live-state.ts` maps protocol-19 snapshots into the workbench model in `src/state.ts`, grouping split panes under their detected Agent while retaining shell-only tabs as standalone Terminals.
 
-`src/use-herdr-runtime.ts` polls every 1.5 seconds, separates rejected mutations from unknown outcomes, refreshes after accepted actions, and preserves the last valid snapshot during transient failures.
+`src/use-herdr-runtime.ts` consumes the structural event stream, separates rejected mutations from unknown outcomes, refreshes after accepted actions, and preserves the last valid snapshot during transient failures.
+
+`src/components/InteractiveTerminal.tsx` owns xterm.js, terminal WebSocket lifecycle, image-path staging, search, and the optional prompt dialog.
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 
-Lifecycle event history is not exposed by protocol 19, so the interface does not fabricate an activity feed.
+Hedr does not edit Herdr configuration files directly.
+
+Use Herdr's own configuration commands until it exposes typed configuration reads and atomic patches through its public API.
+
+The interface does not fabricate lifecycle history or settings that Herdr does not expose.

@@ -42,14 +42,21 @@ up:
     set -eu
     runtime_dir=.hedr-runtime
     mkdir -p "$runtime_dir"
-    if [ -f "$runtime_dir/socket-proxy.pid" ]; then
-        old_pid=$(cat "$runtime_dir/socket-proxy.pid")
-        case "$(ps -p "$old_pid" -o command= 2>/dev/null || true)" in
-            *scripts/socket-proxy.mjs*) kill "$old_pid" 2>/dev/null || true ;;
-        esac
-        rm -f "$runtime_dir/socket-proxy.pid"
-    fi
+    stop_proxy() {
+        pid_file="$1"
+        pattern="$2"
+        if [ -f "$pid_file" ]; then
+            old_pid=$(cat "$pid_file")
+            case "$(ps -p "$old_pid" -o command= 2>/dev/null || true)" in
+                *"$pattern"*) kill "$old_pid" 2>/dev/null || true ;;
+            esac
+            rm -f "$pid_file"
+        fi
+    }
+    stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
     export HEDR_TOKEN="${HEDR_TOKEN:-$(node scripts/access-token.mjs)}"
+    export HERDR_TERMINAL_PROXY_TOKEN="${HERDR_TERMINAL_PROXY_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
     export HEDR_HOST_UID="${HEDR_HOST_UID:-$(id -u)}"
     export HEDR_HOST_GID="${HEDR_HOST_GID:-$(id -g)}"
@@ -57,40 +64,50 @@ up:
     socket_path="${HERDR_HOST_SOCKET_PATH:-${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}}"
     test -S "$socket_path" || { echo "herdr socket not found: $socket_path" >&2; exit 1; }
     export HERDR_TCP_PORT="${HERDR_TCP_PORT:-$(node scripts/find-port.mjs 18787)}"
+    export HERDR_TERMINAL_PROXY_PORT="${HERDR_TERMINAL_PROXY_PORT:-$(node scripts/find-port.mjs 18788)}"
     nohup node scripts/socket-proxy.mjs "$socket_path" "$HERDR_TCP_PORT" >"$runtime_dir/socket-proxy.log" 2>&1 &
-    proxy_pid=$!
-    echo "$proxy_pid" >"$runtime_dir/socket-proxy.pid"
-    keep_proxy=0
+    socket_proxy_pid=$!
+    echo "$socket_proxy_pid" >"$runtime_dir/socket-proxy.pid"
+    nohup node scripts/terminal-session-proxy.mjs "$HERDR_TERMINAL_PROXY_PORT" >"$runtime_dir/terminal-proxy.log" 2>&1 &
+    terminal_proxy_pid=$!
+    echo "$terminal_proxy_pid" >"$runtime_dir/terminal-proxy.pid"
+    keep_proxies=0
     cleanup() {
-        if [ "$keep_proxy" = 0 ]; then
-            kill "$proxy_pid" 2>/dev/null || true
-            rm -f "$runtime_dir/socket-proxy.pid"
+        if [ "$keep_proxies" = 0 ]; then
+            kill "$socket_proxy_pid" "$terminal_proxy_pid" 2>/dev/null || true
+            rm -f "$runtime_dir/socket-proxy.pid" "$runtime_dir/terminal-proxy.pid"
         fi
     }
     trap cleanup EXIT INT TERM
     sleep 0.2
-    kill -0 "$proxy_pid"
+    kill -0 "$socket_proxy_pid"
+    kill -0 "$terminal_proxy_pid"
     docker compose up --build --detach --remove-orphans
     port=$(docker compose port hedr 8080 | head -n 1 | sed 's/.*://')
     host=$(node scripts/lan-address.mjs)
-    keep_proxy=1
+    keep_proxies=1
     echo "local:   http://localhost:$port/?token=$HEDR_TOKEN"
     echo "network: http://$host:$port/?token=$HEDR_TOKEN"
 
-# Stop the production container and host socket proxy.
+# Stop the production container and host socket proxies.
 down:
     #!/bin/sh
     set -eu
     docker compose down
-    pid_file=.hedr-runtime/socket-proxy.pid
-    if [ -f "$pid_file" ]; then
-        proxy_pid=$(cat "$pid_file")
-        case "$(ps -p "$proxy_pid" -o command= 2>/dev/null || true)" in
-            *scripts/socket-proxy.mjs*) kill "$proxy_pid" 2>/dev/null || true ;;
-        esac
-        rm -f "$pid_file"
-    fi
-    rm -f .hedr-runtime/socket-proxy.log
+    stop_proxy() {
+        pid_file="$1"
+        pattern="$2"
+        if [ -f "$pid_file" ]; then
+            proxy_pid=$(cat "$pid_file")
+            case "$(ps -p "$proxy_pid" -o command= 2>/dev/null || true)" in
+                *"$pattern"*) kill "$proxy_pid" 2>/dev/null || true ;;
+            esac
+            rm -f "$pid_file"
+        fi
+    }
+    stop_proxy .hedr-runtime/socket-proxy.pid "scripts/socket-proxy.mjs"
+    stop_proxy .hedr-runtime/terminal-proxy.pid "scripts/terminal-session-proxy.mjs"
+    rm -f .hedr-runtime/socket-proxy.log .hedr-runtime/terminal-proxy.log
     rmdir .hedr-runtime 2>/dev/null || true
 
 # Run reducer and component tests once.

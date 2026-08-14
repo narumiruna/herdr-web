@@ -90,6 +90,30 @@ describe("live Hedr app", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("keeps viewer-token sessions read-only", async () => {
+    window.history.replaceState({}, "", "/?token=view-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ ...payload, access: { role: "viewer" } }),
+            {
+              headers: { "content-type": "application/json" },
+              status: 200,
+            },
+          ),
+      ),
+    );
+
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+    expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  });
+
   test("shows a stable loading workbench while reading the first snapshot", () => {
     window.history.replaceState({}, "", "/?token=test-token");
     vi.stubGlobal(

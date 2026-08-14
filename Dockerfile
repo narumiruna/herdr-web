@@ -19,7 +19,8 @@ ENV BRIDGE_HOST=0.0.0.0 \
     HEDR_STATIC_ROOT=/app/dist \
     PORT=8080
 
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server
 

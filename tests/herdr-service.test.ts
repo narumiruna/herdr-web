@@ -31,6 +31,23 @@ describe("LiveHerdrService", () => {
     });
   });
 
+  test("uses Herdr 0.8 protocol 19 terminal sessions without polling pane reads", async () => {
+    const request = vi.fn().mockResolvedValueOnce({
+      snapshot: { panes: [{ pane_id: "w5:p1" }], protocol: 19 },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { terminalStreamingConfigured: true },
+    );
+
+    await expect(service.getState()).resolves.toMatchObject({
+      capabilities: { terminalReason: "", terminalStreaming: true },
+      reads: {},
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   test("reports partial pane read failures without discarding the snapshot", async () => {
     const request = vi
       .fn()
@@ -71,6 +88,42 @@ describe("LiveHerdrService", () => {
 
     expect(request).toHaveBeenCalledTimes(65);
     expect(result.readErrors["w5:p65"]).toContain("more than 64 panes");
+  });
+
+  test("subscribes only to structural control-plane events", async () => {
+    const subscribe = vi.fn().mockResolvedValue(undefined);
+    const request = vi.fn().mockResolvedValue({
+      snapshot: { panes: [{ pane_id: "w5:p1" }] },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService({
+      request,
+      subscribe,
+    } as unknown as HerdrClient);
+    const controller = new AbortController();
+    const onEvent = vi.fn();
+
+    await service.subscribeEvents(controller.signal, onEvent);
+
+    expect(subscribe).toHaveBeenCalledWith(
+      "events.subscribe",
+      expect.objectContaining({
+        subscriptions: expect.arrayContaining([
+          { type: "workspace.updated" },
+          { type: "tab.focused" },
+          { type: "pane.updated" },
+          { type: "layout.updated" },
+          { pane_id: "w5:p1", type: "pane.agent_status_changed" },
+        ]),
+      }),
+      expect.objectContaining({
+        onEvent: expect.any(Function),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(JSON.stringify(subscribe.mock.calls[0]?.[1])).not.toContain(
+      "pane.output",
+    );
   });
 
   test("stores a verified image under the target pane working directory", async () => {
