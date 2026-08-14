@@ -4,6 +4,7 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   ReloadIcon,
+  UploadIcon,
 } from "@radix-ui/react-icons";
 import { Button } from "@radix-ui/themes";
 import { FitAddon } from "@xterm/addon-fit";
@@ -102,6 +103,26 @@ function imageFromClipboard(data: DataTransfer): File | undefined {
   return undefined;
 }
 
+async function imageFromClipboardApi(): Promise<File | undefined> {
+  if (typeof navigator.clipboard?.read !== "function") return undefined;
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const mediaType = item.types.find((type) => type.startsWith("image/"));
+      if (!mediaType) continue;
+      const blob = await item.getType(mediaType);
+      const extension =
+        mediaType.split("/")[1]?.replace("jpeg", "jpg") || "png";
+      return new File([blob], `clipboard-image.${extension}`, {
+        type: mediaType,
+      });
+    }
+  } catch {
+    // Native paste data remains the primary path when Clipboard API access is unavailable.
+  }
+  return undefined;
+}
+
 function shellEscapePath(path: string): string {
   return `'${path.replaceAll("'", `'"'"'`)}'`;
 }
@@ -145,6 +166,7 @@ export function InteractiveTerminal({
 }: InteractiveTerminalProps) {
   const host = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pasteSink = useRef<HTMLTextAreaElement>(null);
   const promptInput = useRef<HTMLTextAreaElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<Terminal | undefined>(undefined);
@@ -170,6 +192,9 @@ export function InteractiveTerminal({
   const ctrlArmedRef = useRef(false);
   const modeRef = useRef<"control" | "observe">("control");
   const [status, setStatus] = useState<TerminalStatus>("connecting");
+  const [sessionMode, setSessionMode] = useState<"control" | "observe">(
+    "control",
+  );
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -225,6 +250,7 @@ export function InteractiveTerminal({
       const generation = ++connectGeneration.current;
       stopReason.current = undefined;
       modeRef.current = mode;
+      setSessionMode(mode);
       flowWritable.current = true;
       writable.current = false;
       ctrlArmedRef.current = false;
@@ -488,7 +514,7 @@ export function InteractiveTerminal({
     return () => URL.revokeObjectURL(url);
   }, [image]);
 
-  const stageImage = (file: File) => {
+  const stageImage = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
       setImageError("Choose an image file.");
       return;
@@ -496,14 +522,67 @@ export function InteractiveTerminal({
     setImage(file);
     setImageError("");
     setImagePath("");
-  };
+  }, []);
 
-  const paste = (event: ClipboardEvent<HTMLDivElement>) => {
-    if (!structuredActionsEnabled || status !== "live") return;
-    const file = imageFromClipboard(event.clipboardData);
-    if (!file) return;
+  const imagePasteEnabled =
+    structuredActionsEnabled &&
+    sessionMode === "control" &&
+    ["connecting", "live", "reconnecting"].includes(status);
+
+  useEffect(() => {
+    let active = true;
+    const pasteImage = (event: globalThis.ClipboardEvent) => {
+      if (!imagePasteEnabled) return;
+      const file = event.clipboardData
+        ? imageFromClipboard(event.clipboardData)
+        : undefined;
+      if (file) {
+        event.preventDefault();
+        event.stopPropagation();
+        stageImage(file);
+        return;
+      }
+      if (!event.clipboardData?.types?.length) {
+        void imageFromClipboardApi().then((fallback) => {
+          if (active && fallback) stageImage(fallback);
+        });
+      }
+    };
+    window.addEventListener("paste", pasteImage, true);
+    return () => {
+      active = false;
+      window.removeEventListener("paste", pasteImage, true);
+    };
+  }, [imagePasteEnabled, stageImage]);
+
+  useEffect(() => {
+    const redirectTerminalPaste = (event: globalThis.KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      if (
+        event.key.toLowerCase() !== "v" ||
+        (!event.metaKey && !event.ctrlKey) ||
+        event.altKey ||
+        !imagePasteEnabled ||
+        !activeElement ||
+        !host.current?.contains(activeElement)
+      ) {
+        return;
+      }
+      pasteSink.current?.focus({ preventScroll: true });
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", redirectTerminalPaste, true);
+    return () =>
+      window.removeEventListener("keydown", redirectTerminalPaste, true);
+  }, [imagePasteEnabled]);
+
+  const pasteTextFromSink = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     event.preventDefault();
-    stageImage(file);
+    event.stopPropagation();
+    const text = event.clipboardData.getData("text/plain");
+    if (text) terminalRef.current?.paste(text);
+    event.currentTarget.value = "";
+    terminalRef.current?.focus();
   };
 
   const drop = (event: DragEvent<HTMLDivElement>) => {
@@ -587,7 +666,6 @@ export function InteractiveTerminal({
       className="interactive-terminal"
       data-status={status}
       aria-label={`${agentLabel} terminal controls`}
-      onPasteCapture={paste}
       onDragOver={(event) => event.preventDefault()}
       onDrop={drop}
     >
@@ -692,6 +770,13 @@ export function InteractiveTerminal({
           <span>Enter next · Shift+Enter previous · Esc close</span>
         </label>
       )}
+      <textarea
+        ref={pasteSink}
+        className="terminal-paste-sink"
+        aria-label="Terminal paste catcher"
+        tabIndex={-1}
+        onPaste={pasteTextFromSink}
+      />
       <section
         ref={host}
         className="xterm-host"
@@ -759,6 +844,7 @@ export function InteractiveTerminal({
         title="Insert image path"
         description="Review the image before uploading it to the active pane directory. Hedr inserts the path without pressing Enter."
         className="terminal-image-dialog"
+        onCloseAutoFocus={() => terminalRef.current?.focus()}
       >
         <div className="terminal-image-preview">
           {previewUrl && (
@@ -770,6 +856,16 @@ export function InteractiveTerminal({
           <strong>{image?.name}</strong>
           {imagePath && <code>{imagePath}</code>}
           {imageError && <span role="alert">{imageError}</span>}
+          {!imageError && !structuredActionsEnabled && (
+            <span role="status">
+              Image ready. Controller access is required before uploading.
+            </span>
+          )}
+          {!imageError && structuredActionsEnabled && status !== "live" && (
+            <span role="status">
+              Image ready. Wait for an Interactive terminal before uploading.
+            </span>
+          )}
           {imagePath && (
             <Button
               type="button"
@@ -792,7 +888,10 @@ export function InteractiveTerminal({
             {imagePath ? (
               <Button
                 type="button"
+                size="2"
+                variant="solid"
                 color="amber"
+                highContrast
                 disabled={status !== "live"}
                 onClick={() => insertUploadedPath(imagePath)}
               >
@@ -801,7 +900,10 @@ export function InteractiveTerminal({
             ) : (
               <Button
                 type="button"
+                size="2"
+                variant="solid"
                 color="amber"
+                highContrast
                 disabled={
                   imageUploading ||
                   !structuredActionsEnabled ||
@@ -809,6 +911,7 @@ export function InteractiveTerminal({
                 }
                 onClick={() => void insertImage()}
               >
+                <UploadIcon aria-hidden="true" />
                 {imageUploading ? "Uploading…" : "Upload and insert path"}
               </Button>
             )}

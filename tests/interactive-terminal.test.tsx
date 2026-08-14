@@ -6,6 +6,7 @@ import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
 const xterm = vi.hoisted(() => ({
   instances: [] as Array<{
     data?: (value: string) => void;
+    focus: ReturnType<typeof vi.fn>;
     options?: unknown;
     reset: ReturnType<typeof vi.fn>;
     write: ReturnType<typeof vi.fn>;
@@ -17,6 +18,7 @@ vi.mock("@xterm/xterm", () => ({
     cols = 80;
     rows = 24;
     private instance: (typeof xterm.instances)[number] = {
+      focus: vi.fn(),
       reset: vi.fn(),
       write: vi.fn(),
     };
@@ -27,7 +29,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon() {}
     open() {}
     dispose() {}
-    focus() {}
+    focus = this.instance.focus;
     hasSelection() {
       return false;
     }
@@ -42,6 +44,9 @@ vi.mock("@xterm/xterm", () => ({
     }
     onResize() {
       return { dispose() {} };
+    }
+    paste(value: string) {
+      this.instance.data?.(value);
     }
     attachCustomWheelEventHandler() {}
     attachCustomKeyEventHandler() {}
@@ -257,6 +262,113 @@ describe("InteractiveTerminal", () => {
     expect(createTicket).toHaveBeenCalledTimes(2);
   });
 
+  test("captures image paste while connecting and enables upload after the terminal becomes interactive", async () => {
+    const { socket } = await renderTerminal();
+    const file = new File(["png"], "early-paste.png", { type: "image/png" });
+    const terminal = screen.getByRole("region", {
+      name: "reviewer interactive terminal",
+    });
+
+    const xtermInput = document.createElement("textarea");
+    terminal.append(xtermInput);
+    xtermInput.focus();
+    fireEvent.keyDown(xtermInput, { key: "v", metaKey: true });
+    const pasteCatcher = screen.getByLabelText("Terminal paste catcher");
+    expect(pasteCatcher).toHaveFocus();
+    fireEvent.paste(pasteCatcher, {
+      clipboardData: { files: [file], items: [], types: ["Files"] },
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Insert image path" }),
+    ).toBeVisible();
+    const upload = screen.getByRole("button", {
+      name: "Upload and insert path",
+    });
+    expect(upload).toHaveClass("rt-Button", "rt-variant-solid");
+    expect(upload.closest(".radix-themes")).not.toBeNull();
+    expect(upload).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Image ready. Wait for an Interactive terminal before uploading.",
+      ),
+    ).toBeVisible();
+
+    socket.message(frame());
+    await waitFor(() => expect(upload).toBeEnabled());
+  });
+
+  test("forwards ordinary text from the paste catcher back through xterm", async () => {
+    const { socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const terminal = screen.getByRole("region", {
+      name: "reviewer interactive terminal",
+    });
+    const xtermInput = document.createElement("textarea");
+    terminal.append(xtermInput);
+    xtermInput.focus();
+
+    fireEvent.keyDown(xtermInput, { ctrlKey: true, key: "v" });
+    const pasteCatcher = screen.getByLabelText("Terminal paste catcher");
+    expect(pasteCatcher).toHaveFocus();
+    fireEvent.paste(pasteCatcher, {
+      clipboardData: {
+        files: [],
+        getData: () => "ordinary terminal text",
+        items: [],
+        types: ["text/plain"],
+      },
+    });
+
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([{ data: "ordinary terminal text", type: "terminal.input" }]);
+  });
+
+  test("falls back to the Clipboard API when native paste data is empty", async () => {
+    await renderTerminal();
+    const read = vi.fn().mockResolvedValue([
+      {
+        getType: vi
+          .fn()
+          .mockResolvedValue(new Blob(["png"], { type: "image/png" })),
+        types: ["image/png"],
+      },
+    ]);
+    vi.stubGlobal("navigator", { clipboard: { read } });
+
+    fireEvent.paste(window, {
+      clipboardData: { files: [], items: [], types: [] },
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Insert image path" }),
+    ).toBeVisible();
+    expect(screen.getByText("clipboard-image.png")).toBeVisible();
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  test("leaves image paste untouched with viewer access", async () => {
+    await renderTerminal({
+      controlEnabled: false,
+      structuredActionsEnabled: false,
+    });
+    const file = new File(["png"], "viewer-paste.png", { type: "image/png" });
+
+    expect(
+      fireEvent.paste(window, {
+        clipboardData: { files: [file], items: [] },
+      }),
+    ).toBe(true);
+
+    expect(
+      screen.queryByRole("dialog", { name: "Insert image path" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("stages image paste without side effects and inserts an escaped path after confirmation", async () => {
     const { onUploadImage, socket } = await renderTerminal();
     socket.message(frame());
@@ -265,7 +377,8 @@ describe("InteractiveTerminal", () => {
     const terminal = screen.getByRole("region", {
       name: "reviewer interactive terminal",
     });
-    terminal.addEventListener("paste", (event) => event.stopPropagation());
+    const xtermPaste = vi.fn();
+    terminal.addEventListener("paste", xtermPaste);
 
     fireEvent.paste(terminal, {
       clipboardData: { files: [file], items: [] },
@@ -273,10 +386,26 @@ describe("InteractiveTerminal", () => {
     expect(
       await screen.findByRole("dialog", { name: "Insert image path" }),
     ).toBeVisible();
+    expect(xtermPaste).not.toHaveBeenCalled();
+    const focusCallsBeforeCancel = xterm.instances[0]?.focus.mock.calls.length;
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Cancel" }));
     expect(onUploadImage).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(xterm.instances[0]?.focus.mock.calls.length).toBeGreaterThan(
+        focusCallsBeforeCancel ?? 0,
+      ),
+    );
+
+    fireEvent.paste(terminal, {
+      clipboardData: {
+        files: [],
+        getData: () => "ordinary terminal text",
+        items: [],
+      },
+    });
+    expect(xtermPaste).toHaveBeenCalledOnce();
 
     fireEvent.paste(terminal, {
       clipboardData: { files: [file], items: [] },
@@ -321,7 +450,7 @@ describe("InteractiveTerminal", () => {
     ).toHaveLength(0);
   });
 
-  test("offers read-only observation or explicit takeover when control is held elsewhere", async () => {
+  test("offers read-only observation without capturing images in observe mode", async () => {
     const { socket } = await renderTerminal();
     socket.message({
       reason: "terminal is already controlled by another client",
@@ -331,9 +460,39 @@ describe("InteractiveTerminal", () => {
     expect(
       (await screen.findAllByText("Control is held elsewhere"))[0],
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Watch read-only" }),
-    ).toBeVisible();
+    const watch = screen.getByRole("button", { name: "Watch read-only" });
+    expect(watch).toBeVisible();
     expect(screen.getByRole("button", { name: "Take control" })).toBeVisible();
+
+    await userEvent.setup().click(watch);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const observeSocket = FakeWebSocket.instances[1];
+    if (!observeSocket) throw new Error("Missing observe socket");
+    observeSocket.message(frame());
+    expect(await screen.findByText("Watching")).toBeVisible();
+
+    const terminal = screen.getByRole("region", {
+      name: "reviewer interactive terminal",
+    });
+    const xtermInput = document.createElement("textarea");
+    const xtermPaste = vi.fn();
+    xtermInput.addEventListener("paste", xtermPaste);
+    terminal.append(xtermInput);
+    xtermInput.focus();
+    fireEvent.keyDown(xtermInput, { key: "v", metaKey: true });
+    expect(xtermInput).toHaveFocus();
+
+    const file = new File(["png"], "observe-paste.png", {
+      type: "image/png",
+    });
+    expect(
+      fireEvent.paste(xtermInput, {
+        clipboardData: { files: [file], items: [] },
+      }),
+    ).toBe(true);
+    expect(xtermPaste).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("dialog", { name: "Insert image path" }),
+    ).not.toBeInTheDocument();
   });
 });
