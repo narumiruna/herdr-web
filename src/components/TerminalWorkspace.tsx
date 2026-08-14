@@ -55,7 +55,6 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
 interface TerminalWorkspaceProps {
   actionsEnabled: boolean;
   agent: Agent;
-  appearance: "dark" | "light";
   draft: ComposerDraft;
   isSending: boolean;
   workspace: Workspace;
@@ -286,7 +285,6 @@ function TerminalPaneView({
 export function TerminalWorkspace({
   actionsEnabled,
   agent,
-  appearance,
   createTerminalTicket,
   draft,
   isSending,
@@ -638,7 +636,6 @@ export function TerminalWorkspace({
                   </div>
                   <InteractiveTerminal
                     actionsEnabled={terminalEnabled}
-                    appearance={appearance}
                     controlEnabled={terminalControlEnabled}
                     structuredActionsEnabled={actionsEnabled}
                     agentId={agent.id}

@@ -242,6 +242,12 @@
 }
 
 .interactive-terminal {
+  --terminal: #0c0c0c;
+  --terminal-panel: #171717;
+  --terminal-elevated: #252525;
+  --terminal-border: #3a3a3a;
+  --terminal-text: #eeeeec;
+  --terminal-muted: #b4b4b0;
   position: relative;
   display: flex;
   min-width: 0;

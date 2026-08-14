@@ -41,7 +41,6 @@ type TerminalStatus =
 
 interface InteractiveTerminalProps {
   actionsEnabled: boolean;
-  appearance: "dark" | "light";
   controlEnabled: boolean;
   structuredActionsEnabled: boolean;
   agentId: string;
@@ -132,7 +131,6 @@ function statusLabel(status: TerminalStatus): string {
 
 export function InteractiveTerminal({
   actionsEnabled,
-  appearance,
   controlEnabled,
   structuredActionsEnabled,
   agentId,
@@ -370,10 +368,10 @@ export function InteractiveTerminal({
       screenReaderMode: true,
       scrollback: 5_000,
       theme: {
-        background: "#00000000",
-        cursor: appearance === "dark" ? "#ffc53d" : "#ad5700",
-        foreground: appearance === "dark" ? "#eeeeec" : "#29221d",
-        selectionBackground: appearance === "dark" ? "#5c3d0577" : "#facf5777",
+        background: "#0c0c0c",
+        cursor: "#ffc53d",
+        foreground: "#eeeeec",
+        selectionBackground: "#5c3d0577",
       },
     });
     const fit = new FitAddon();
@@ -467,14 +465,7 @@ export function InteractiveTerminal({
       fitRef.current = undefined;
       searchRef.current = undefined;
     };
-  }, [
-    actionsEnabled,
-    appearance,
-    closeSocket,
-    connectTerminal,
-    controlEnabled,
-    send,
-  ]);
+  }, [actionsEnabled, closeSocket, connectTerminal, controlEnabled, send]);
 
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus();
@@ -596,7 +587,7 @@ export function InteractiveTerminal({
       className="interactive-terminal"
       data-status={status}
       aria-label={`${agentLabel} terminal controls`}
-      onPaste={paste}
+      onPasteCapture={paste}
       onDragOver={(event) => event.preventDefault()}
       onDrop={drop}
     >
