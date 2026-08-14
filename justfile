@@ -50,6 +50,10 @@ up:
         rm -f "$runtime_dir/socket-proxy.pid"
     fi
     export HERDR_WEB_TOKEN="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
+    export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
+    export HERDR_HOST_UID="${HERDR_HOST_UID:-$(id -u)}"
+    export HERDR_HOST_GID="${HERDR_HOST_GID:-$(id -g)}"
+    test -d "$HERDR_PROJECTS_ROOT" || { echo "project root not found: $HERDR_PROJECTS_ROOT" >&2; exit 1; }
     socket_path="${HERDR_HOST_SOCKET_PATH:-${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}}"
     test -S "$socket_path" || { echo "herdr socket not found: $socket_path" >&2; exit 1; }
     export HERDR_TCP_PORT="${HERDR_TCP_PORT:-$(node scripts/find-port.mjs 18787)}"

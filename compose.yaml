@@ -7,6 +7,10 @@ services:
       HERDR_TCP_HOST: host.docker.internal
       HERDR_TCP_PORT: "${HERDR_TCP_PORT:-0}"
       HERDR_WEB_TOKEN: "${HERDR_WEB_TOKEN:-}"
+      HERDR_PROJECTS_ROOT: "${HERDR_PROJECTS_ROOT:-/tmp}"
     ports:
       - "${HERDR_WEB_PORT:-0}:8080"
     restart: unless-stopped
+    user: "${HERDR_HOST_UID:-1000}:${HERDR_HOST_GID:-1000}"
+    volumes:
+      - "${HERDR_PROJECTS_ROOT:-/tmp}:${HERDR_PROJECTS_ROOT:-/tmp}"

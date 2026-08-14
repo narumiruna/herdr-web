@@ -2,6 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { HerdrApiError } from "./herdr-client.js";
 import type { CreateSessionInput } from "./herdr-service.js";
+import {
+  type ImageUploadInput,
+  MAX_IMAGE_BYTES,
+  type UploadedImage,
+  validateImage,
+} from "./image-upload.js";
 
 export interface HerdrService {
   closePane(paneId: string): Promise<unknown>;
@@ -9,6 +15,7 @@ export interface HerdrService {
   getState(): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
   splitPane(paneId: string): Promise<unknown>;
+  uploadImage(paneId: string, input: ImageUploadInput): Promise<UploadedImage>;
 }
 
 interface HandlerOptions {
@@ -17,7 +24,9 @@ interface HandlerOptions {
 }
 
 const RESOURCE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
-const MAX_BODY_BYTES = 16_384;
+const MAX_JSON_BODY_BYTES = 16_384;
+
+class PayloadTooLargeError extends Error {}
 
 function sendJson(
   response: ServerResponse,
@@ -44,18 +53,34 @@ function authorized(request: IncomingMessage, token: string): boolean {
   );
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readBody(
+  request: IncomingMessage,
+  maxBytes: number,
+): Promise<Buffer> {
+  const declaredLength = Number.parseInt(
+    request.headers["content-length"] ?? "0",
+    10,
+  );
+  if (declaredLength > maxBytes) {
+    throw new PayloadTooLargeError("Request body is too large");
+  }
   const chunks: Buffer[] = [];
   let length = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     length += buffer.length;
-    if (length > MAX_BODY_BYTES)
-      throw new RangeError("Request body is too large");
+    if (length > maxBytes) {
+      throw new PayloadTooLargeError("Request body is too large");
+    }
     chunks.push(buffer);
   }
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  return Buffer.concat(chunks);
+}
+
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  const body = await readBody(request, MAX_JSON_BODY_BYTES);
+  if (body.length === 0) return {};
+  return JSON.parse(body.toString("utf8")) as unknown;
 }
 
 function objectBody(value: unknown): Record<string, unknown> {
@@ -88,6 +113,12 @@ function cleanText(value: unknown, field: string, max: number): string {
 }
 
 function errorResponse(response: ServerResponse, error: unknown): void {
+  if (error instanceof PayloadTooLargeError) {
+    sendJson(response, 413, {
+      error: { code: "payload_too_large", message: error.message },
+    });
+    return;
+  }
   if (
     error instanceof TypeError ||
     error instanceof RangeError ||
@@ -144,6 +175,26 @@ export function createHerdrHttpHandler({ service, token }: HandlerOptions) {
     try {
       if (request.method === "GET" && url.pathname === "/api/herdr/state") {
         sendJson(response, 200, await service.getState());
+        return;
+      }
+      const image = url.pathname.match(
+        /^\/api\/herdr\/agents\/([^/]+)\/images$/,
+      );
+      if (request.method === "POST" && image?.[1]) {
+        const mediaType = request.headers["content-type"]
+          ?.split(";", 1)[0]
+          ?.trim()
+          .toLowerCase();
+        const input: ImageUploadInput = {
+          data: await readBody(request, MAX_IMAGE_BYTES),
+          mediaType: mediaType ?? "",
+        };
+        validateImage(input);
+        sendJson(
+          response,
+          200,
+          await service.uploadImage(cleanId(image[1]), input),
+        );
         return;
       }
       const prompt = url.pathname.match(

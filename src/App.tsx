@@ -208,9 +208,12 @@ export function App({
 
             <div className="workspace-grid">
               <TerminalWorkspace
+                key={agent.id}
                 agent={agent}
                 workspace={workspace}
-                onMessage={(message) => runtime.promptAgent(agent.id, message)}
+                onMessage={(message, image) =>
+                  runtime.promptAgent(agent.id, message, image)
+                }
                 onNewSession={() => setSessionOpen(true)}
                 onSplitPane={() =>
                   runtime.splitPane(agent.id, agent.activePaneId)

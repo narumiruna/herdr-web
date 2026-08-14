@@ -24,16 +24,37 @@ export interface NewLiveSession {
   workspaceId: string;
 }
 
+export interface UploadedImage {
+  mediaType: string;
+  path: string;
+  size: number;
+  type: "image_uploaded";
+}
+
+export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const SUPPORTED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
 export class HerdrApiClient {
   constructor(private readonly token: string) {}
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const suppliedHeaders = Object.fromEntries(new Headers(init.headers));
+    const hasContentType = Object.keys(suppliedHeaders).some(
+      (name) => name.toLowerCase() === "content-type",
+    );
     const response = await fetch(path, {
       ...init,
       headers: {
-        ...init.headers,
+        ...(init.body && !hasContentType
+          ? { "content-type": "application/json" }
+          : {}),
+        ...suppliedHeaders,
         authorization: `Bearer ${this.token}`,
-        ...(init.body ? { "content-type": "application/json" } : {}),
       },
     });
     if (!response.ok) {
@@ -60,6 +81,17 @@ export class HerdrApiClient {
     return this.request(
       `/api/herdr/agents/${encodeURIComponent(paneId)}/prompt`,
       { body: JSON.stringify({ message }), method: "POST" },
+    );
+  }
+
+  uploadImage(paneId: string, image: File): Promise<UploadedImage> {
+    return this.request(
+      `/api/herdr/agents/${encodeURIComponent(paneId)}/images`,
+      {
+        body: image,
+        headers: { "content-type": image.type },
+        method: "POST",
+      },
     );
   }
 

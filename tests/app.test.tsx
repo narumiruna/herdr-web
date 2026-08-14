@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
 import { App } from "../src/App";
@@ -37,6 +37,27 @@ describe("herdr web app", () => {
       main.getByText("› Keep numeric IDs for existing clients."),
     ).toBeVisible();
     expect(screen.getByText("Replied to api-review")).toBeVisible();
+  });
+
+  test("queues pasted and dropped images without hiding the composer", async () => {
+    renderApp();
+    const textbox = screen.getByRole("textbox", { name: "Message api-review" });
+    const pasted = new File(["png"], "pasted.png", { type: "image/png" });
+
+    fireEvent.paste(textbox, { clipboardData: { files: [pasted] } });
+
+    expect(screen.getByText("pasted.png")).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Remove pasted.png" }));
+    const dropped = new File(["jpeg"], "dropped.jpg", {
+      type: "image/jpeg",
+    });
+    fireEvent.drop(screen.getByRole("form", { name: "Message composer" }), {
+      dataTransfer: { files: [dropped] },
+    });
+    expect(screen.getByText("dropped.jpg")).toBeVisible();
+    expect(textbox).toBeVisible();
   });
 
   test("command palette finds and focuses agents", async () => {

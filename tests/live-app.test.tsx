@@ -89,6 +89,73 @@ describe("live herdr app", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("uploads a selected image and prompts the agent with its host path", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const imagePath = "/repo/.herdr-web/uploads/remote-shot.png";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/images")) {
+        return new Response(
+          JSON.stringify({
+            mediaType: "image/png",
+            path: imagePath,
+            size: 11,
+            type: "image_uploaded",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.endsWith("/prompt")) {
+        return new Response(JSON.stringify({ type: "agent_prompted" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])],
+      "remote-shot.png",
+      { type: "image/png" },
+    );
+
+    render(<App live />);
+
+    await screen.findByRole("heading", { name: "π - live-test" });
+    await user.upload(screen.getByLabelText("Choose image"), file);
+    expect(screen.getByText("remote-shot.png")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/herdr/agents/w9%3Ap1/images",
+        expect.objectContaining({
+          body: file,
+          headers: expect.objectContaining({
+            authorization: "Bearer test-token",
+            "content-type": "image/png",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/herdr/agents/w9%3Ap1/prompt",
+      expect.objectContaining({
+        body: JSON.stringify({
+          message: `Please inspect the attached image.\n\nAttached image: \`${imagePath}\``,
+        }),
+        method: "POST",
+      }),
+    );
+    expect(screen.queryByText("remote-shot.png")).not.toBeInTheDocument();
+  });
+
   test("loads live state and forwards a prompt with bearer auth", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

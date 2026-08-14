@@ -36,6 +36,12 @@ function fakeService(): HerdrService {
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
     promptAgent: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
     splitPane: vi.fn().mockResolvedValue({ type: "pane_info" }),
+    uploadImage: vi.fn().mockResolvedValue({
+      mediaType: "image/png",
+      path: "/repo/.herdr-web/uploads/image.png",
+      size: 11,
+      type: "image_uploaded",
+    }),
   };
 }
 
@@ -77,6 +83,46 @@ describe("herdr HTTP bridge", () => {
 
     expect(response.status).toBe(200);
     expect(service.promptAgent).toHaveBeenCalledWith("w5:p1", "hi");
+  });
+
+  test("authenticates and forwards a verified binary image", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+
+    const response = await fetch(`${baseUrl}/api/herdr/agents/w5%3Ap1/images`, {
+      body: Buffer.from(png),
+      headers: {
+        authorization: "Bearer test-secret",
+        "content-type": "image/png",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(service.uploadImage).toHaveBeenCalledWith("w5:p1", {
+      data: expect.any(Buffer),
+      mediaType: "image/png",
+    });
+    const upload = vi.mocked(service.uploadImage).mock.calls[0]?.[1];
+    expect(upload?.data).toEqual(Buffer.from(png));
+  });
+
+  test("rejects unsupported image content before touching herdr", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+
+    const response = await fetch(`${baseUrl}/api/herdr/agents/w5:p1/images`, {
+      body: "<svg/>",
+      headers: {
+        authorization: "Bearer test-secret",
+        "content-type": "image/svg+xml",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect(service.uploadImage).not.toHaveBeenCalled();
   });
 
   test("rejects malformed resource IDs without touching herdr", async () => {

@@ -60,6 +60,33 @@ test("mobile layout keeps navigation and the terminal reachable", async ({
   ).toBeVisible();
 });
 
+test("mobile composer stages and sends an image attachment", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByLabel("Choose image").setInputFiles({
+    buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]),
+    mimeType: "image/png",
+    name: "mobile-shot.png",
+  });
+
+  await expect(page.getByText("mobile-shot.png")).toBeVisible();
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(
+    page
+      .locator(".terminal-message")
+      .filter({ hasText: "Attached image: `mobile-shot.png`" }),
+  ).toBeVisible();
+  await expect(page.locator(".composer-attachment")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight <= window.innerHeight,
+    ),
+  ).toBe(true);
+});
+
 test("long mobile terminal output stays inside its scroll viewport", async ({
   page,
 }) => {

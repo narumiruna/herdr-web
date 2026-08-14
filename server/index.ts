@@ -31,8 +31,9 @@ const endpoint =
       }
     : socketPath;
 const staticRoot = resolve(process.env.HERDR_WEB_STATIC_ROOT ?? "dist");
+const projectsRoot = process.env.HERDR_PROJECTS_ROOT?.trim() || undefined;
 const client = new HerdrClient(endpoint);
-const service = new LiveHerdrService(client);
+const service = new LiveHerdrService(client, { projectsRoot });
 const api = createHerdrHttpHandler({ service, token });
 const staticFiles = createStaticHandler(staticRoot);
 

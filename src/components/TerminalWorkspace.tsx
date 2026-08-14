@@ -9,20 +9,29 @@ import {
   ExclamationTriangleIcon,
   FileTextIcon,
   GitHubLogoIcon,
+  ImageIcon,
   PaperPlaneIcon,
   PlusIcon,
   StopwatchIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { Badge, Button } from "@radix-ui/themes";
-import { type FormEvent, useState } from "react";
+import {
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { MAX_ATTACHMENT_BYTES, SUPPORTED_IMAGE_TYPES } from "../herdr-api";
 import type { Agent, TerminalPane, Workspace } from "../state";
 import { StatusPill } from "./StatusPill";
 
 interface TerminalWorkspaceProps {
   agent: Agent;
   workspace: Workspace;
-  onMessage: (message: string) => void | Promise<void>;
+  onMessage: (message: string, image?: File) => void | Promise<void>;
   onNewSession: () => void;
   onSplitPane: () => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
@@ -138,16 +147,72 @@ export function TerminalWorkspace({
   onShowActivity,
 }: TerminalWorkspaceProps) {
   const [message, setMessage] = useState("");
+  const [attachment, setAttachment] = useState<File>();
+  const [attachmentError, setAttachmentError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const [sending, setSending] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
+  const imageInput = useRef<HTMLInputElement>(null);
   const canPrompt = agent.canPrompt !== false;
+  const canSend = Boolean(message.trim() || attachment);
+
+  useEffect(() => {
+    if (!attachment || typeof URL.createObjectURL !== "function") {
+      setPreviewUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(attachment);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [attachment]);
+
+  const queueImage = (file: File) => {
+    if (
+      !SUPPORTED_IMAGE_TYPES.includes(
+        file.type as (typeof SUPPORTED_IMAGE_TYPES)[number],
+      )
+    ) {
+      setAttachmentError("Choose a PNG, JPEG, GIF, or WebP image.");
+      return;
+    }
+    if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {
+      setAttachmentError("Image size must be between 1 byte and 8 MiB.");
+      return;
+    }
+    setAttachment(file);
+    setAttachmentError("");
+  };
+
+  const queueTransferredImage = (files: FileList) => {
+    const file = files[0];
+    if (!file) return false;
+    queueImage(file);
+    return true;
+  };
+
+  const pasteImage = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (queueTransferredImage(event.clipboardData.files)) {
+      event.preventDefault();
+    }
+  };
+
+  const dropImage = (event: DragEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    queueTransferredImage(event.dataTransfer.files);
+  };
 
   const submitMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if (!message.trim() || !canPrompt || sending) return;
+    if (!canSend || !canPrompt || sending) return;
     setSending(true);
     try {
-      await onMessage(message);
+      await onMessage(message, attachment);
       setMessage("");
+      setAttachment(undefined);
+      setAttachmentError("");
     } catch {
       // The runtime-level alert presents the bridge error and keeps the draft.
     } finally {
@@ -310,7 +375,75 @@ export function TerminalWorkspace({
           ))}
         </div>
 
-        <form className="message-composer" onSubmit={submitMessage}>
+        <form
+          className="message-composer"
+          aria-label="Message composer"
+          data-dragging={dragging}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            dragDepth.current += 1;
+            setDragging(true);
+          }}
+          onDragLeave={() => {
+            dragDepth.current = Math.max(0, dragDepth.current - 1);
+            if (dragDepth.current === 0) setDragging(false);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={dropImage}
+          onSubmit={submitMessage}
+        >
+          {attachment && (
+            <div className="composer-attachment">
+              {previewUrl ? (
+                <img src={previewUrl} alt="" />
+              ) : (
+                <span className="composer-attachment-icon" aria-hidden="true">
+                  <ImageIcon />
+                </span>
+              )}
+              <span className="composer-attachment-copy">
+                <strong>{attachment.name}</strong>
+                <small>
+                  {Math.max(1, Math.ceil(attachment.size / 1024))} KB
+                </small>
+              </span>
+              <button
+                type="button"
+                aria-label={`Remove ${attachment.name}`}
+                disabled={sending}
+                onClick={() => setAttachment(undefined)}
+              >
+                <Cross2Icon />
+              </button>
+            </div>
+          )}
+          {attachmentError && (
+            <span className="composer-attachment-error" role="alert">
+              {attachmentError}
+            </span>
+          )}
+          <input
+            ref={imageInput}
+            className="composer-file-input"
+            type="file"
+            accept={SUPPORTED_IMAGE_TYPES.join(",")}
+            aria-label="Choose image"
+            disabled={!canPrompt || sending}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.item(0);
+              if (file) queueImage(file);
+              event.currentTarget.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="composer-attach"
+            aria-label="Attach image"
+            disabled={!canPrompt || sending}
+            onClick={() => imageInput.current?.click()}
+          >
+            <ImageIcon />
+          </button>
           <span className="composer-prompt" aria-hidden="true">
             ›
           </span>
@@ -327,6 +460,7 @@ export function TerminalWorkspace({
             }
             disabled={!canPrompt || sending}
             onChange={(event) => setMessage(event.target.value)}
+            onPaste={pasteImage}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -337,9 +471,9 @@ export function TerminalWorkspace({
           <Button
             type="submit"
             color="amber"
-            variant={message.trim() ? "solid" : "soft"}
+            variant={canSend ? "solid" : "soft"}
             aria-label="Send message"
-            disabled={!canPrompt || !message.trim() || sending}
+            disabled={!canPrompt || !canSend || sending}
           >
             <PaperPlaneIcon />
             <span>Send</span>

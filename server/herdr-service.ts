@@ -1,4 +1,10 @@
 import { HerdrApiError, type HerdrClient } from "./herdr-client.js";
+import {
+  type ImageUploadInput,
+  type UploadedImage,
+  validateImage,
+  writePaneImage,
+} from "./image-upload.js";
 
 interface SessionSnapshotResult {
   type: "session_snapshot";
@@ -24,6 +30,18 @@ interface TabCreatedResponse {
   root_pane: { pane_id: string };
 }
 
+interface PaneInfoResponse {
+  type: "pane_info";
+  pane: {
+    cwd?: string;
+    foreground_cwd?: string;
+  };
+}
+
+interface ServiceOptions {
+  projectsRoot?: string;
+}
+
 export interface CreateSessionInput {
   command: string;
   label: string;
@@ -46,7 +64,10 @@ const RUNTIMES: Record<
 };
 
 export class LiveHerdrService {
-  constructor(private readonly client: HerdrClient) {}
+  constructor(
+    private readonly client: HerdrClient,
+    private readonly options: ServiceOptions = {},
+  ) {}
 
   async getState(): Promise<{
     reads: Record<string, PaneReadResponse["read"]>;
@@ -83,6 +104,24 @@ export class LiveHerdrService {
       if (paneId) reads[paneId] = entry.value.read;
     });
     return { reads, snapshot: result.snapshot };
+  }
+
+  async uploadImage(
+    paneId: string,
+    input: ImageUploadInput,
+  ): Promise<UploadedImage> {
+    validateImage(input);
+    const result = await this.client.request<PaneInfoResponse>("pane.get", {
+      pane_id: paneId,
+    });
+    if (result.type !== "pane_info" || !result.pane) {
+      throw new TypeError("Herdr returned invalid pane information");
+    }
+    const cwd = result.pane.foreground_cwd ?? result.pane.cwd;
+    if (!cwd) {
+      throw new TypeError("Herdr pane did not report a working directory");
+    }
+    return writePaneImage(cwd, input, this.options.projectsRoot);
   }
 
   promptAgent(target: string, text: string): Promise<unknown> {

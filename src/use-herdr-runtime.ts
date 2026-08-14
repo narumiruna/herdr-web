@@ -22,12 +22,21 @@ interface HerdrRuntime {
   createSession: (input: NewLiveSession) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
-  promptAgent: (agentId: string, message: string) => Promise<void>;
+  promptAgent: (
+    agentId: string,
+    message: string,
+    image?: File,
+  ) => Promise<void>;
   refresh: () => Promise<void>;
   setAccessToken: (token: string) => void;
   splitPane: (agentId: string, paneId: string) => Promise<void>;
   state: HerdrState;
   status: ConnectionStatus;
+}
+
+export function promptWithImage(message: string, path: string): string {
+  const instruction = message.trim() || "Please inspect the attached image.";
+  return `${instruction}\n\nAttached image: \`${path.replaceAll("`", "\\`")}\``;
 }
 
 export function useHerdrRuntime(live: boolean): HerdrRuntime {
@@ -127,12 +136,24 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
     },
     dispatch,
     error,
-    promptAgent: async (agentId, message) => {
+    promptAgent: async (agentId, message, image) => {
       if (!live) {
-        dispatch({ type: "agent.replied", agentId, message });
+        dispatch({
+          type: "agent.replied",
+          agentId,
+          message: image ? promptWithImage(message, image.name) : message,
+        });
         return;
       }
-      await mutate((api) => api.promptAgent(agentId, message));
+      await mutate(async (api) => {
+        const prompt = image
+          ? promptWithImage(
+              message,
+              (await api.uploadImage(agentId, image)).path,
+            )
+          : message;
+        return api.promptAgent(agentId, prompt);
+      });
     },
     refresh,
     setAccessToken: (value) => {
