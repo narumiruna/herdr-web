@@ -257,6 +257,34 @@ describe("InteractiveTerminal", () => {
     expect(createTicket).toHaveBeenCalledTimes(2);
   });
 
+  test("captures image paste while connecting and enables upload after the terminal becomes interactive", async () => {
+    const { socket } = await renderTerminal();
+    const file = new File(["png"], "early-paste.png", { type: "image/png" });
+    const terminal = screen.getByRole("region", {
+      name: "reviewer interactive terminal",
+    });
+
+    fireEvent.paste(terminal, {
+      clipboardData: { files: [file], items: [] },
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Insert image path" }),
+    ).toBeVisible();
+    const upload = screen.getByRole("button", {
+      name: "Upload and insert path",
+    });
+    expect(upload).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Image ready. Wait for an Interactive terminal before uploading.",
+      ),
+    ).toBeVisible();
+
+    socket.message(frame());
+    await waitFor(() => expect(upload).toBeEnabled());
+  });
+
   test("stages image paste without side effects and inserts an escaped path after confirmation", async () => {
     const { onUploadImage, socket } = await renderTerminal();
     socket.message(frame());
@@ -265,7 +293,8 @@ describe("InteractiveTerminal", () => {
     const terminal = screen.getByRole("region", {
       name: "reviewer interactive terminal",
     });
-    terminal.addEventListener("paste", (event) => event.stopPropagation());
+    const xtermPaste = vi.fn();
+    terminal.addEventListener("paste", xtermPaste);
 
     fireEvent.paste(terminal, {
       clipboardData: { files: [file], items: [] },
@@ -273,10 +302,20 @@ describe("InteractiveTerminal", () => {
     expect(
       await screen.findByRole("dialog", { name: "Insert image path" }),
     ).toBeVisible();
+    expect(xtermPaste).not.toHaveBeenCalled();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Cancel" }));
     expect(onUploadImage).not.toHaveBeenCalled();
+
+    fireEvent.paste(terminal, {
+      clipboardData: {
+        files: [],
+        getData: () => "ordinary terminal text",
+        items: [],
+      },
+    });
+    expect(xtermPaste).toHaveBeenCalledOnce();
 
     fireEvent.paste(terminal, {
       clipboardData: { files: [file], items: [] },

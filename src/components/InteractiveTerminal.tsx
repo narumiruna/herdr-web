@@ -10,7 +10,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import {
-  type ClipboardEvent,
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
@@ -488,7 +487,7 @@ export function InteractiveTerminal({
     return () => URL.revokeObjectURL(url);
   }, [image]);
 
-  const stageImage = (file: File) => {
+  const stageImage = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
       setImageError("Choose an image file.");
       return;
@@ -496,15 +495,29 @@ export function InteractiveTerminal({
     setImage(file);
     setImageError("");
     setImagePath("");
-  };
+  }, []);
 
-  const paste = (event: ClipboardEvent<HTMLDivElement>) => {
-    if (!structuredActionsEnabled || status !== "live") return;
-    const file = imageFromClipboard(event.clipboardData);
-    if (!file) return;
-    event.preventDefault();
-    stageImage(file);
-  };
+  useEffect(() => {
+    const pasteImage = (event: globalThis.ClipboardEvent) => {
+      const terminalHost = host.current;
+      const target = event.target;
+      if (
+        !structuredActionsEnabled ||
+        !event.clipboardData ||
+        !(target instanceof Node) ||
+        !terminalHost?.contains(target)
+      ) {
+        return;
+      }
+      const file = imageFromClipboard(event.clipboardData);
+      if (!file) return;
+      event.preventDefault();
+      event.stopPropagation();
+      stageImage(file);
+    };
+    window.addEventListener("paste", pasteImage, true);
+    return () => window.removeEventListener("paste", pasteImage, true);
+  }, [stageImage, structuredActionsEnabled]);
 
   const drop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -587,7 +600,6 @@ export function InteractiveTerminal({
       className="interactive-terminal"
       data-status={status}
       aria-label={`${agentLabel} terminal controls`}
-      onPasteCapture={paste}
       onDragOver={(event) => event.preventDefault()}
       onDrop={drop}
     >
@@ -770,6 +782,11 @@ export function InteractiveTerminal({
           <strong>{image?.name}</strong>
           {imagePath && <code>{imagePath}</code>}
           {imageError && <span role="alert">{imageError}</span>}
+          {!imageError && status !== "live" && (
+            <span role="status">
+              Image ready. Wait for an Interactive terminal before uploading.
+            </span>
+          )}
           {imagePath && (
             <Button
               type="button"

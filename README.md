@@ -152,7 +152,7 @@ On mobile, workspace creation, session details, and appearance live in **More ac
 
 - Type normally to send exact terminal input.
 - Use `Cmd+C` on macOS or `Ctrl+Shift+C` elsewhere to copy a terminal selection.
-- Use `Cmd+V` or `Ctrl+V` for normal text paste or to stage a clipboard image.
+- Use `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux for normal text paste or to stage a clipboard image.
 - Use `Cmd+Shift+F` or `Ctrl+Shift+F` to search terminal output.
 - Use the image toolbar button to stage a local image.
 - Use the mobile **Esc**, **Ctrl**, and **Tab** key row when the soft keyboard does not expose terminal modifiers.
@@ -160,7 +160,9 @@ On mobile, workspace creation, session details, and appearance live in **More ac
 
 ## Send remote images
 
-Paste an image while the interactive terminal is focused or use its image button.
+Focus the interactive terminal, then paste an image with `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux; the image button is the fallback.
+
+Pasting during connection still opens the review dialog, but uploading waits until the terminal reports **Interactive**.
 
 The staged-image dialog performs no upload until **Upload and insert path** is confirmed.
 
