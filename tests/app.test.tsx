@@ -16,15 +16,18 @@ function renderApp() {
   return user;
 }
 
-describe("Herdeer terminal-first workbench", () => {
-  test("shows the Herdeer product identity", () => {
+describe("Hedr terminal-first workbench", () => {
+  test("shows the Hedr product identity", () => {
     renderApp();
 
     expect(
-      screen.getByText("herdeer", { selector: ".brand-type strong" }),
+      screen.getByText("hedr", { selector: ".brand-type strong" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("navigation", { name: "Herdeer navigation" }),
+      screen.getAllByRole("img", { name: "Hedr terminal mark" })[0],
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Hedr navigation" }),
     ).toBeVisible();
   });
 

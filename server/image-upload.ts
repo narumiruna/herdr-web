@@ -90,11 +90,7 @@ export async function writePaneImage(
     }
   }
 
-  const requestedUploadDirectory = join(
-    projectDirectory,
-    ".herdeer",
-    "uploads",
-  );
+  const requestedUploadDirectory = join(projectDirectory, ".hedr", "uploads");
   await mkdir(requestedUploadDirectory, { mode: 0o700, recursive: true });
   const uploadDirectory = await realpath(requestedUploadDirectory);
   if (!contains(projectDirectory, uploadDirectory)) {

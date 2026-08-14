@@ -12,7 +12,7 @@ import { basename, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const projectRoot = process.cwd();
-const cliPath = resolve(projectRoot, "scripts/herdeer.mjs");
+const cliPath = resolve(projectRoot, "scripts/hedr.mjs");
 
 interface Invocation {
   command: "herdr" | "just";
@@ -51,7 +51,7 @@ async function runCli(
   args: string[],
   snapshot: unknown = { result: { snapshot: { panes: [] } } },
 ) {
-  const root = await mkdtemp(resolve(tmpdir(), "herdeer-cli-"));
+  const root = await mkdtemp(resolve(tmpdir(), "hedr-cli-"));
   const { binDirectory, logPath } = await createFakeCommands(root);
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd: root,
@@ -76,7 +76,7 @@ async function runCli(
   return { ...result, invocations, root: await realpath(root) };
 }
 
-describe("herdeer CLI", () => {
+describe("hedr CLI", () => {
   it("creates a workspace for a directory and starts the web workbench", async () => {
     const fixtureRoot = await mkdtemp(resolve(tmpdir(), "herdr project "));
     const target = resolve(fixtureRoot, "sample project");
@@ -151,7 +151,7 @@ describe("herdeer CLI", () => {
     const result = await runCli(["--help"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Usage: herdeer [directory]");
+    expect(result.stdout).toContain("Usage: hedr [directory]");
     expect(result.invocations).toEqual([]);
   });
 });

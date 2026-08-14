@@ -11,7 +11,8 @@
 
 ## TASTE
 
-- Use Herdeer for this tool's product, package, CLI, and app-owned configuration; reserve Herdr for the upstream runtime, protocol, socket, API integration, and Herdr-owned resources.
+- Use Hedr for this tool's product, package, CLI, and app-owned configuration; reserve Herdr for the upstream runtime, protocol, socket, API integration, and Herdr-owned resources.
+- Use an H monogram with a terminal cursor for the Hedr brand mark.
 - Keep imports static and top-level; never use inline or dynamic imports.
 - Keep the workbench terminal-first; use one compact navigation rail and disclose runtime details on demand.
 - Keep navigation, terminal output, composer, and dialogs in the same light or dark appearance.

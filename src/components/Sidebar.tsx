@@ -5,7 +5,7 @@ import {
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import type { HerdrState } from "../state";
-import { HerdeerLogo } from "./HerdeerLogo";
+import { HedrLogo } from "./HedrLogo";
 
 interface SidebarProps {
   state: HerdrState;
@@ -36,11 +36,11 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <HerdeerLogo />
+        <HedrLogo />
       </div>
       <ScrollArea.Root className="sidebar-scroll">
         <ScrollArea.Viewport className="sidebar-viewport">
-          <nav aria-label="Herdeer navigation">
+          <nav aria-label="Hedr navigation">
             {attention.length > 0 && (
               <section
                 className="nav-section attention-section"

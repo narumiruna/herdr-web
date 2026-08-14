@@ -22,8 +22,8 @@ lib-cov
 coverage
 test-results/
 playwright-report/
-.herdeer-runtime/
-.herdeer/
+.hedr-runtime/
+.hedr/
 *.lcov
 
 # nyc test coverage

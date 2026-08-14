@@ -1,10 +1,10 @@
 {
-  "name": "herdeer",
+  "name": "hedr",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "herdeer": "./scripts/herdeer.mjs"
+    "hedr": "./scripts/hedr.mjs"
   },
   "scripts": {
     "dev": "concurrently --kill-others --names web,bridge \"vite\" \"tsx watch server/index.ts\"",

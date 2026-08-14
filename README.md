@@ -1,6 +1,6 @@
-# Herdeer
+# Hedr
 
-Herdeer is a responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
+Hedr is a responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
 
 It keeps herdr's core job visible: find the Agent that needs input, inspect its live terminal, and send a real prompt without hunting through sessions.
 
@@ -55,13 +55,13 @@ just install-cli
 Open the current directory or an explicit project directory:
 
 ```sh
-herdeer .
-herdeer /path/to/project
+hedr .
+hedr /path/to/project
 ```
 
 The command resolves the directory, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
 
-Run `herdeer --help` for usage and press `Ctrl+C` to stop the development web processes.
+Run `hedr --help` for usage and press `Ctrl+C` to stop the development web processes.
 
 The linked command depends on this checkout, its installed npm dependencies, `herdr`, and `just` remaining available.
 
@@ -73,7 +73,7 @@ Install dependencies once:
 just install
 ```
 
-Start Vite and the authenticated Herdeer bridge:
+Start Vite and the authenticated Hedr bridge:
 
 ```sh
 just run
@@ -86,7 +86,7 @@ Open the printed `network` URL from another device on the same trusted network.
 For a stable token or a named-session socket:
 
 ```sh
-HERDEER_TOKEN=my-long-random-token \
+HEDR_TOKEN=my-long-random-token \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 just run
 ```
@@ -94,7 +94,7 @@ just run
 Without `just`, set a token explicitly before running the development processes:
 
 ```sh
-HERDEER_TOKEN=my-long-random-token npm run dev
+HEDR_TOKEN=my-long-random-token npm run dev
 ```
 
 Vite prints the network URL, and the page asks for the token when it is not included in the URL.
@@ -145,17 +145,17 @@ You can also drop an image onto the composer or use the image button.
 
 The composer accepts one PNG, JPEG, GIF, or WebP file up to 8 MiB and can send it without additional text.
 
-A staged attachment shows its destination under the active pane's `.herdeer/uploads/` directory and must be removed before selecting a replacement.
+A staged attachment shows its destination under the active pane's `.hedr/uploads/` directory and must be removed before selecting a replacement.
 
-The bridge verifies the declared type against the file signature, writes a random file under the active pane's `.herdeer/uploads/` directory, and sends its absolute path to the Agent.
+The bridge verifies the declared type against the file signature, writes a random file under the active pane's `.hedr/uploads/` directory, and sends its absolute path to the Agent.
 
 Remove old attachments manually when they are no longer needed:
 
 ```sh
-find /path/to/project/.herdeer/uploads -type f -delete
+find /path/to/project/.hedr/uploads -type f -delete
 ```
 
-Add `.herdeer/` to each target repository's ignore rules if untracked local files should stay hidden from `git status`.
+Add `.hedr/` to each target repository's ignore rules if untracked local files should stay hidden from `git status`.
 
 ## Run with Docker
 
@@ -167,7 +167,7 @@ just up
 
 `just up` performs these steps:
 
-1. Creates an access token unless `HERDEER_TOKEN` is already set.
+1. Creates an access token unless `HEDR_TOKEN` is already set.
 2. Starts a loopback-only TCP forwarder for the host herdr Unix socket.
 3. Builds and starts the Node.js production container.
 4. Selects an available host port and prints local and LAN URLs.
@@ -175,7 +175,7 @@ just up
 Set a fixed web port, custom herdr socket, or narrower project mount when needed:
 
 ```sh
-HERDEER_PORT=4173 \
+HEDR_PORT=4173 \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 HERDR_PROJECTS_ROOT="$HOME/workspace" \
 just up
@@ -199,7 +199,7 @@ Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/
 
 ## Security
 
-The Herdeer bridge can submit prompts and control terminal panes, so it fails closed when `HERDEER_TOKEN` is empty.
+The Hedr bridge can submit prompts and control terminal panes, so it fails closed when `HEDR_TOKEN` is empty.
 
 The token in a printed URL is moved into `sessionStorage` and removed from the address bar after the page loads.
 

@@ -1,16 +1,16 @@
 services:
-  herdeer:
+  hedr:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
       HERDR_TCP_HOST: host.docker.internal
       HERDR_TCP_PORT: "${HERDR_TCP_PORT:-0}"
-      HERDEER_TOKEN: "${HERDEER_TOKEN:-}"
+      HEDR_TOKEN: "${HEDR_TOKEN:-}"
       HERDR_PROJECTS_ROOT: "${HERDR_PROJECTS_ROOT:-/tmp}"
     ports:
-      - "${HERDEER_PORT:-0}:8080"
+      - "${HEDR_PORT:-0}:8080"
     restart: unless-stopped
-    user: "${HERDEER_HOST_UID:-1000}:${HERDEER_HOST_GID:-1000}"
+    user: "${HEDR_HOST_UID:-1000}:${HEDR_HOST_GID:-1000}"
     volumes:
       - "${HERDR_PROJECTS_ROOT:-/tmp}:${HERDR_PROJECTS_ROOT:-/tmp}"

@@ -152,7 +152,7 @@ function errorResponse(response: ServerResponse, error: unknown): void {
 }
 
 export function createHerdrHttpHandler({ service, token }: HandlerOptions) {
-  if (!token) throw new Error("HERDEER_TOKEN must not be empty");
+  if (!token) throw new Error("HEDR_TOKEN must not be empty");
   return async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? "/", "http://herdr.local");
     if (!url.pathname.startsWith("/api/herdr/")) {

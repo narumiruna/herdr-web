@@ -118,7 +118,7 @@ export class HerdrApiClient {
   }
 }
 
-const TOKEN_KEY = "herdeer-token";
+const TOKEN_KEY = "hedr-token";
 
 export function browserAccessToken(): string {
   const url = new URL(window.location.href);

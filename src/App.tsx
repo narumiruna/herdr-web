@@ -15,7 +15,7 @@ import { Button, IconButton, Theme } from "@radix-ui/themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CommandPalette, NewSessionDialog } from "./components/AppDialogs";
 import { ConnectionScreen } from "./components/ConnectionScreen";
-import { HerdeerLogo } from "./components/HerdeerLogo";
+import { HedrLogo } from "./components/HedrLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
 import { SessionDetails } from "./components/SessionDetails";
@@ -55,7 +55,7 @@ export function App({
   const [appearance, setAppearance] = useState<"light" | "dark">(() => {
     const saved =
       typeof window.localStorage?.getItem === "function"
-        ? window.localStorage.getItem("herdeer-appearance")
+        ? window.localStorage.getItem("hedr-appearance")
         : null;
     if (saved === "light" || saved === "dark") return saved;
     return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -142,7 +142,7 @@ export function App({
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
-      window.localStorage.setItem("herdeer-appearance", appearance);
+      window.localStorage.setItem("hedr-appearance", appearance);
     }
     document
       .querySelector('meta[name="theme-color"]')
@@ -200,7 +200,7 @@ export function App({
         accentColor="amber"
         grayColor="sand"
         radius="medium"
-        className="herdeer-theme"
+        className="hedr-theme"
       >
         <ConnectionScreen
           error={runtime.error}
@@ -276,7 +276,7 @@ export function App({
       grayColor="sand"
       radius="medium"
       scaling="100%"
-      className="herdeer-theme"
+      className="hedr-theme"
     >
       <Tooltip.Provider>
         <div className="app-shell">
@@ -302,9 +302,9 @@ export function App({
                   <HamburgerMenuIcon />
                 </IconButton>
                 <span className="mobile-brand-mark">
-                  <HerdeerLogo compact />
+                  <HedrLogo compact />
                 </span>
-                <strong>{workspace?.name ?? "Herdeer"}</strong>
+                <strong>{workspace?.name ?? "Hedr"}</strong>
               </div>
 
               <div className="topbar-actions">
@@ -563,7 +563,7 @@ export function App({
             ) : (
               <main className="empty-workbench">
                 <div className="empty-workbench-mark">
-                  <HerdeerLogo compact />
+                  <HedrLogo compact />
                 </div>
                 <span>{workspace ? "Empty workspace" : "No workspaces"}</span>
                 <h1>
