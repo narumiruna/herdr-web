@@ -181,6 +181,22 @@
   color: var(--terminal-text);
   cursor: pointer;
 }
+.snapshot-mode {
+  display: flex;
+  min-height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--terminal-border);
+  background: var(--terminal-panel);
+  color: var(--terminal-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
+.snapshot-mode span {
+  opacity: 0.72;
+}
 .pane-switcher {
   display: flex;
   min-height: 38px;
@@ -223,6 +239,198 @@
   flex: 1;
   border-radius: 8px;
   background: var(--sand-8);
+}
+
+.interactive-terminal {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--terminal);
+  color: var(--terminal-text);
+}
+.interactive-terminal-tools {
+  display: flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--terminal-border);
+  background: var(--terminal-panel);
+  color: var(--terminal-muted);
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-size: 10px;
+}
+.interactive-terminal-state,
+.interactive-terminal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.interactive-terminal-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber-9);
+}
+.interactive-terminal[data-status="live"] .interactive-terminal-state i {
+  background: var(--grass-9);
+}
+.interactive-terminal[data-status="error"] .interactive-terminal-state i,
+.interactive-terminal[data-status="exited"] .interactive-terminal-state i,
+.interactive-terminal[data-status="control-conflict"]
+  .interactive-terminal-state
+  i {
+  background: var(--red-9);
+}
+.interactive-terminal-actions button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  place-items: center;
+}
+.interactive-terminal-actions button:hover,
+.interactive-terminal-actions button:focus-visible {
+  background: var(--terminal-elevated);
+  color: var(--terminal-text);
+}
+.interactive-terminal-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.xterm-host {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 8px 10px;
+  overflow: hidden;
+}
+.xterm-host .xterm {
+  height: 100%;
+}
+.xterm-host .xterm-viewport {
+  scrollbar-color: var(--sand-8) transparent;
+}
+.terminal-mobile-keys {
+  display: none;
+}
+.terminal-search {
+  display: flex;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--terminal-border);
+  background: var(--terminal-elevated);
+  color: var(--terminal-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
+.terminal-search input {
+  min-width: 80px;
+  flex: 1;
+  padding: 5px 7px;
+  border: 1px solid var(--terminal-border);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--terminal);
+  color: var(--terminal-text);
+}
+.terminal-search input:focus-visible {
+  border-color: var(--amber-8);
+  box-shadow: 0 0 0 1px var(--amber-8);
+}
+.terminal-state-overlay {
+  position: absolute;
+  inset: 32px 0 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--terminal) 82%, transparent);
+  color: var(--terminal-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+.terminal-state-action {
+  flex-direction: column;
+  padding: 24px;
+  color: var(--terminal-muted);
+  text-align: center;
+}
+.terminal-state-action strong {
+  color: var(--terminal-text);
+}
+.terminal-state-action > span {
+  max-width: 58ch;
+}
+.terminal-state-action > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.terminal-image-preview,
+.terminal-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+.terminal-image-preview img {
+  width: min(100%, 520px);
+  max-height: 320px;
+  align-self: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  object-fit: contain;
+}
+.terminal-image-preview code {
+  padding: 8px;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: var(--panel-muted);
+  font-size: 11px;
+}
+.terminal-image-preview [role="alert"],
+.terminal-prompt-form [role="alert"] {
+  color: var(--red-11);
+  font-size: 12px;
+}
+.terminal-prompt-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+.terminal-prompt-form textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: "JetBrains Mono", monospace;
+  line-height: 1.5;
+}
+.terminal-prompt-form textarea:focus-visible {
+  border-color: var(--amber-8);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber-8) 35%, transparent);
 }
 
 .message-composer {
@@ -454,6 +662,49 @@
   }
   .pane-titlebar {
     min-height: 44px;
+  }
+  .interactive-terminal-tools {
+    min-height: 44px;
+  }
+  .interactive-terminal-actions button {
+    width: 44px;
+    height: 44px;
+  }
+  .terminal-mobile-keys {
+    display: flex;
+    min-height: 44px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--terminal-border);
+    background: var(--terminal-panel);
+  }
+  .terminal-mobile-keys button {
+    min-width: 64px;
+    min-height: 44px;
+    border: 1px solid var(--terminal-border);
+    border-radius: 6px;
+    background: var(--terminal-elevated);
+    color: var(--terminal-text);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+  }
+  .terminal-mobile-keys button[aria-pressed="true"] {
+    border-color: var(--amber-8);
+    background: var(--amber-4);
+  }
+  .terminal-mobile-keys button:disabled {
+    opacity: 0.42;
+  }
+  .terminal-state-overlay {
+    inset-block-start: 88px;
+  }
+  .xterm-host {
+    padding: 6px;
+  }
+  .terminal-search > span:last-child {
+    display: none;
   }
   .pane-title,
   .pane-switcher button {

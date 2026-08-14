@@ -94,7 +94,9 @@ export function App({
     );
   const workspaceTabs = workspace ? tabsForWorkspace(state, workspace.id) : [];
   const canStartAgent =
-    runtime.connection === "connected" && pendingLaunch?.status !== "starting";
+    runtime.connection === "connected" &&
+    runtime.accessRole === "controller" &&
+    pendingLaunch?.status !== "starting";
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -511,8 +513,13 @@ export function App({
                 onSelect={selectAgent}
               >
                 <TerminalWorkspace
-                  actionsEnabled={runtime.connection === "connected"}
+                  actionsEnabled={
+                    runtime.connection === "connected" &&
+                    runtime.accessRole === "controller"
+                  }
                   agent={agent}
+                  appearance={appearance}
+                  createTerminalTicket={runtime.terminalTicket}
                   draft={drafts[agent.id] ?? EMPTY_COMPOSER_DRAFT}
                   isSending={sending[agent.id] === true}
                   workspace={workspace}
@@ -543,6 +550,7 @@ export function App({
                   onSplitPane={() =>
                     runtime.splitPane(agent.id, agent.activePaneId)
                   }
+                  onUploadImage={runtime.uploadImage}
                   onSelectPane={(paneId) =>
                     runtime.dispatch({
                       type: "pane.selected",
@@ -558,6 +566,10 @@ export function App({
                       throw error;
                     }
                   }}
+                  terminalControlEnabled={runtime.accessRole === "controller"}
+                  terminalEnabled={runtime.status === "ready"}
+                  terminalReason={state.capabilities.terminalReason}
+                  terminalStreaming={state.capabilities.terminalStreaming}
                 />
               </SessionTabs>
             ) : (

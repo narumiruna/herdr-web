@@ -6,7 +6,11 @@ services:
     environment:
       HERDR_TCP_HOST: host.docker.internal
       HERDR_TCP_PORT: "${HERDR_TCP_PORT:-0}"
+      HERDR_TERMINAL_PROXY_HOST: host.docker.internal
+      HERDR_TERMINAL_PROXY_PORT: "${HERDR_TERMINAL_PROXY_PORT:-0}"
+      HERDR_TERMINAL_PROXY_TOKEN: "${HERDR_TERMINAL_PROXY_TOKEN:-}"
       HEDR_TOKEN: "${HEDR_TOKEN:-}"
+      HEDR_VIEW_TOKEN: "${HEDR_VIEW_TOKEN:-}"
       HERDR_PROJECTS_ROOT: "${HERDR_PROJECTS_ROOT:-/tmp}"
     ports:
       - "${HEDR_PORT:-0}:8080"

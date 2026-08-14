@@ -8,6 +8,7 @@ import {
   type UploadedImage,
   validateImage,
 } from "./image-upload.js";
+import type { TerminalTicketStore } from "./terminal-tickets.js";
 
 export interface HerdrService {
   closePane(paneId: string): Promise<unknown>;
@@ -15,12 +16,20 @@ export interface HerdrService {
   getState(): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
   splitPane(paneId: string): Promise<unknown>;
+  subscribeEvents?(
+    signal: AbortSignal,
+    onEvent: (event: unknown) => void,
+    onReady?: () => void,
+  ): Promise<void>;
   uploadImage(paneId: string, input: ImageUploadInput): Promise<UploadedImage>;
 }
 
 interface HandlerOptions {
   service: HerdrService;
+  terminalConfigured?: boolean;
+  terminalTickets?: TerminalTicketStore;
   token: string;
+  viewToken?: string;
 }
 
 const RESOURCE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -43,14 +52,26 @@ function sendJson(
   response.end(body);
 }
 
-function authorized(request: IncomingMessage, token: string): boolean {
-  const header = request.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return false;
-  const supplied = Buffer.from(header.slice(7));
-  const expected = Buffer.from(token);
+function tokenMatches(supplied: string, expected: string): boolean {
+  const suppliedBytes = Buffer.from(supplied);
+  const expectedBytes = Buffer.from(expected);
   return (
-    supplied.length === expected.length && timingSafeEqual(supplied, expected)
+    suppliedBytes.length === expectedBytes.length &&
+    timingSafeEqual(suppliedBytes, expectedBytes)
   );
+}
+
+function accessRole(
+  request: IncomingMessage,
+  controllerToken: string,
+  viewToken?: string,
+): "controller" | "viewer" | undefined {
+  const header = request.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return undefined;
+  const supplied = header.slice(7);
+  if (tokenMatches(supplied, controllerToken)) return "controller";
+  if (viewToken && tokenMatches(supplied, viewToken)) return "viewer";
+  return undefined;
 }
 
 async function readBody(
@@ -112,6 +133,13 @@ function cleanText(value: unknown, field: string, max: number): string {
   return text;
 }
 
+function cleanTerminalDimension(value: unknown, field: string): number {
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 1_000) {
+    throw new RangeError(`${field} must be an integer between 1 and 1000`);
+  }
+  return Number(value);
+}
+
 function errorResponse(response: ServerResponse, error: unknown): void {
   if (error instanceof PayloadTooLargeError) {
     sendJson(response, 413, {
@@ -151,8 +179,17 @@ function errorResponse(response: ServerResponse, error: unknown): void {
   });
 }
 
-export function createHerdrHttpHandler({ service, token }: HandlerOptions) {
+export function createHerdrHttpHandler({
+  service,
+  terminalConfigured = false,
+  terminalTickets,
+  token,
+  viewToken,
+}: HandlerOptions) {
   if (!token) throw new Error("HEDR_TOKEN must not be empty");
+  if (viewToken === token) {
+    throw new Error("HEDR_VIEW_TOKEN must differ from HEDR_TOKEN");
+  }
   return async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? "/", "http://herdr.local");
     if (!url.pathname.startsWith("/api/herdr/")) {
@@ -161,7 +198,8 @@ export function createHerdrHttpHandler({ service, token }: HandlerOptions) {
       });
       return;
     }
-    if (!authorized(request, token)) {
+    const role = accessRole(request, token, viewToken);
+    if (!role) {
       response.setHeader("www-authenticate", "Bearer");
       sendJson(response, 401, {
         error: {
@@ -173,8 +211,117 @@ export function createHerdrHttpHandler({ service, token }: HandlerOptions) {
     }
 
     try {
+      if (request.method === "GET" && url.pathname === "/api/herdr/events") {
+        if (!service.subscribeEvents) {
+          sendJson(response, 404, {
+            error: {
+              code: "event_stream_unavailable",
+              message: "Herdr event streaming is unavailable",
+            },
+          });
+          return;
+        }
+        const controller = new AbortController();
+        let keepalive: NodeJS.Timeout | undefined;
+        response.once("close", () => controller.abort());
+        try {
+          await service.subscribeEvents(
+            controller.signal,
+            (event) => {
+              if (response.writableEnded) return;
+              const writable = response.write(`${JSON.stringify(event)}\n`);
+              if (!writable) controller.abort();
+            },
+            () => {
+              response.writeHead(200, {
+                "cache-control": "no-store",
+                connection: "keep-alive",
+                "content-type": "application/x-ndjson; charset=utf-8",
+                "x-accel-buffering": "no",
+                "x-content-type-options": "nosniff",
+              });
+              response.flushHeaders();
+              keepalive = setInterval(() => {
+                if (!response.writableEnded) response.write("\n");
+              }, 15_000);
+              keepalive.unref();
+            },
+          );
+          if (!response.writableEnded) response.end();
+        } catch (error) {
+          if (!response.headersSent) errorResponse(response, error);
+          else if (!response.writableEnded) response.end();
+        } finally {
+          if (keepalive) clearInterval(keepalive);
+        }
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/herdr/state") {
-        sendJson(response, 200, await service.getState());
+        const state = await service.getState();
+        sendJson(
+          response,
+          200,
+          state && typeof state === "object" && !Array.isArray(state)
+            ? { ...state, access: { role } }
+            : state,
+        );
+        return;
+      }
+      const terminalTicket = url.pathname.match(
+        /^\/api\/herdr\/panes\/([^/]+)\/terminal-ticket$/,
+      );
+      if (request.method === "POST" && terminalTicket?.[1]) {
+        if (!terminalConfigured || !terminalTickets) {
+          sendJson(response, 409, {
+            error: {
+              code: "terminal_streaming_unavailable",
+              message:
+                "This Hedr bridge is not configured for Herdr terminal sessions",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        const mode = body.mode ?? "control";
+        if (mode !== "control" && mode !== "observe") {
+          throw new TypeError("mode must be control or observe");
+        }
+        if (body.takeover !== undefined && typeof body.takeover !== "boolean") {
+          throw new TypeError("takeover must be a boolean");
+        }
+        if (mode === "observe" && body.takeover === true) {
+          throw new TypeError("observe mode cannot take control");
+        }
+        if (role === "viewer" && mode !== "observe") {
+          sendJson(response, 403, {
+            error: {
+              code: "read_only_access",
+              message: "This access token permits observation only",
+            },
+          });
+          return;
+        }
+        const issued = terminalTickets.issue({
+          cols: cleanTerminalDimension(body.cols, "cols"),
+          mode,
+          paneId: cleanId(terminalTicket[1]),
+          rows: cleanTerminalDimension(body.rows, "rows"),
+          takeover: body.takeover === true,
+        });
+        sendJson(response, 201, {
+          ...issued,
+          path: "/api/herdr/terminal",
+          type: "terminal_ticket",
+        });
+        return;
+      }
+      if (role === "viewer") {
+        sendJson(response, 403, {
+          error: {
+            code: "read_only_access",
+            message: "This access token does not permit Herdr mutations",
+          },
+        });
         return;
       }
       const image = url.pathname.match(

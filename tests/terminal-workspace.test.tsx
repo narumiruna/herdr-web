@@ -47,6 +47,13 @@ function Harness({
       <TerminalWorkspace
         actionsEnabled={actionsEnabled}
         agent={agent}
+        appearance="dark"
+        createTerminalTicket={async () => ({
+          expiresAt: Date.now() + 30_000,
+          path: "/api/herdr/terminal",
+          ticket: "test-ticket",
+          type: "terminal_ticket",
+        })}
         draft={draft}
         isSending={sending[agent.id] === true}
         workspace={createDemoState().workspaces[0]}
@@ -73,6 +80,16 @@ function Harness({
         onSplitPane={() => undefined}
         onSelectPane={onSelectPane}
         onClosePane={() => undefined}
+        onUploadImage={async () => ({
+          mediaType: "image/png",
+          path: "/repo/.hedr/uploads/test.png",
+          size: 1,
+          type: "image_uploaded",
+        })}
+        terminalControlEnabled
+        terminalEnabled
+        terminalReason="This bridge is configured for snapshots only."
+        terminalStreaming={false}
       />
     </Tooltip.Provider>
   );
@@ -87,7 +104,9 @@ describe("TerminalWorkspace decision states", () => {
 
     render(<Harness agent={agent} />);
 
-    expect(screen.getByRole("note")).toHaveTextContent("Read-only terminal");
+    expect(
+      screen.getByText("Read-only terminal").closest('[role="note"]'),
+    ).toHaveTextContent("Read-only terminal");
     expect(
       screen.queryByRole("form", { name: "Message composer" }),
     ).not.toBeInTheDocument();

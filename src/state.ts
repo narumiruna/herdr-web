@@ -68,6 +68,10 @@ export interface Activity {
 }
 
 export interface HerdrState {
+  capabilities: {
+    terminalReason: string;
+    terminalStreaming: boolean;
+  };
   workspaces: Workspace[];
   agents: Agent[];
   activities: Activity[];
@@ -418,6 +422,11 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
 
 export function createDemoState(): HerdrState {
   return {
+    capabilities: {
+      terminalReason:
+        "Interactive terminal streaming is unavailable in demo mode.",
+      terminalStreaming: false,
+    },
     selectedWorkspaceId: "herdr-core",
     selectedAgentId: "agent-review",
     selectedSessionByWorkspace: {

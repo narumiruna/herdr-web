@@ -13,6 +13,7 @@ afterEach(async () => {
 
 async function fakeHerdr(
   respond: (request: Record<string, unknown>) => Record<string, unknown>,
+  afterRespond?: (socket: Socket, request: Record<string, unknown>) => void,
 ): Promise<{ socketPath: string; requests: Array<Record<string, unknown>> }> {
   const directory = await mkdtemp(join(tmpdir(), "hedr-test-"));
   const socketPath = join(directory, "herdr.sock");
@@ -31,6 +32,7 @@ async function fakeHerdr(
         const request = JSON.parse(line) as Record<string, unknown>;
         requests.push(request);
         socket.write(`${JSON.stringify(respond(request))}\n`);
+        afterRespond?.(socket, request);
         newline = buffer.indexOf("\n");
       }
     });
@@ -62,6 +64,44 @@ describe("HerdrClient", () => {
     });
     expect(fake.requests).toHaveLength(1);
     expect(fake.requests[0]).toMatchObject({ method: "ping", params: {} });
+  });
+
+  test("streams fragmented Unicode subscription events until cancellation", async () => {
+    const event = {
+      data: { label: "決定" },
+      event: "workspace_updated",
+      subscription: 0,
+    };
+    const bytes = Buffer.from(`${JSON.stringify(event)}\n`);
+    const fake = await fakeHerdr(
+      (request) => ({
+        id: request.id,
+        result: { type: "subscription_started" },
+      }),
+      (socket) => {
+        const split = bytes.indexOf(Buffer.from("決")) + 1;
+        socket.write(bytes.subarray(0, split));
+        setTimeout(() => socket.write(bytes.subarray(split)), 5);
+      },
+    );
+    const client = new HerdrClient(fake.socketPath, { timeoutMs: 500 });
+    const controller = new AbortController();
+    const events: unknown[] = [];
+
+    await client.subscribe(
+      "events.subscribe",
+      { subscriptions: [] },
+      {
+        onEvent: (value) => {
+          events.push(value);
+          controller.abort();
+        },
+        signal: controller.signal,
+      },
+    );
+
+    expect(events).toEqual([event]);
+    expect(fake.requests[0]).toMatchObject({ method: "events.subscribe" });
   });
 
   test("surfaces structured herdr errors", async () => {

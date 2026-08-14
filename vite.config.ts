@@ -10,7 +10,10 @@ export default defineConfig({
     host: "0.0.0.0",
     port: webPort,
     proxy: {
-      "/api": `http://127.0.0.1:${bridgePort}`,
+      "/api": {
+        target: `http://127.0.0.1:${bridgePort}`,
+        ws: true,
+      },
     },
   },
   test: {

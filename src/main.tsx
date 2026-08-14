@@ -15,6 +15,7 @@ import "@radix-ui/colors/red.css";
 import "@radix-ui/colors/red-dark.css";
 import "@radix-ui/colors/sand.css";
 import "@radix-ui/colors/sand-dark.css";
+import "@xterm/xterm/css/xterm.css";
 import "./styles.css";
 import "./styles-tabs.css";
 import "./styles-workbench.css";
