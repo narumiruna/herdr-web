@@ -38,6 +38,27 @@ Check the local herdr server before starting the web app:
 herdr status server
 ```
 
+## Project-directory CLI
+
+Install the command from this checkout:
+
+```sh
+just install-cli
+```
+
+Open the current directory or an explicit project directory:
+
+```sh
+herdr-web .
+herdr-web /path/to/project
+```
+
+The command resolves the directory, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
+
+Run `herdr-web --help` for usage and press `Ctrl+C` to stop the development web processes.
+
+The linked command depends on this checkout, its installed npm dependencies, `herdr`, and `just` remaining available.
+
 ## Run locally
 
 Install dependencies once:

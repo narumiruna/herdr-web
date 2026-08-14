@@ -6,6 +6,10 @@ default:
 install:
     npm install
 
+# Install the herdr-web command from this checkout.
+install-cli: install
+    npm link
+
 # Start the live Vite workbench and herdr bridge on available ports.
 run:
     #!/bin/sh

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "herdr-web": "./scripts/herdr-web.mjs"
+  },
   "scripts": {
     "dev": "concurrently --kill-others --names web,bridge \"vite\" \"tsx watch server/index.ts\"",
     "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
