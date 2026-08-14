@@ -192,6 +192,9 @@ export function InteractiveTerminal({
   const ctrlArmedRef = useRef(false);
   const modeRef = useRef<"control" | "observe">("control");
   const [status, setStatus] = useState<TerminalStatus>("connecting");
+  const [sessionMode, setSessionMode] = useState<"control" | "observe">(
+    "control",
+  );
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -247,6 +250,7 @@ export function InteractiveTerminal({
       const generation = ++connectGeneration.current;
       stopReason.current = undefined;
       modeRef.current = mode;
+      setSessionMode(mode);
       flowWritable.current = true;
       writable.current = false;
       ctrlArmedRef.current = false;
@@ -520,9 +524,15 @@ export function InteractiveTerminal({
     setImagePath("");
   }, []);
 
+  const imagePasteEnabled =
+    structuredActionsEnabled &&
+    sessionMode === "control" &&
+    ["connecting", "live", "reconnecting"].includes(status);
+
   useEffect(() => {
     let active = true;
     const pasteImage = (event: globalThis.ClipboardEvent) => {
+      if (!imagePasteEnabled) return;
       const file = event.clipboardData
         ? imageFromClipboard(event.clipboardData)
         : undefined;
@@ -543,7 +553,7 @@ export function InteractiveTerminal({
       active = false;
       window.removeEventListener("paste", pasteImage, true);
     };
-  }, [stageImage]);
+  }, [imagePasteEnabled, stageImage]);
 
   useEffect(() => {
     const redirectTerminalPaste = (event: globalThis.KeyboardEvent) => {
@@ -552,6 +562,7 @@ export function InteractiveTerminal({
         event.key.toLowerCase() !== "v" ||
         (!event.metaKey && !event.ctrlKey) ||
         event.altKey ||
+        !imagePasteEnabled ||
         !activeElement ||
         !host.current?.contains(activeElement)
       ) {
@@ -563,7 +574,7 @@ export function InteractiveTerminal({
     window.addEventListener("keydown", redirectTerminalPaste, true);
     return () =>
       window.removeEventListener("keydown", redirectTerminalPaste, true);
-  }, []);
+  }, [imagePasteEnabled]);
 
   const pasteTextFromSink = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     event.preventDefault();

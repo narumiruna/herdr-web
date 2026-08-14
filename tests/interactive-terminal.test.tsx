@@ -351,28 +351,22 @@ describe("InteractiveTerminal", () => {
     expect(read).toHaveBeenCalledOnce();
   });
 
-  test("shows why a globally pasted image cannot upload with viewer access", async () => {
+  test("leaves image paste untouched with viewer access", async () => {
     await renderTerminal({
       controlEnabled: false,
       structuredActionsEnabled: false,
     });
     const file = new File(["png"], "viewer-paste.png", { type: "image/png" });
 
-    fireEvent.paste(window, {
-      clipboardData: { files: [file], items: [] },
-    });
+    expect(
+      fireEvent.paste(window, {
+        clipboardData: { files: [file], items: [] },
+      }),
+    ).toBe(true);
 
     expect(
-      await screen.findByRole("dialog", { name: "Insert image path" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Image ready. Controller access is required before uploading.",
-      ),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Upload and insert path" }),
-    ).toBeDisabled();
+      screen.queryByRole("dialog", { name: "Insert image path" }),
+    ).not.toBeInTheDocument();
   });
 
   test("stages image paste without side effects and inserts an escaped path after confirmation", async () => {
@@ -456,7 +450,7 @@ describe("InteractiveTerminal", () => {
     ).toHaveLength(0);
   });
 
-  test("offers read-only observation or explicit takeover when control is held elsewhere", async () => {
+  test("offers read-only observation without capturing images in observe mode", async () => {
     const { socket } = await renderTerminal();
     socket.message({
       reason: "terminal is already controlled by another client",
@@ -466,9 +460,39 @@ describe("InteractiveTerminal", () => {
     expect(
       (await screen.findAllByText("Control is held elsewhere"))[0],
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Watch read-only" }),
-    ).toBeVisible();
+    const watch = screen.getByRole("button", { name: "Watch read-only" });
+    expect(watch).toBeVisible();
     expect(screen.getByRole("button", { name: "Take control" })).toBeVisible();
+
+    await userEvent.setup().click(watch);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const observeSocket = FakeWebSocket.instances[1];
+    if (!observeSocket) throw new Error("Missing observe socket");
+    observeSocket.message(frame());
+    expect(await screen.findByText("Watching")).toBeVisible();
+
+    const terminal = screen.getByRole("region", {
+      name: "reviewer interactive terminal",
+    });
+    const xtermInput = document.createElement("textarea");
+    const xtermPaste = vi.fn();
+    xtermInput.addEventListener("paste", xtermPaste);
+    terminal.append(xtermInput);
+    xtermInput.focus();
+    fireEvent.keyDown(xtermInput, { key: "v", metaKey: true });
+    expect(xtermInput).toHaveFocus();
+
+    const file = new File(["png"], "observe-paste.png", {
+      type: "image/png",
+    });
+    expect(
+      fireEvent.paste(xtermInput, {
+        clipboardData: { files: [file], items: [] },
+      }),
+    ).toBe(true);
+    expect(xtermPaste).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("dialog", { name: "Insert image path" }),
+    ).not.toBeInTheDocument();
   });
 });
