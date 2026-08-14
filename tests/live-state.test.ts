@@ -4,16 +4,12 @@ import { mapLiveSnapshot } from "../src/live-state";
 describe("mapLiveSnapshot", () => {
   test("maps real herdr workspaces, agents, layouts, and pane output", () => {
     const state = mapLiveSnapshot({
+      readErrors: { "w5:p2": "socket read failed" },
       reads: {
         "w5:p1": {
           pane_id: "w5:p1",
           revision: 9,
           text: "user\nhi\nassistant\nHello!",
-        },
-        "w5:p2": {
-          pane_id: "w5:p2",
-          revision: 2,
-          text: "$ pwd\n/Users/narumi/workspace/herdr-web",
         },
       },
       snapshot: {
@@ -47,6 +43,7 @@ describe("mapLiveSnapshot", () => {
             agent: "pi",
             agent_status: "idle",
             cwd: "/Users/narumi/workspace/herdr-web",
+            foreground_cwd: "/Users/narumi/workspace/herdr-web/src",
             pane_id: "w5:p1",
             revision: 9,
             tab_id: "w5:t1",
@@ -93,6 +90,7 @@ describe("mapLiveSnapshot", () => {
 
     expect(state.selectedWorkspaceId).toBe("w5");
     expect(state.selectedAgentId).toBe("w5:p1");
+    expect(state.selectedSessionByWorkspace).toEqual({ w5: "w5:p1" });
     expect(state.workspaces[0]).toMatchObject({
       id: "w5",
       name: "herdr-web",
@@ -106,13 +104,21 @@ describe("mapLiveSnapshot", () => {
       label: "π - herdr-web",
       runtime: "pi",
       status: "idle",
+      tabId: "w5:t1",
+      tabNumber: 1,
     });
     expect(state.agents[0]?.panes).toEqual([
       expect.objectContaining({
+        cwd: "/Users/narumi/workspace/herdr-web/src",
         id: "w5:p1",
         lines: ["user", "hi", "assistant", "Hello!"],
       }),
-      expect.objectContaining({ id: "w5:p2", title: "shell" }),
+      expect.objectContaining({
+        id: "w5:p2",
+        outputError: "socket read failed",
+        outputState: "unavailable",
+        title: "shell",
+      }),
     ]);
   });
 
@@ -221,7 +227,12 @@ describe("mapLiveSnapshot", () => {
     expect(state.agents).toHaveLength(2);
     expect(state.agents.filter(({ kind }) => kind === "agent")).toHaveLength(1);
     expect(state.agents.filter(({ kind }) => kind === "terminal")).toEqual([
-      expect.objectContaining({ id: "w5:p3", label: "monitor" }),
+      expect.objectContaining({
+        id: "w5:p3",
+        label: "monitor",
+        tabId: "w5:t2",
+        tabNumber: 2,
+      }),
     ]);
     expect(state.agents[0]?.panes).toHaveLength(2);
     expect(state.selectedAgentId).toBe("w5:p3");

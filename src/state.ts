@@ -12,11 +12,16 @@ export interface Workspace {
   accent: "amber" | "blue" | "grass";
 }
 
+export type TerminalOutputState = "ready" | "unavailable";
+
 export interface TerminalPane {
   id: string;
   title: string;
   command: string;
+  cwd?: string;
   lines: string[];
+  outputError?: string;
+  outputState?: TerminalOutputState;
 }
 
 export type SessionKind = "agent" | "terminal";
@@ -33,6 +38,8 @@ export interface Agent {
   summary: string;
   currentStep: string;
   started: string;
+  tabId?: string;
+  tabNumber?: number;
   updated: string;
   contextPercent: number;
   filesChanged: number;
@@ -66,6 +73,7 @@ export interface HerdrState {
   activities: Activity[];
   selectedWorkspaceId: string;
   selectedAgentId: string;
+  selectedSessionByWorkspace: Record<string, string>;
 }
 
 export type HerdrAction =
@@ -91,9 +99,9 @@ export type HerdrAction =
 
 const STATUS_PRIORITY: Record<AgentStatus, number> = {
   blocked: 5,
-  done: 4,
-  working: 3,
-  idle: 2,
+  working: 4,
+  idle: 3,
+  done: 2,
   unknown: 1,
 };
 
@@ -107,6 +115,19 @@ export function agentsForWorkspace(
       if (left.kind !== right.kind) return left.kind === "agent" ? -1 : 1;
       return STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status];
     });
+}
+
+export function tabsForWorkspace(
+  state: HerdrState,
+  workspaceId: string,
+): Agent[] {
+  return state.agents
+    .filter((agent) => agent.workspaceId === workspaceId)
+    .sort(
+      (left, right) =>
+        (left.tabNumber ?? Number.MAX_SAFE_INTEGER) -
+        (right.tabNumber ?? Number.MAX_SAFE_INTEGER),
+    );
 }
 
 export function selectedWorkspace(state: HerdrState): Workspace {
@@ -156,9 +177,29 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       const selectedWorkspace = action.state.workspaces.find(
         ({ id }) => id === state.selectedWorkspaceId,
       );
+      const selectedSessionByWorkspace = {
+        ...action.state.selectedSessionByWorkspace,
+      };
+      for (const [workspaceId, agentId] of Object.entries(
+        state.selectedSessionByWorkspace,
+      )) {
+        if (
+          agents.some(
+            (agent) =>
+              agent.id === agentId && agent.workspaceId === workspaceId,
+          )
+        ) {
+          selectedSessionByWorkspace[workspaceId] = agentId;
+        }
+      }
+      if (selectedAgent) {
+        selectedSessionByWorkspace[selectedAgent.workspaceId] =
+          selectedAgent.id;
+      }
       return {
         ...action.state,
         agents,
+        selectedSessionByWorkspace,
         selectedAgentId: selectedAgent?.id ?? action.state.selectedAgentId,
         selectedWorkspaceId:
           selectedAgent?.workspaceId ??
@@ -173,11 +214,23 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       if (!workspace) {
         return state;
       }
-      const firstAgent = agentsForWorkspace(state, workspace.id)[0];
+      const rememberedAgent = state.agents.find(
+        ({ id, workspaceId }) =>
+          id === state.selectedSessionByWorkspace[workspace.id] &&
+          workspaceId === workspace.id,
+      );
+      const firstTab = tabsForWorkspace(state, workspace.id)[0];
+      const selectedAgentId = rememberedAgent?.id ?? firstTab?.id ?? "";
       return {
         ...state,
         selectedWorkspaceId: workspace.id,
-        selectedAgentId: firstAgent?.id ?? "",
+        selectedAgentId,
+        selectedSessionByWorkspace: selectedAgentId
+          ? {
+              ...state.selectedSessionByWorkspace,
+              [workspace.id]: selectedAgentId,
+            }
+          : state.selectedSessionByWorkspace,
       };
     }
     case "agent.selected": {
@@ -189,6 +242,10 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
         ...state,
         selectedWorkspaceId: agent.workspaceId,
         selectedAgentId: agent.id,
+        selectedSessionByWorkspace: {
+          ...state.selectedSessionByWorkspace,
+          [agent.workspaceId]: agent.id,
+        },
       };
     }
     case "agent.replied": {
@@ -256,6 +313,16 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
         summary: "Starting a new agent session",
         currentStep: "Reading workspace context",
         started: "just now",
+        tabId: action.id,
+        tabNumber:
+          Math.max(
+            state.agents.filter(
+              ({ workspaceId }) => workspaceId === workspace.id,
+            ).length,
+            ...state.agents
+              .filter(({ workspaceId }) => workspaceId === workspace.id)
+              .map(({ tabNumber }) => tabNumber ?? 0),
+          ) + 1,
         updated: "just now",
         contextPercent: 1,
         filesChanged: 0,
@@ -281,6 +348,10 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
         agents: [...state.agents, agent],
         selectedWorkspaceId: workspace.id,
         selectedAgentId: agent.id,
+        selectedSessionByWorkspace: {
+          ...state.selectedSessionByWorkspace,
+          [workspace.id]: agent.id,
+        },
         activities: [
           {
             id: `created-${state.activities.length + 1}`,
@@ -349,6 +420,11 @@ export function createDemoState(): HerdrState {
   return {
     selectedWorkspaceId: "herdr-core",
     selectedAgentId: "agent-review",
+    selectedSessionByWorkspace: {
+      "docs-site": "agent-docs",
+      "herdr-core": "agent-review",
+      marketplace: "agent-plugin",
+    },
     workspaces: [
       {
         id: "herdr-core",

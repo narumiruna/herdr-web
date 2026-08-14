@@ -32,6 +32,7 @@ export interface UploadedImage {
 }
 
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const MAX_PROMPT_CHARACTERS = 20_000;
 export const SUPPORTED_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",
@@ -49,6 +50,7 @@ export class HerdrApiClient {
     );
     const response = await fetch(path, {
       ...init,
+      signal: init.signal ?? AbortSignal.timeout(15_000),
       headers: {
         ...(init.body && !hasContentType
           ? { "content-type": "application/json" }

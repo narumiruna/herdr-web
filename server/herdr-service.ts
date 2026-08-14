@@ -70,6 +70,7 @@ export class LiveHerdrService {
   ) {}
 
   async getState(): Promise<{
+    readErrors: Record<string, string>;
     reads: Record<string, PaneReadResponse["read"]>;
     snapshot: SessionSnapshotResult["snapshot"];
   }> {
@@ -80,10 +81,10 @@ export class LiveHerdrService {
     if (result.type !== "session_snapshot" || !result.snapshot) {
       throw new Error("Herdr returned an invalid session snapshot");
     }
-    const paneIds = (result.snapshot.panes ?? [])
+    const allPaneIds = (result.snapshot.panes ?? [])
       .map(({ pane_id: paneId }) => paneId)
-      .filter((paneId): paneId is string => Boolean(paneId))
-      .slice(0, 64);
+      .filter((paneId): paneId is string => Boolean(paneId));
+    const paneIds = allPaneIds.slice(0, 64);
     const settled = await Promise.allSettled(
       paneIds.map((paneId) =>
         this.client.request<PaneReadResponse>("pane.read", {
@@ -95,15 +96,32 @@ export class LiveHerdrService {
         }),
       ),
     );
+    const readErrors: Record<string, string> = Object.fromEntries(
+      allPaneIds
+        .slice(64)
+        .map((paneId) => [
+          paneId,
+          "Output was not loaded because the snapshot contains more than 64 panes",
+        ]),
+    );
     const reads: Record<string, PaneReadResponse["read"]> = {};
     settled.forEach((entry, index) => {
-      if (entry.status !== "fulfilled" || entry.value.type !== "pane_read") {
+      const paneId = paneIds[index];
+      if (!paneId) return;
+      if (entry.status === "rejected") {
+        readErrors[paneId] =
+          entry.reason instanceof Error
+            ? entry.reason.message
+            : "Terminal output could not be read";
         return;
       }
-      const paneId = paneIds[index];
-      if (paneId) reads[paneId] = entry.value.read;
+      if (entry.value.type !== "pane_read") {
+        readErrors[paneId] = "Herdr returned invalid terminal output";
+        return;
+      }
+      reads[paneId] = entry.value.read;
     });
-    return { reads, snapshot: result.snapshot };
+    return { readErrors, reads, snapshot: result.snapshot };
   }
 
   async uploadImage(

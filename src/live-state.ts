@@ -35,6 +35,7 @@ interface LivePane {
   cwd?: string | null;
   display_agent?: string | null;
   focused?: boolean;
+  foreground_cwd?: string | null;
   label?: string | null;
   pane_id: string;
   revision: number;
@@ -60,6 +61,7 @@ interface LiveRead {
 }
 
 export interface LiveSnapshotPayload {
+  readErrors?: Record<string, string>;
   reads: Record<string, LiveRead>;
   snapshot: {
     agents: LivePane[];
@@ -102,6 +104,7 @@ function terminalPanes(
   pane: LivePane,
   allPanes: LivePane[],
   reads: Record<string, LiveRead>,
+  readErrors: Record<string, string>,
   layout: LiveLayout | undefined,
 ): TerminalPane[] {
   const paneIds = layout?.panes.map(({ pane_id: paneId }) => paneId);
@@ -110,12 +113,18 @@ function terminalPanes(
       candidate.tab_id === pane.tab_id &&
       (!paneIds || paneIds.includes(candidate.pane_id)),
   );
-  return members.map((candidate) => ({
-    command: candidate.agent ?? "shell",
-    id: candidate.pane_id,
-    lines: paneLines(reads[candidate.pane_id]),
-    title: paneTitle(candidate),
-  }));
+  return members.map((candidate) => {
+    const outputError = readErrors[candidate.pane_id];
+    return {
+      command: candidate.agent ?? "shell",
+      cwd: (candidate.foreground_cwd ?? candidate.cwd)?.trim() ?? "",
+      id: candidate.pane_id,
+      lines: paneLines(reads[candidate.pane_id]),
+      outputError,
+      outputState: outputError ? "unavailable" : "ready",
+      title: paneTitle(candidate),
+    };
+  });
 }
 
 function currentStep(pane: LivePane, status: AgentStatus): string {
@@ -126,12 +135,14 @@ function mapAgent(
   pane: LivePane,
   allPanes: LivePane[],
   reads: Record<string, LiveRead>,
+  readErrors: Record<string, string>,
   layouts: LiveLayout[],
   kind: Agent["kind"],
+  tab: LiveTab | undefined,
 ): Agent {
   const status = statusOf(pane.agent_status);
   const layout = layouts.find(({ tab_id: tabId }) => tabId === pane.tab_id);
-  const panes = terminalPanes(pane, allPanes, reads, layout);
+  const panes = terminalPanes(pane, allPanes, reads, readErrors, layout);
   const label = paneTitle(pane);
   return {
     activePaneId:
@@ -154,6 +165,8 @@ function mapAgent(
     runtime: pane.display_agent ?? pane.agent ?? "Shell",
     started: "",
     status,
+    tabId: pane.tab_id,
+    tabNumber: tab?.number,
     summary: pane.tokens?.summary ?? label,
     updated: `revision ${pane.revision}`,
     workspaceId: pane.workspace_id,
@@ -186,6 +199,7 @@ function paneFromSnapshot(pane: LivePane, allPanes: LivePane[]): LivePane {
 
 export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
   const { snapshot, reads } = payload;
+  const readErrors = payload.readErrors ?? {};
   const workspaces = snapshot.workspaces.map((workspace, index) =>
     mapWorkspace(workspace, snapshot.panes, index),
   );
@@ -195,8 +209,10 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
       paneFromSnapshot(pane, snapshot.panes),
       snapshot.panes,
       reads,
+      readErrors,
       snapshot.layouts,
       "agent",
+      snapshot.tabs.find(({ tab_id: tabId }) => tabId === pane.tab_id),
     ),
   );
   const standaloneTerminals = snapshot.tabs
@@ -211,7 +227,17 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
           ?.pane_id;
       const pane = snapshot.panes.find(({ pane_id: id }) => id === paneId);
       return pane
-        ? [mapAgent(pane, snapshot.panes, reads, snapshot.layouts, "terminal")]
+        ? [
+            mapAgent(
+              pane,
+              snapshot.panes,
+              reads,
+              readErrors,
+              snapshot.layouts,
+              "terminal",
+              tab,
+            ),
+          ]
         : [];
     });
   const agents = [...detectedAgents, ...standaloneTerminals];
@@ -230,10 +256,24 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
     agents.find(({ workspaceId }) => workspaceId === selectedWorkspaceId)?.id ??
     agents[0]?.id ??
     "";
+  const selectedSessionByWorkspace = Object.fromEntries(
+    snapshot.workspaces.flatMap((workspace) => {
+      const session = agents.find(
+        ({ tabId, workspaceId }) =>
+          workspaceId === workspace.workspace_id &&
+          tabId === workspace.active_tab_id,
+      );
+      return session ? [[workspace.workspace_id, session.id]] : [];
+    }),
+  );
+  if (selectedAgentId && selectedWorkspaceId) {
+    selectedSessionByWorkspace[selectedWorkspaceId] = selectedAgentId;
+  }
   return {
     activities: [],
     agents,
     selectedAgentId,
+    selectedSessionByWorkspace,
     selectedWorkspaceId,
     workspaces,
   };

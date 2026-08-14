@@ -47,10 +47,12 @@ export function SessionDetails({
             <Component1Icon aria-hidden="true" /> {workspace.name}
           </dd>
         </div>
-        {workspace.path && (
+        {(activePane?.cwd || workspace.path) && (
           <div>
-            <dt>Path</dt>
-            <dd title={workspace.path}>{workspace.path}</dd>
+            <dt>Current directory</dt>
+            <dd title={activePane?.cwd || workspace.path}>
+              {activePane?.cwd || workspace.path}
+            </dd>
           </div>
         )}
         {workspace.branch && (
@@ -84,9 +86,9 @@ export function SessionDetails({
       <section className="details-note" aria-label="Session behavior">
         <InfoCircledIcon aria-hidden="true" />
         <p>
-          Herdr keeps this session running when the browser disconnects.
-          Terminal output is read-only; prompts are available only for detected
-          Agents.
+          Herdr keeps this session running when the browser disconnects. The
+          workbench shows up to 240 recent lines per pane. Prompts are available
+          only for detected Agents.
         </p>
       </section>
     </div>

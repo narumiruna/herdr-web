@@ -139,6 +139,44 @@ describe("live herdr app", () => {
       screen.getByRole("button", { name: "Open live-test workspace" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "New agent" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start Agent" })).toBeVisible();
+  });
+
+  test("moves long-running Agent launch failures into a recoverable background status", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/sessions")) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "agent_failed",
+              message: "Agent did not become ready",
+            },
+          }),
+          { headers: { "content-type": "application/json" }, status: 502 },
+        );
+      }
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.click(screen.getByRole("button", { name: "New agent" }));
+    await user.type(screen.getByLabelText("Agent name"), "background-agent");
+    await user.click(screen.getByRole("button", { name: "Start agent" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Start a new Agent" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("background-agent could not start."),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
   });
 
   test("uploads a selected image and prompts the agent with its host path", async () => {
@@ -178,7 +216,7 @@ describe("live herdr app", () => {
 
     render(<App live />);
 
-    await screen.findByRole("heading", { name: "π - live-test" });
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
     await user.upload(screen.getByLabelText("Choose image"), file);
     expect(screen.getByText("remote-shot.png")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Send message" }));
@@ -206,6 +244,154 @@ describe("live herdr app", () => {
       }),
     );
     expect(screen.queryByText("remote-shot.png")).not.toBeInTheDocument();
+  });
+
+  test("uploads images to the focused split pane but prompts the detected Agent", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const splitPayload = {
+      reads: {
+        ...payload.reads,
+        "w9:p2": { pane_id: "w9:p2", revision: 1, text: "$ pwd" },
+      },
+      snapshot: {
+        ...payload.snapshot,
+        focused_pane_id: "w9:p2",
+        layouts: [
+          {
+            focused_pane_id: "w9:p2",
+            panes: [
+              { focused: false, pane_id: "w9:p1" },
+              { focused: true, pane_id: "w9:p2" },
+            ],
+            tab_id: "w9:t1",
+            workspace_id: "w9",
+          },
+        ],
+        panes: [
+          ...payload.snapshot.panes,
+          {
+            agent_status: "unknown",
+            cwd: "/repo/tools",
+            foreground_cwd: "/repo/tools",
+            pane_id: "w9:p2",
+            revision: 1,
+            tab_id: "w9:t1",
+            terminal_title_stripped: "tools",
+            workspace_id: "w9",
+          },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/images")) {
+        return new Response(
+          JSON.stringify({
+            mediaType: "image/png",
+            path: "/repo/tools/.herdr-web/uploads/split.png",
+            size: 11,
+            type: "image_uploaded",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.endsWith("/prompt")) {
+        return new Response(JSON.stringify({ type: "agent_prompted" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(splitPayload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])],
+      "split.png",
+      { type: "image/png" },
+    );
+
+    render(<App live />);
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.upload(screen.getByLabelText("Choose image"), file);
+    expect(
+      screen.getByText(/will be stored under \/repo\/tools/),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/herdr/agents/w9%3Ap2/images",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/herdr/agents/w9%3Ap1/prompt",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  test("reuses a successful image upload when a rejected prompt is retried", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const imagePath = "/repo/.herdr-web/uploads/retry.png";
+    let prompts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/images")) {
+        return new Response(
+          JSON.stringify({
+            mediaType: "image/png",
+            path: imagePath,
+            size: 11,
+            type: "image_uploaded",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.endsWith("/prompt")) {
+        prompts += 1;
+        return new Response(
+          JSON.stringify(
+            prompts === 1
+              ? { error: { code: "agent_busy", message: "Agent is busy" } }
+              : { type: "agent_prompted" },
+          ),
+          {
+            headers: { "content-type": "application/json" },
+            status: prompts === 1 ? 409 : 200,
+          },
+        );
+      }
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])],
+      "retry.png",
+      { type: "image/png" },
+    );
+
+    render(<App live />);
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.upload(screen.getByLabelText("Choose image"), file);
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Retry message" }),
+    );
+
+    await waitFor(() => expect(prompts).toBe(2));
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/images"),
+      ),
+    ).toHaveLength(1);
   });
 
   test("keeps a failed prompt draft and offers inline retry", async () => {
@@ -246,6 +432,36 @@ describe("live herdr app", () => {
     expect(screen.getByRole("button", { name: "Retry message" })).toBeVisible();
   });
 
+  test("warns when prompt delivery cannot be confirmed", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/prompt")) {
+        throw new TypeError("Failed to fetch");
+      }
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App live />);
+    const message = await screen.findByRole("textbox", {
+      name: "Message π - live-test",
+    });
+    await user.type(message, "check once");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Send message again" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("alert", { name: "Message failed" }),
+    ).toHaveTextContent("Check the terminal");
+    expect(message).toHaveValue("check once");
+  });
+
   test("keeps the last valid snapshot visible during a transient disconnect", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     let requests = 0;
@@ -262,7 +478,7 @@ describe("live herdr app", () => {
     render(<App live />);
 
     expect(
-      await screen.findByRole("heading", { name: "π - live-test" }),
+      await screen.findByRole("tab", { name: /π - live-test.*Idle/i }),
     ).toBeVisible();
     expect(
       await screen.findByRole(
@@ -272,11 +488,14 @@ describe("live herdr app", () => {
       ),
     ).toHaveTextContent("Showing the last update");
     expect(
-      screen.getByRole("heading", { name: "π - live-test" }),
+      screen.getByRole("tab", { name: /π - live-test.*Idle/i }),
     ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Herdr is unavailable" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message π - live-test" }),
+    ).toBeDisabled();
   });
 
   test("loads live state and forwards a prompt with bearer auth", async () => {
@@ -296,7 +515,7 @@ describe("live herdr app", () => {
     render(<App live />);
 
     expect(
-      await screen.findByRole("heading", { name: "π - live-test" }),
+      await screen.findByRole("tab", { name: /π - live-test.*Idle/i }),
     ).toBeVisible();
     expect(window.location.search).toBe("");
     const message = screen.getByRole("textbox", {

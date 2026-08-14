@@ -1,8 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { agentsForWorkspace, appReducer, createDemoState } from "../src/state";
+import {
+  agentsForWorkspace,
+  appReducer,
+  createDemoState,
+  tabsForWorkspace,
+} from "../src/state";
 
 describe("herdr state", () => {
-  test("orders blocked agents before other agents and standalone terminals", () => {
+  test("orders blocked and working agents before completed agents and terminals", () => {
     const state = createDemoState();
     state.agents.push({
       ...state.agents[0],
@@ -17,10 +22,81 @@ describe("herdr state", () => {
 
     expect(ordered.map(({ id }) => id)).toEqual([
       "agent-review",
+      "agent-build",
+      "agent-tests",
+      "terminal-shell",
+    ]);
+  });
+
+  test("orders Agent and standalone Terminal tabs by their Herdr tab number", () => {
+    const state = createDemoState();
+    state.agents.push({
+      ...state.agents[0],
+      id: "terminal-shell",
+      kind: "terminal",
+      tabNumber: 4,
+    });
+    const sessions = state.agents.filter(
+      ({ workspaceId }) => workspaceId === "herdr-core",
+    );
+    const numbers = [3, 1, 2, 4];
+    sessions.forEach((session, index) => {
+      session.tabNumber = numbers[index];
+    });
+
+    expect(tabsForWorkspace(state, "herdr-core").map(({ id }) => id)).toEqual([
+      "agent-review",
       "agent-tests",
       "agent-build",
       "terminal-shell",
     ]);
+  });
+
+  test("remembers the selected tab independently for each workspace", () => {
+    const state = createDemoState();
+    const docsAgent = state.agents.find(({ id }) => id === "agent-docs");
+    if (!docsAgent) throw new Error("Missing docs Agent");
+    state.agents.push({
+      ...docsAgent,
+      id: "agent-docs-second",
+      label: "docs-second",
+      tabNumber: 2,
+    });
+    const selected = appReducer(state, {
+      type: "agent.selected",
+      agentId: "agent-docs-second",
+    });
+    const switchedAway = appReducer(selected, {
+      type: "workspace.selected",
+      workspaceId: "herdr-core",
+    });
+    const returned = appReducer(switchedAway, {
+      type: "workspace.selected",
+      workspaceId: "docs-site",
+    });
+
+    expect(returned.selectedAgentId).toBe("agent-docs-second");
+    expect(returned.selectedSessionByWorkspace["docs-site"]).toBe(
+      "agent-docs-second",
+    );
+  });
+
+  test("uses Herdr tab order when a workspace has no remembered tab", () => {
+    const state = createDemoState();
+    state.selectedSessionByWorkspace = {};
+    const sessions = state.agents.filter(
+      ({ workspaceId }) => workspaceId === "herdr-core",
+    );
+    sessions.forEach((session, index) => {
+      session.tabNumber = [3, 1, 2][index];
+    });
+
+    const next = appReducer(state, {
+      type: "workspace.selected",
+      workspaceId: "herdr-core",
+    });
+
+    expect(next.selectedAgentId).toBe("agent-review");
   });
 
   test("selecting an empty workspace clears the previous session focus", () => {
@@ -103,6 +179,7 @@ describe("herdr state", () => {
       label: "security-audit",
       runtime: "Codex",
       status: "working",
+      tabNumber: 4,
     });
     expect(next.selectedAgentId).toBe("agent-new");
     expect(next.activities[0]?.kind).toBe("created");

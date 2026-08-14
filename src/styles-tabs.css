@@ -1,0 +1,120 @@
+.session-tabs-layout {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.session-tab-content[data-state="active"] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.session-tab-content[data-state="inactive"] {
+  display: none;
+}
+.session-tabs {
+  min-width: 0;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.session-tabs-scroll,
+.session-tabs-viewport {
+  width: 100%;
+}
+.session-tabs-viewport {
+  overflow-y: hidden;
+}
+.session-tabs-list {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  height: 40px;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 12px 0;
+}
+.session-tab {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 280px;
+  height: 35px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.session-tab:hover {
+  background: var(--panel-muted);
+  color: var(--ink-secondary);
+}
+.session-tab[data-state="active"] {
+  background: var(--canvas);
+  box-shadow: inset 0 -2px 0 var(--amber-9);
+  color: var(--ink);
+}
+.session-tab-icon {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+.session-tab-icon > svg {
+  width: 13px;
+  height: 13px;
+}
+.session-tab-label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-tab-status {
+  flex: 0 0 auto;
+}
+.session-tab-status .status-pill {
+  gap: 3px;
+  padding: 3px 5px;
+  font-size: 11px;
+}
+.session-tabs-scrollbar {
+  display: flex;
+  height: 4px;
+  padding: 1px;
+  background: transparent;
+  user-select: none;
+}
+.session-tabs-scrollbar-thumb {
+  flex: 1;
+  border-radius: 4px;
+  background: var(--sand-7);
+}
+
+@media (max-width: 620px) {
+  .session-tabs-viewport {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 10px,
+      #000 calc(100% - 10px),
+      transparent
+    );
+  }
+  .session-tabs-list {
+    height: 45px;
+    padding: 1px 12px 0;
+  }
+  .session-tab {
+    max-width: 220px;
+    height: 44px;
+    padding: 0 10px;
+  }
+}

@@ -1,50 +1,79 @@
 import {
+  CheckIcon,
   CodeIcon,
   ColumnsIcon,
+  CopyIcon,
   Cross2Icon,
   ExclamationTriangleIcon,
   ImageIcon,
+  LockClosedIcon,
   PaperPlaneIcon,
+  ReloadIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { Button, IconButton } from "@radix-ui/themes";
 import {
   type DragEvent,
   type FormEvent,
+  type KeyboardEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { MAX_ATTACHMENT_BYTES, SUPPORTED_IMAGE_TYPES } from "../herdr-api";
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_PROMPT_CHARACTERS,
+  SUPPORTED_IMAGE_TYPES,
+} from "../herdr-api";
 import type { Agent, TerminalPane, Workspace } from "../state";
+import { HerdrMutationError } from "../use-herdr-runtime";
 import { IconTooltip } from "./IconTooltip";
 import { RadixDialog } from "./RadixDialog";
-import { StatusPill } from "./StatusPill";
+
+export interface ComposerDraft {
+  attachment?: File;
+  attachmentError: string;
+  message: string;
+  sendError: string;
+  sendOutcome?: "rejected" | "unknown";
+  sendStage?: "action" | "prompt" | "upload";
+  uploadedPath?: string;
+}
+
+export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
+  attachmentError: "",
+  message: "",
+  sendError: "",
+};
 
 interface TerminalWorkspaceProps {
+  actionsEnabled: boolean;
   agent: Agent;
+  draft: ComposerDraft;
+  isSending: boolean;
   workspace: Workspace;
-  onMessage: (message: string, image?: File) => void | Promise<void>;
+  onClearDraft: (agentId: string) => void;
+  onDraftChange: (agentId: string, update: Partial<ComposerDraft>) => void;
+  onMessage: (
+    message: string,
+    image?: File,
+    uploadedPath?: string,
+  ) => Promise<{ uploadedPath?: string }> | undefined;
   onMessageFailure?: () => void;
+  onRetryOutput: () => void | Promise<void>;
+  onSendingChange: (agentId: string, sending: boolean) => void;
   onSplitPane: () => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
   onClosePane: (paneId: string) => void | Promise<void>;
 }
 
-interface Draft {
-  attachment?: File;
-  attachmentError: string;
-  message: string;
-  sendError: string;
+function compactPath(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 2) return path;
+  return `…/${parts.slice(-2).join("/")}`;
 }
-
-const EMPTY_DRAFT: Draft = {
-  attachmentError: "",
-  message: "",
-  sendError: "",
-};
 
 function lineClass(line: string): string {
   if (line.startsWith("$")) return "terminal-command";
@@ -73,6 +102,26 @@ function imageFromTransfer(data: DataTransfer): File | undefined {
   return undefined;
 }
 
+function movePaneTab(event: KeyboardEvent<HTMLButtonElement>) {
+  if (
+    !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+  ) {
+    return;
+  }
+  const tabs = Array.from(
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+      '[role="tab"]',
+    ) ?? [],
+  );
+  const current = tabs.indexOf(event.currentTarget);
+  if (current < 0 || tabs.length < 2) return;
+  event.preventDefault();
+  const offset = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+  const next = tabs[(current + offset + tabs.length) % tabs.length];
+  next?.focus();
+  next?.click();
+}
+
 function terminalLineEntries(lines: string[]) {
   const occurrences = new Map<string, number>();
   return lines.map((line) => {
@@ -89,6 +138,7 @@ interface TerminalPaneViewProps {
   agentLabel: string;
   onFocus: () => void;
   onClose: () => void;
+  onRetryOutput: () => void;
 }
 
 function TerminalPaneView({
@@ -98,6 +148,7 @@ function TerminalPaneView({
   agentLabel,
   onFocus,
   onClose,
+  onRetryOutput,
 }: TerminalPaneViewProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const followsOutput = useRef(true);
@@ -110,6 +161,25 @@ function TerminalPaneView({
     }
   }, [pane.lines]);
 
+  const navigatePane = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    ) {
+      return;
+    }
+    const panes = Array.from(
+      event.currentTarget
+        .closest(".pane-grid")
+        ?.querySelectorAll<HTMLElement>(".pane-focus-target") ?? [],
+    );
+    const current = panes.indexOf(event.currentTarget);
+    if (current < 0 || panes.length < 2) return;
+    event.preventDefault();
+    const offset =
+      event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+    panes[(current + offset + panes.length) % panes.length]?.focus();
+  };
+
   return (
     <section
       className="terminal-pane"
@@ -118,10 +188,19 @@ function TerminalPaneView({
       onPointerDown={onFocus}
     >
       <div className="pane-titlebar">
-        <span className="pane-title">
+        <button
+          type="button"
+          className="pane-title pane-focus-target"
+          aria-label={`Focus ${pane.title} pane`}
+          onFocus={onFocus}
+          onKeyDown={navigatePane}
+        >
           <CodeIcon aria-hidden="true" />
           {pane.title}
-        </span>
+        </button>
+        {focused && canClose && (
+          <span className="pane-active-label">Active</span>
+        )}
         {canClose && (
           <button
             type="button"
@@ -152,7 +231,16 @@ function TerminalPaneView({
             role="document"
             aria-label={`${agentLabel} output`}
           >
-            {pane.lines.length === 0 ? (
+            {pane.outputState === "unavailable" ? (
+              <div className="terminal-output-error" role="status">
+                <ReloadIcon aria-hidden="true" />
+                <strong>Terminal output is temporarily unavailable.</strong>
+                <span>{pane.outputError}</span>
+                <button type="button" onClick={onRetryOutput}>
+                  Retry output
+                </button>
+              </div>
+            ) : pane.lines.length === 0 ? (
               <p className="terminal-empty">No terminal output yet.</p>
             ) : (
               terminalLineEntries(pane.lines).map(({ key, line }) => (
@@ -182,36 +270,46 @@ function TerminalPaneView({
 }
 
 export function TerminalWorkspace({
+  actionsEnabled,
   agent,
+  draft,
+  isSending,
   workspace,
+  onClearDraft,
+  onDraftChange,
   onMessage,
   onMessageFailure,
+  onRetryOutput,
+  onSendingChange,
   onSplitPane,
   onSelectPane,
   onClosePane,
 }: TerminalWorkspaceProps) {
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [sending, setSending] = useState<Record<string, boolean>>({});
   const [dragging, setDragging] = useState(false);
   const [closingPane, setClosingPane] = useState<TerminalPane>();
   const [closeError, setCloseError] = useState("");
   const [closing, setClosing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [cwdCopied, setCwdCopied] = useState(false);
+  const [sentAgentId, setSentAgentId] = useState("");
   const dragDepth = useRef(0);
   const imageInput = useRef<HTMLInputElement>(null);
   const composerForm = useRef<HTMLFormElement>(null);
+  const messageInput = useRef<HTMLTextAreaElement>(null);
   const cancelCloseButton = useRef<HTMLButtonElement>(null);
-  const draft = drafts[agent.id] ?? EMPTY_DRAFT;
-  const isSending = sending[agent.id] === true;
   const canPrompt = agent.kind === "agent" && agent.canPrompt !== false;
-  const canSend = Boolean(draft.message.trim() || draft.attachment);
+  const canSend =
+    actionsEnabled && Boolean(draft.message.trim() || draft.attachment);
+  const currentWorkingDirectory =
+    agent.panes.find(({ id }) => id === agent.activePaneId)?.cwd ||
+    workspace.path;
 
-  const updateDraft = useCallback((agentId: string, update: Partial<Draft>) => {
-    setDrafts((current) => ({
-      ...current,
-      [agentId]: { ...(current[agentId] ?? EMPTY_DRAFT), ...update },
-    }));
-  }, []);
+  const updateDraft = useCallback(
+    (agentId: string, update: Partial<ComposerDraft>) => {
+      onDraftChange(agentId, update);
+    },
+    [onDraftChange],
+  );
 
   useEffect(() => {
     if (!draft.attachment || typeof URL.createObjectURL !== "function") {
@@ -223,8 +321,22 @@ export function TerminalWorkspace({
     return () => URL.revokeObjectURL(url);
   }, [draft.attachment]);
 
+  useLayoutEffect(() => {
+    const element = messageInput.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
+  });
+
   const queueImage = useCallback(
     (file: File, agentId = agent.id) => {
+      if (!actionsEnabled) return;
+      if (draft.attachment) {
+        updateDraft(agentId, {
+          attachmentError: "Remove the current image before attaching another.",
+        });
+        return;
+      }
       if (
         !SUPPORTED_IMAGE_TYPES.includes(
           file.type as (typeof SUPPORTED_IMAGE_TYPES)[number],
@@ -245,15 +357,20 @@ export function TerminalWorkspace({
         attachment: file,
         attachmentError: "",
         sendError: "",
+        sendOutcome: undefined,
+        sendStage: undefined,
+        uploadedPath: undefined,
       });
     },
-    [agent.id, updateDraft],
+    [actionsEnabled, agent.id, draft.attachment, updateDraft],
   );
 
   useEffect(() => {
     const activeAgentId = agent.id;
     const pasteImage = (event: globalThis.ClipboardEvent) => {
-      if (!canPrompt || sending[activeAgentId] || !event.clipboardData) return;
+      if (!actionsEnabled || !canPrompt || isSending || !event.clipboardData) {
+        return;
+      }
       const image = imageFromTransfer(event.clipboardData);
       if (!image) return;
       event.preventDefault();
@@ -261,7 +378,7 @@ export function TerminalWorkspace({
     };
     window.addEventListener("paste", pasteImage);
     return () => window.removeEventListener("paste", pasteImage);
-  }, [agent.id, canPrompt, queueImage, sending]);
+  }, [actionsEnabled, agent.id, canPrompt, isSending, queueImage]);
 
   const dropImage = (event: DragEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -275,19 +392,43 @@ export function TerminalWorkspace({
     if (!canSend || !canPrompt || isSending) return;
     const agentId = agent.id;
     const pending = draft;
-    updateDraft(agentId, { sendError: "" });
-    setSending((current) => ({ ...current, [agentId]: true }));
+    updateDraft(agentId, {
+      sendError: "",
+      sendOutcome: undefined,
+      sendStage: undefined,
+    });
+    onSendingChange(agentId, true);
     try {
-      await onMessage(pending.message, pending.attachment);
-      setDrafts((current) => ({ ...current, [agentId]: EMPTY_DRAFT }));
+      await onMessage(
+        pending.message,
+        pending.attachment,
+        pending.uploadedPath,
+      );
+      onClearDraft(agentId);
+      setSentAgentId(agentId);
+      window.setTimeout(
+        () => setSentAgentId((current) => (current === agentId ? "" : current)),
+        2_500,
+      );
     } catch (error) {
       onMessageFailure?.();
+      const mutationError =
+        error instanceof HerdrMutationError ? error : undefined;
       updateDraft(agentId, {
         sendError:
-          error instanceof Error ? error.message : "Message could not be sent.",
+          mutationError?.outcome === "unknown"
+            ? mutationError.stage === "upload"
+              ? "The image upload could not be confirmed, so the prompt was not sent. Retrying may store another copy."
+              : "Delivery could not be confirmed. Check the terminal before sending this prompt again."
+            : error instanceof Error
+              ? error.message
+              : "Message could not be sent.",
+        sendOutcome: mutationError?.outcome ?? "rejected",
+        sendStage: mutationError?.stage,
+        uploadedPath: mutationError?.uploadedPath ?? pending.uploadedPath,
       });
     } finally {
-      setSending((current) => ({ ...current, [agentId]: false }));
+      onSendingChange(agentId, false);
     }
   };
 
@@ -296,8 +437,26 @@ export function TerminalWorkspace({
     void sendDraft();
   };
 
+  const copyWorkingDirectory = async () => {
+    if (!currentWorkingDirectory) return;
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(currentWorkingDirectory);
+    } else {
+      const copyTarget = document.createElement("textarea");
+      copyTarget.value = currentWorkingDirectory;
+      copyTarget.style.position = "fixed";
+      copyTarget.style.opacity = "0";
+      document.body.append(copyTarget);
+      copyTarget.select();
+      document.execCommand("copy");
+      copyTarget.remove();
+    }
+    setCwdCopied(true);
+    window.setTimeout(() => setCwdCopied(false), 1_500);
+  };
+
   const confirmClose = async () => {
-    if (!closingPane || closing) return;
+    if (!actionsEnabled || !closingPane || closing) return;
     setClosing(true);
     setCloseError("");
     try {
@@ -305,7 +464,11 @@ export function TerminalWorkspace({
       setClosingPane(undefined);
     } catch (error) {
       setCloseError(
-        error instanceof Error ? error.message : "Could not close the pane.",
+        error instanceof HerdrMutationError && error.outcome === "unknown"
+          ? "The close result could not be confirmed. Refresh before trying again."
+          : error instanceof Error
+            ? error.message
+            : "Could not close the pane.",
       );
     } finally {
       setClosing(false);
@@ -315,28 +478,56 @@ export function TerminalWorkspace({
   return (
     <main className="main-workspace">
       <header className="workspace-header">
-        <div className="workspace-identity">
-          <div className="agent-title-line">
-            <h1>{agent.label}</h1>
-            <StatusPill status={agent.status} />
-          </div>
-          {agent.currentStep && agent.status !== "blocked" && (
-            <p>{agent.currentStep}</p>
+        <div className="workspace-metadata">
+          {currentWorkingDirectory && (
+            <span className="workspace-cwd-group">
+              <code className="workspace-cwd" title={currentWorkingDirectory}>
+                <span className="sr-only">
+                  Current working directory: {currentWorkingDirectory}
+                </span>
+                <span className="workspace-cwd-full" aria-hidden="true">
+                  {currentWorkingDirectory}
+                </span>
+                <span className="workspace-cwd-compact" aria-hidden="true">
+                  {compactPath(currentWorkingDirectory)}
+                </span>
+              </code>
+              <button
+                type="button"
+                className="workspace-copy-cwd"
+                aria-label={
+                  cwdCopied
+                    ? "Current working directory copied"
+                    : "Copy current working directory"
+                }
+                onClick={() => void copyWorkingDirectory()}
+              >
+                {cwdCopied ? <CheckIcon /> : <CopyIcon />}
+              </button>
+            </span>
+          )}
+          {workspace.branch && (
+            <code className="workspace-branch" title={workspace.branch}>
+              {workspace.branch}
+            </code>
           )}
         </div>
         <div className="workspace-actions">
-          <IconTooltip label="Split terminal">
+          {agent.panes.length >= 2 && (
+            <span className="workspace-action-note">2-pane web limit</span>
+          )}
+          <IconTooltip label="Split pane">
             <IconButton
               type="button"
               variant="soft"
               color="gray"
-              aria-label="Split terminal"
+              aria-label="Split pane"
               title={
                 agent.panes.length >= 2
                   ? "This session already has two panes."
                   : undefined
               }
-              disabled={agent.panes.length >= 2}
+              disabled={!actionsEnabled || agent.panes.length >= 2}
               onClick={() =>
                 void Promise.resolve(onSplitPane()).catch(() => undefined)
               }
@@ -345,21 +536,10 @@ export function TerminalWorkspace({
             </IconButton>
           </IconTooltip>
         </div>
-        {(workspace.branch || workspace.path) && (
-          <div className="workspace-metadata">
-            {workspace.branch && <code>{workspace.branch}</code>}
-            {workspace.path && (
-              <span title={workspace.path}>{workspace.path}</span>
-            )}
-          </div>
-        )}
       </header>
 
       {agent.status === "blocked" && (
-        <section
-          className="attention-banner"
-          aria-label="Agent needs attention"
-        >
+        <section className="attention-banner" aria-label="Agent needs input">
           <ExclamationTriangleIcon aria-hidden="true" />
           <div>
             <strong>Waiting for your direction</strong>
@@ -369,158 +549,230 @@ export function TerminalWorkspace({
       )}
 
       <section className="terminal-shell" aria-label={`${agent.label} session`}>
-        <div className="pane-grid" data-split={agent.panes.length > 1}>
-          {agent.panes.map((pane) => (
-            <TerminalPaneView
-              pane={pane}
-              key={pane.id}
-              agentLabel={agent.label}
-              focused={pane.id === agent.activePaneId}
-              canClose={agent.panes.length > 1}
-              onFocus={() => onSelectPane(pane.id)}
-              onClose={() => {
-                setCloseError("");
-                setClosingPane(pane);
-              }}
-            />
-          ))}
+        {agent.panes.length > 1 && (
+          <div
+            className="pane-switcher"
+            data-two={agent.panes.length === 2}
+            role="tablist"
+            aria-label="Session panes"
+          >
+            {agent.panes.map((pane) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={pane.id === agent.activePaneId}
+                tabIndex={pane.id === agent.activePaneId ? 0 : -1}
+                key={pane.id}
+                onClick={() => onSelectPane(pane.id)}
+                onKeyDown={movePaneTab}
+              >
+                <CodeIcon aria-hidden="true" /> {pane.title}
+              </button>
+            ))}
+          </div>
+        )}
+        <div
+          className="pane-grid"
+          data-split={agent.panes.length === 2}
+          data-many={agent.panes.length > 2}
+        >
+          {agent.panes
+            .filter(
+              (pane) =>
+                agent.panes.length <= 2 || pane.id === agent.activePaneId,
+            )
+            .map((pane) => (
+              <TerminalPaneView
+                pane={pane}
+                key={pane.id}
+                agentLabel={agent.label}
+                focused={pane.id === agent.activePaneId}
+                canClose={actionsEnabled && agent.panes.length > 1}
+                onFocus={() => onSelectPane(pane.id)}
+                onClose={() => {
+                  setCloseError("");
+                  setClosingPane(pane);
+                }}
+                onRetryOutput={() => void onRetryOutput()}
+              />
+            ))}
         </div>
 
-        <form
-          ref={composerForm}
-          className="message-composer"
-          aria-label="Message composer"
-          data-dragging={dragging}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            dragDepth.current += 1;
-            setDragging(true);
-          }}
-          onDragLeave={() => {
-            dragDepth.current = Math.max(0, dragDepth.current - 1);
-            if (dragDepth.current === 0) setDragging(false);
-          }}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={dropImage}
-          onSubmit={submitMessage}
-        >
-          {draft.attachment && (
-            <div className="composer-attachment">
-              {previewUrl ? (
-                <img src={previewUrl} alt="" />
-              ) : (
-                <span className="composer-attachment-icon" aria-hidden="true">
-                  <ImageIcon />
+        {canPrompt ? (
+          <form
+            ref={composerForm}
+            className="message-composer"
+            aria-label="Message composer"
+            data-dragging={dragging}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              dragDepth.current += 1;
+              setDragging(true);
+            }}
+            onDragLeave={() => {
+              dragDepth.current = Math.max(0, dragDepth.current - 1);
+              if (dragDepth.current === 0) setDragging(false);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={dropImage}
+            onSubmit={submitMessage}
+          >
+            {draft.attachment && (
+              <div className="composer-attachment">
+                {previewUrl ? (
+                  <img src={previewUrl} alt="" />
+                ) : (
+                  <span className="composer-attachment-icon" aria-hidden="true">
+                    <ImageIcon />
+                  </span>
+                )}
+                <span className="composer-attachment-copy">
+                  <strong>{draft.attachment.name}</strong>
+                  <small>
+                    {Math.max(1, Math.ceil(draft.attachment.size / 1024))} KB ·{" "}
+                    {draft.uploadedPath
+                      ? `stored at ${draft.uploadedPath}`
+                      : `will be stored under ${currentWorkingDirectory}/.herdr-web/uploads`}
+                  </small>
                 </span>
-              )}
-              <span className="composer-attachment-copy">
-                <strong>{draft.attachment.name}</strong>
-                <small>
-                  {Math.max(1, Math.ceil(draft.attachment.size / 1024))} KB
-                </small>
+                <button
+                  type="button"
+                  aria-label={`Remove ${draft.attachment.name}`}
+                  disabled={isSending}
+                  onClick={() =>
+                    updateDraft(agent.id, {
+                      attachment: undefined,
+                      attachmentError: "",
+                      uploadedPath: undefined,
+                    })
+                  }
+                >
+                  <Cross2Icon />
+                </button>
+              </div>
+            )}
+            {draft.attachmentError && (
+              <span className="composer-error" role="alert">
+                {draft.attachmentError}
               </span>
-              <button
-                type="button"
-                aria-label={`Remove ${draft.attachment.name}`}
-                disabled={isSending}
-                onClick={() => updateDraft(agent.id, { attachment: undefined })}
+            )}
+            {draft.sendError && (
+              <div
+                className="composer-send-error"
+                role="alert"
+                aria-label="Message failed"
               >
-                <Cross2Icon />
-              </button>
-            </div>
-          )}
-          {draft.attachmentError && (
-            <span className="composer-error" role="alert">
-              {draft.attachmentError}
-            </span>
-          )}
-          {draft.sendError && (
-            <div
-              className="composer-send-error"
-              role="alert"
-              aria-label="Message failed"
-            >
-              <span>{draft.sendError}</span>
-              <button
-                type="button"
-                aria-label="Retry message"
-                onClick={() => composerForm.current?.requestSubmit()}
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {isSending && (
-            <span className="composer-progress" role="status">
-              Sending message…
-            </span>
-          )}
-          <input
-            ref={imageInput}
-            className="composer-file-input"
-            type="file"
-            accept={SUPPORTED_IMAGE_TYPES.join(",")}
-            aria-label="Choose image"
-            disabled={!canPrompt || isSending}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.item(0);
-              if (file) queueImage(file);
-              event.currentTarget.value = "";
-            }}
-          />
-          <button
-            type="button"
-            className="composer-attach"
-            aria-label="Attach image"
-            disabled={!canPrompt || isSending}
-            title={
-              !canPrompt ? "Image prompts require a detected Agent." : undefined
-            }
-            onClick={() => imageInput.current?.click()}
-          >
-            <ImageIcon />
-          </button>
-          <textarea
-            rows={1}
-            value={draft.message}
-            aria-label={`Message ${agent.label}`}
-            placeholder={
-              canPrompt
-                ? agent.status === "blocked"
-                  ? "Type a decision or instruction…"
-                  : `Message ${agent.label}…`
-                : "This is a read-only terminal"
-            }
-            disabled={!canPrompt || isSending}
-            onChange={(event) =>
-              updateDraft(agent.id, {
-                message: event.target.value,
-                sendError: "",
-              })
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
+                <span>{draft.sendError}</span>
+                <button
+                  type="button"
+                  aria-label={
+                    draft.sendOutcome === "unknown" &&
+                    draft.sendStage !== "upload"
+                      ? "Send message again"
+                      : "Retry message"
+                  }
+                  onClick={() => composerForm.current?.requestSubmit()}
+                >
+                  {draft.sendOutcome === "unknown" &&
+                  draft.sendStage !== "upload"
+                    ? "Send again"
+                    : "Retry"}
+                </button>
+              </div>
+            )}
+            {isSending && (
+              <span className="composer-progress" role="status">
+                Sending message…
+              </span>
+            )}
+            {!isSending && sentAgentId === agent.id && (
+              <span className="composer-success" role="status">
+                Prompt sent. Waiting for terminal output…
+              </span>
+            )}
+            <input
+              ref={imageInput}
+              className="composer-file-input"
+              type="file"
+              accept={SUPPORTED_IMAGE_TYPES.join(",")}
+              aria-label="Choose image"
+              disabled={!actionsEnabled || isSending}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.item(0);
+                if (file) queueImage(file);
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="composer-attach"
+              aria-label="Attach image"
+              disabled={!actionsEnabled || isSending}
+              title={
+                !actionsEnabled ? "Reconnect to attach an image." : undefined
               }
-            }}
-          />
-          <Button
-            type="submit"
-            color="amber"
-            variant={canSend ? "solid" : "soft"}
-            aria-label="Send message"
-            disabled={!canPrompt || !canSend || isSending}
-          >
-            <PaperPlaneIcon />
-            <span>{isSending ? "Sending…" : "Send"}</span>
-          </Button>
-          {!canPrompt && (
-            <span className="composer-disabled-note">
+              onClick={() => imageInput.current?.click()}
+            >
+              <ImageIcon />
+            </button>
+            <textarea
+              ref={messageInput}
+              rows={1}
+              maxLength={MAX_PROMPT_CHARACTERS}
+              value={draft.message}
+              aria-label={`Message ${agent.label}`}
+              placeholder={
+                agent.status === "blocked"
+                  ? "Reply with a decision or instruction…"
+                  : `Message ${agent.label}…`
+              }
+              disabled={!actionsEnabled || isSending}
+              onChange={(event) =>
+                updateDraft(agent.id, {
+                  message: event.target.value,
+                  sendError: "",
+                  sendOutcome: undefined,
+                  sendStage: undefined,
+                })
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+            <Button
+              type="submit"
+              color="amber"
+              variant={canSend ? "solid" : "soft"}
+              aria-label="Send message"
+              disabled={!canSend || isSending}
+            >
+              <PaperPlaneIcon />
+              <span>{isSending ? "Sending…" : "Send"}</span>
+            </Button>
+            <div className="composer-hint">
+              <span>Enter to send · Shift+Enter for a new line</span>
+              <span>
+                {draft.message.length.toLocaleString()} /{" "}
+                {MAX_PROMPT_CHARACTERS.toLocaleString()}
+              </span>
+            </div>
+          </form>
+        ) : (
+          <div className="terminal-readonly" role="note">
+            <LockClosedIcon aria-hidden="true" />
+            <span>
+              <strong>Read-only terminal</strong>
               Prompts are available only for detected Agents.
             </span>
-          )}
-        </form>
+          </div>
+        )}
       </section>
 
       <RadixDialog
@@ -554,7 +806,7 @@ export function TerminalWorkspace({
             <Button
               type="button"
               color="red"
-              disabled={closing}
+              disabled={closing || !actionsEnabled}
               onClick={() => void confirmClose()}
             >
               {closing ? "Closing…" : "Confirm close pane"}

@@ -7,7 +7,7 @@ import {
 import type { AgentStatus } from "../state";
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
-  blocked: "Needs you",
+  blocked: "Needs input",
   done: "Done",
   idle: "Idle",
   unknown: "Terminal",

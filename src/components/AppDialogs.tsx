@@ -64,8 +64,26 @@ export function CommandPalette({
           ({ id }) => id === session.workspaceId,
         ),
       }));
-    return [...workspaces, ...sessions];
-  }, [normalizedQuery, state.agents, state.workspaces]);
+    const attention = sessions.filter(
+      ({ session }) => session.status === "blocked",
+    );
+    const current = sessions.filter(
+      ({ session }) =>
+        session.status !== "blocked" &&
+        session.workspaceId === state.selectedWorkspaceId,
+    );
+    const other = sessions.filter(
+      ({ session }) =>
+        session.status !== "blocked" &&
+        session.workspaceId !== state.selectedWorkspaceId,
+    );
+    return [...attention, ...current, ...workspaces, ...other];
+  }, [
+    normalizedQuery,
+    state.agents,
+    state.selectedWorkspaceId,
+    state.workspaces,
+  ]);
 
   useEffect(() => {
     if (!open) setQuery("");
@@ -87,9 +105,21 @@ export function CommandPalette({
     (result): result is Extract<CommandResult, { kind: "workspace" }> =>
       result.kind === "workspace",
   );
-  const sessionResults = results.filter(
+  const attentionResults = results.filter(
     (result): result is Extract<CommandResult, { kind: "session" }> =>
-      result.kind === "session",
+      result.kind === "session" && result.session.status === "blocked",
+  );
+  const currentSessionResults = results.filter(
+    (result): result is Extract<CommandResult, { kind: "session" }> =>
+      result.kind === "session" &&
+      result.session.status !== "blocked" &&
+      result.session.workspaceId === state.selectedWorkspaceId,
+  );
+  const otherSessionResults = results.filter(
+    (result): result is Extract<CommandResult, { kind: "session" }> =>
+      result.kind === "session" &&
+      result.session.status !== "blocked" &&
+      result.session.workspaceId !== state.selectedWorkspaceId,
   );
 
   const resultButton = (result: CommandResult) => {
@@ -100,6 +130,7 @@ export function CommandPalette({
           id={resultDomId(result)}
           type="button"
           role="option"
+          tabIndex={-1}
           aria-selected={index === activeIndex}
           className="command-result"
           key={`workspace-${result.id}`}
@@ -124,7 +155,11 @@ export function CommandPalette({
         id={resultDomId(result)}
         type="button"
         role="option"
+        tabIndex={-1}
         aria-selected={index === activeIndex}
+        aria-current={
+          result.session.id === state.selectedAgentId ? "page" : undefined
+        }
         className="command-result"
         key={`session-${result.id}`}
         onPointerMove={() => setActiveIndex(index)}
@@ -205,23 +240,35 @@ export function CommandPalette({
         role="listbox"
         aria-label="Search results"
       >
+        {attentionResults.length > 0 && (
+          <fieldset>
+            <legend>Needs input</legend>
+            {attentionResults.map(resultButton)}
+          </fieldset>
+        )}
+        {currentSessionResults.length > 0 && (
+          <fieldset>
+            <legend>Current workspace</legend>
+            {currentSessionResults.map(resultButton)}
+          </fieldset>
+        )}
         {workspaceResults.length > 0 && (
           <fieldset>
             <legend>Workspaces</legend>
             {workspaceResults.map(resultButton)}
           </fieldset>
         )}
-        {sessionResults.length > 0 && (
+        {otherSessionResults.length > 0 && (
           <fieldset>
-            <legend>Agents and terminals</legend>
-            {sessionResults.map(resultButton)}
+            <legend>Other sessions</legend>
+            {otherSessionResults.map(resultButton)}
           </fieldset>
         )}
         {results.length === 0 && (
           <div className="command-empty">
             <MagnifyingGlassIcon aria-hidden="true" />
-            <strong>No matching sessions</strong>
-            <span>Try a runtime, branch, workspace, or Agent name.</span>
+            <strong>No matching workspace or session</strong>
+            <span>Try a runtime, branch, path, workspace, or Agent name.</span>
           </div>
         )}
       </div>
@@ -249,7 +296,7 @@ interface NewSessionDialogProps {
     label: string;
     runtime: RuntimeName;
     command: string;
-  }) => void | Promise<void>;
+  }) => void;
 }
 
 const RUNTIME_COMMAND: Record<RuntimeName, string> = {
@@ -268,33 +315,20 @@ export function NewSessionDialog({
   const [label, setLabel] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
   const [runtime, setRuntime] = useState<RuntimeName>("Claude Code");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
   const command = RUNTIME_COMMAND[runtime];
 
   useEffect(() => {
     if (!open) {
       setLabel("");
       setRuntime("Claude Code");
-      setSubmitting(false);
-      setSubmitError("");
     }
   }, [open]);
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!label.trim() || submitting) return;
-    setSubmitting(true);
-    setSubmitError("");
-    try {
-      await onCreate({ label, runtime, command });
-      onOpenChange(false);
-    } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Could not start the Agent",
-      );
-      setSubmitting(false);
-    }
+    if (!label.trim()) return;
+    onCreate({ label: label.trim(), runtime, command });
+    onOpenChange(false);
   };
 
   return (
@@ -323,6 +357,7 @@ export function NewSessionDialog({
             ref={nameInput}
             id="session-name"
             value={label}
+            maxLength={80}
             placeholder="e.g. security-audit"
             onChange={(event) => setLabel(event.target.value)}
           >
@@ -331,26 +366,45 @@ export function NewSessionDialog({
             </TextField.Slot>
           </TextField.Root>
         </label>
-        <label className="form-field">
-          <span>Agent runtime</span>
-          <select
-            aria-label="Agent runtime"
-            value={runtime}
-            onChange={(event) => setRuntime(event.target.value as RuntimeName)}
-          >
-            {Object.keys(RUNTIME_COMMAND).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="command-preset">
+        <fieldset className="runtime-options">
+          <legend>Agent runtime</legend>
+          {Object.entries(RUNTIME_COMMAND).map(([name, preset]) => (
+            <label key={name} data-selected={runtime === name}>
+              <input
+                type="radio"
+                name="agent-runtime"
+                value={name}
+                checked={runtime === name}
+                onChange={() => setRuntime(name as RuntimeName)}
+              />
+              <span>
+                <strong>{name}</strong>
+                <code>{preset}</code>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <section className="launch-review" aria-label="Launch preview">
           <span>
-            <CodeIcon aria-hidden="true" /> Fixed launch command
+            <CodeIcon aria-hidden="true" /> Launch preview
           </span>
-          <code>{command}</code>
-        </div>
+          <dl>
+            <div className="launch-review-row">
+              <dt>Workspace</dt>
+              <dd>{workspace.name}</dd>
+            </div>
+            <div className="launch-review-row">
+              <dt>Directory</dt>
+              <dd title={workspace.path}>{workspace.path}</dd>
+            </div>
+            <div className="launch-review-row">
+              <dt>Command</dt>
+              <dd>
+                <code>{command}</code>
+              </dd>
+            </div>
+          </dl>
+        </section>
         <div className="session-note">
           <span className="session-note-dot" aria-hidden="true" />
           <span>
@@ -358,11 +412,6 @@ export function NewSessionDialog({
             The Agent keeps running when this browser disconnects.
           </span>
         </div>
-        {submitError && (
-          <span className="session-form-error" role="alert">
-            {submitError}
-          </span>
-        )}
         <div className="form-actions">
           <Button
             type="button"
@@ -372,12 +421,8 @@ export function NewSessionDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            color="amber"
-            disabled={!label.trim() || submitting}
-          >
-            <RocketIcon /> {submitting ? "Starting…" : "Start agent"}
+          <Button type="submit" color="amber" disabled={!label.trim()}>
+            <RocketIcon /> Start agent
           </Button>
         </div>
       </form>

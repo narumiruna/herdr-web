@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
 import { App } from "../src/App";
+import { createDemoState } from "../src/state";
 
 function renderApp() {
   const user = userEvent.setup();
@@ -16,6 +17,22 @@ function renderApp() {
 }
 
 describe("herdr terminal-first workbench", () => {
+  test("shows each workspace session in a keyboard-accessible tab bar", async () => {
+    const user = renderApp();
+    const tabList = screen.getByRole("tablist", { name: "herdr tabs" });
+
+    expect(within(tabList).getAllByRole("tab")).toHaveLength(3);
+    const selectedTab = within(tabList).getByRole("tab", {
+      name: /api-review/i,
+    });
+    expect(selectedTab).toHaveAttribute("aria-selected", "true");
+    selectedTab.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(
+      screen.getByRole("tab", { name: /web-bridge.*Working/i }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
   test("opens the most urgent agent when a workspace is selected", async () => {
     const user = renderApp();
 
@@ -23,15 +40,18 @@ describe("herdr terminal-first workbench", () => {
       screen.getByRole("button", { name: "Open herdr.dev workspace" }),
     );
 
-    const main = within(screen.getByRole("main"));
-    expect(main.getByRole("heading", { name: "agent-guide" })).toBeVisible();
-    expect(main.getByText("docs/agent-guide")).toBeVisible();
+    expect(
+      screen.getByRole("tab", { name: /agent-guide.*Idle/i }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(screen.getByRole("main")).getByText("docs/agent-guide"),
+    ).toBeVisible();
   });
 
-  test("puts blocked agents in a global needs-attention group", () => {
+  test("puts blocked agents in a global needs-input group", () => {
     renderApp();
 
-    const attention = screen.getByRole("region", { name: "Needs attention" });
+    const attention = screen.getByRole("region", { name: "Needs input" });
     expect(
       within(attention).getByRole("button", { name: /api-review/i }),
     ).toBeVisible();
@@ -48,7 +68,9 @@ describe("herdr terminal-first workbench", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     const main = within(screen.getByRole("main"));
-    expect(main.getByText("Working")).toBeVisible();
+    expect(
+      screen.getByRole("tab", { name: /api-review.*Working/i }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(
       main.getByText("› Keep numeric IDs for existing clients."),
     ).toBeVisible();
@@ -66,7 +88,7 @@ describe("herdr terminal-first workbench", () => {
       clipboardData: { files: [image], items: [] },
     });
 
-    await user.click(screen.getByRole("button", { name: /web-bridge/i }));
+    await user.click(screen.getByRole("tab", { name: /web-bridge/i }));
     const buildMessage = screen.getByRole("textbox", {
       name: "Message web-bridge",
     });
@@ -74,11 +96,44 @@ describe("herdr terminal-first workbench", () => {
     expect(screen.queryByText("review.png")).not.toBeInTheDocument();
     await user.type(buildMessage, "build draft");
 
-    await user.click(screen.getByRole("button", { name: /api-review/i }));
+    await user.click(screen.getByRole("tab", { name: /api-review/i }));
     expect(
       screen.getByRole("textbox", { name: "Message api-review" }),
     ).toHaveValue("review draft");
     expect(screen.getByText("review.png")).toBeVisible();
+  });
+
+  test("keeps drafts when navigation temporarily has no session to render", async () => {
+    const state = createDemoState();
+    state.workspaces.push({
+      accent: "blue",
+      ahead: 0,
+      behind: 0,
+      branch: "main",
+      id: "empty-workspace",
+      name: "empty-workspace",
+      path: "/repo/empty",
+    });
+    const user = userEvent.setup();
+    render(<App live={false} initialState={state} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "Message api-review" }),
+      "preserve me",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Open empty-workspace workspace" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Start your first Agent" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Open herdr workspace" }),
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Message api-review" }),
+    ).toHaveValue("preserve me");
   });
 
   test("queues pasted and dropped images without hiding the composer", async () => {
@@ -112,8 +167,10 @@ describe("herdr terminal-first workbench", () => {
     await user.type(search, "plugin");
     await user.keyboard("{ArrowDown}{ArrowUp}{Enter}");
 
-    const main = within(screen.getByRole("main"));
-    expect(main.getByRole("heading", { name: "plugin-index" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: /plugin-index/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   test("restores focus after closing the command palette", async () => {
@@ -133,32 +190,53 @@ describe("herdr terminal-first workbench", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  test("cancels Agent setup without side effects and restores focus", async () => {
+    const user = renderApp();
+    const trigger = screen.getByRole("button", { name: "New agent" });
+    await user.click(trigger);
+    await user.type(screen.getByLabelText("Agent name"), "do-not-start");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      screen.queryByRole("tab", { name: /do-not-start/i }),
+    ).not.toBeInTheDocument();
+  });
+
   test("creates a new agent with a fixed command preset", async () => {
     const user = renderApp();
 
     await user.click(screen.getByRole("button", { name: "New agent" }));
     expect(screen.getByLabelText("Agent name")).toHaveFocus();
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
     await user.type(screen.getByLabelText("Agent name"), "security-audit");
-    await user.selectOptions(screen.getByLabelText("Agent runtime"), "Codex");
-    expect(screen.getByText("codex --full-auto")).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: /Codex/i }));
+    expect(
+      within(screen.getByRole("region", { name: "Launch preview" })).getByText(
+        "codex --full-auto",
+      ),
+    ).toBeVisible();
     expect(screen.queryByLabelText("Command")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start agent" }));
 
     expect(
-      within(screen.getByRole("main")).getByRole("heading", {
-        name: "security-audit",
-      }),
-    ).toBeVisible();
+      screen.queryByRole("dialog", { name: "Start a new Agent" }),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText("security-audit is ready.")).toBeVisible();
+    expect(
+      screen.getByRole("tab", { name: /security-audit.*Working/i }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Codex connected to herdr")).toBeVisible();
   });
 
   test("cancels and confirms pane closure without hidden side effects", async () => {
     const user = renderApp();
 
-    await user.click(screen.getByRole("button", { name: "Split terminal" }));
-    expect(
-      screen.getByRole("button", { name: "Split terminal" }),
-    ).toHaveAttribute("title", "This session already has two panes.");
+    await user.click(screen.getByRole("button", { name: "Split pane" }));
+    expect(screen.getByRole("button", { name: "Split pane" })).toHaveAttribute(
+      "title",
+      "This session already has two panes.",
+    );
     expect(
       screen.getByRole("region", { name: "shell terminal" }),
     ).toBeVisible();

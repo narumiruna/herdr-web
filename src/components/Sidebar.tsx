@@ -1,14 +1,11 @@
 import {
   ChevronRightIcon,
   Component1Icon,
-  DesktopIcon,
   ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import * as Separator from "@radix-ui/react-separator";
-import { type Agent, agentsForWorkspace, type HerdrState } from "../state";
+import type { HerdrState } from "../state";
 import { HerdrLogo } from "./HerdrLogo";
-import { StatusPill } from "./StatusPill";
 
 interface SidebarProps {
   state: HerdrState;
@@ -17,50 +14,12 @@ interface SidebarProps {
   onDismiss?: () => void;
 }
 
-function SessionButton({
-  session,
-  selected,
-  onSelect,
-}: {
-  session: Agent;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const isTerminal = session.kind === "terminal";
-  return (
-    <button
-      type="button"
-      className="session-item"
-      data-active={selected}
-      aria-pressed={selected}
-      aria-label={`Open ${session.label} ${isTerminal ? "terminal" : "agent"}`}
-      onClick={onSelect}
-    >
-      <span className="session-kind-icon" aria-hidden="true">
-        {isTerminal ? (
-          <DesktopIcon />
-        ) : (
-          <StatusPill status={session.status} compact />
-        )}
-      </span>
-      <span className="session-copy">
-        <strong>{session.label}</strong>
-      </span>
-    </button>
-  );
-}
-
 export function Sidebar({
   state,
   onSelectWorkspace,
   onSelectAgent,
   onDismiss,
 }: SidebarProps) {
-  const sessions = agentsForWorkspace(state, state.selectedWorkspaceId);
-  const visibleAgents = sessions.filter(
-    ({ kind, status }) => kind === "agent" && status !== "blocked",
-  );
-  const terminals = sessions.filter(({ kind }) => kind === "terminal");
   const attention = state.agents.filter(
     ({ kind, status }) => kind === "agent" && status === "blocked",
   );
@@ -85,10 +44,10 @@ export function Sidebar({
             {attention.length > 0 && (
               <section
                 className="nav-section attention-section"
-                aria-label="Needs attention"
+                aria-label="Needs input"
               >
                 <div className="section-label-row attention-label">
-                  <h2>Needs attention</h2>
+                  <h2>Needs input</h2>
                   <span>{attention.length}</span>
                 </div>
                 <div className="attention-list">
@@ -97,14 +56,18 @@ export function Sidebar({
                       type="button"
                       className="attention-item"
                       data-active={agent.id === state.selectedAgentId}
-                      aria-label={`Open ${agent.label} agent needing attention`}
+                      aria-label={`Open ${agent.label} Agent needing input`}
                       key={agent.id}
                       onClick={() => selectAgent(agent.id)}
                     >
                       <ExclamationTriangleIcon aria-hidden="true" />
                       <span>
                         <strong>{agent.label}</strong>
-                        <small>{agent.currentStep}</small>
+                        <small>
+                          {state.workspaces.find(
+                            ({ id }) => id === agent.workspaceId,
+                          )?.name ?? "Unknown workspace"}
+                        </small>
                       </span>
                       <ChevronRightIcon aria-hidden="true" />
                     </button>
@@ -141,6 +104,19 @@ export function Sidebar({
                       </span>
                       <span className="workspace-copy">
                         <strong>{workspace.name}</strong>
+                        {attention.some(
+                          ({ workspaceId }) => workspaceId === workspace.id,
+                        ) && (
+                          <small>
+                            {
+                              attention.filter(
+                                ({ workspaceId }) =>
+                                  workspaceId === workspace.id,
+                              ).length
+                            }{" "}
+                            needs input
+                          </small>
+                        )}
                       </span>
                       <ChevronRightIcon
                         className="workspace-chevron"
@@ -151,51 +127,6 @@ export function Sidebar({
                 })}
               </div>
             </section>
-
-            {(visibleAgents.length > 0 || terminals.length > 0) && (
-              <Separator.Root className="sidebar-separator" decorative />
-            )}
-
-            {visibleAgents.length > 0 && (
-              <section className="nav-section" aria-labelledby="agents-heading">
-                <div className="section-label-row">
-                  <h2 id="agents-heading">Agents</h2>
-                  <span>{visibleAgents.length}</span>
-                </div>
-                <div className="session-list">
-                  {visibleAgents.map((agent) => (
-                    <SessionButton
-                      key={agent.id}
-                      session={agent}
-                      selected={agent.id === state.selectedAgentId}
-                      onSelect={() => selectAgent(agent.id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {terminals.length > 0 && (
-              <section
-                className="nav-section"
-                aria-labelledby="terminals-heading"
-              >
-                <div className="section-label-row">
-                  <h2 id="terminals-heading">Terminals</h2>
-                  <span>{terminals.length}</span>
-                </div>
-                <div className="session-list">
-                  {terminals.map((terminal) => (
-                    <SessionButton
-                      key={terminal.id}
-                      session={terminal}
-                      selected={terminal.id === state.selectedAgentId}
-                      onSelect={() => selectAgent(terminal.id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
           </nav>
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">

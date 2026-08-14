@@ -16,6 +16,7 @@ import "@radix-ui/colors/red-dark.css";
 import "@radix-ui/colors/sand.css";
 import "@radix-ui/colors/sand-dark.css";
 import "./styles.css";
+import "./styles-tabs.css";
 import "./styles-workbench.css";
 import "./styles-overlays.css";
 import { StrictMode } from "react";

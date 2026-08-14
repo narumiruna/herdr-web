@@ -31,6 +31,48 @@ describe("LiveHerdrService", () => {
     });
   });
 
+  test("reports partial pane read failures without discarding the snapshot", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        snapshot: {
+          panes: [{ pane_id: "w5:p1" }, { pane_id: "w5:p2" }],
+        },
+        type: "session_snapshot",
+      })
+      .mockResolvedValueOnce({
+        read: { pane_id: "w5:p1", revision: 1, text: "hi" },
+        type: "pane_read",
+      })
+      .mockRejectedValueOnce(new Error("socket read failed"));
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await expect(service.getState()).resolves.toMatchObject({
+      readErrors: { "w5:p2": "socket read failed" },
+      reads: { "w5:p1": { text: "hi" } },
+      snapshot: { panes: [{ pane_id: "w5:p1" }, { pane_id: "w5:p2" }] },
+    });
+  });
+
+  test("marks panes beyond the bounded read limit as partial output", async () => {
+    const panes = Array.from({ length: 65 }, (_, index) => ({
+      pane_id: `w5:p${index + 1}`,
+    }));
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ snapshot: { panes }, type: "session_snapshot" })
+      .mockResolvedValue({
+        read: { pane_id: "read", revision: 1, text: "output" },
+        type: "pane_read",
+      });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    const result = await service.getState();
+
+    expect(request).toHaveBeenCalledTimes(65);
+    expect(result.readErrors["w5:p65"]).toContain("more than 64 panes");
+  });
+
   test("stores a verified image under the target pane working directory", async () => {
     const directory = await mkdtemp(join(tmpdir(), "herdr-image-upload-"));
     const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);

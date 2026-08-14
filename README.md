@@ -2,23 +2,23 @@
 
 A responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
 
-The Terminal-first Workbench keeps herdr's core job visible: find the Agent that needs attention, inspect its live terminal, and send a real prompt without hunting through sessions.
+The Terminal-first Workbench keeps herdr's core job visible: find the Agent that needs input, inspect its live terminal, and send a real prompt without hunting through sessions.
 
 ## Features
 
 - Terminal-dominant desktop, tablet, and mobile layouts with one persistent navigation rail on wide screens.
-- Detected Agents separated from standalone Terminals so shell panes never inflate the Agent count.
-- A global Needs attention queue before workspace navigation.
+- A workspace tab bar that preserves Herdr tab order across detected Agents and standalone Terminals.
+- A global Needs input queue before workspace navigation, with per-workspace counts.
 - Live workspace, tab, pane, terminal-output, and Agent-state snapshots from herdr 0.8.
 - Real prompts submitted through herdr's `agent.prompt` API, with responses shown in the terminal.
-- Per-Agent in-memory text and image drafts that survive navigation and failed sends.
+- Per-Agent in-memory text and image drafts that survive empty workspaces, navigation, and failed sends.
 - Remote image paste, drag/drop, and file selection with host-readable Agent attachment paths.
 - Real pane splitting and confirmed pane closing.
 - New Claude Code, Codex, Pi, and OpenCode Agents with visible, fixed approved commands.
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
-- Last-valid-snapshot recovery during transient bridge disconnections.
-- Unified light and dark appearances across navigation, terminal output, composer, and dialogs.
+- Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
+- Unified light and dark appearances that follow the initial system preference and persist the user's choice.
 - JetBrains Mono terminal text with bundled Nerd Font symbols and no client-side font install.
 - Bearer-token protection for every terminal-control API request.
 
@@ -29,7 +29,7 @@ The front end intentionally uses every requested Radix family.
 - **Colors:** semantic Sand, Amber, Blue, Grass, and Red scales from `@radix-ui/colors`.
 - **Icons:** interface symbols from `@radix-ui/react-icons`.
 - **Themes:** buttons, badges, fields, icon buttons, and the appearance provider from `@radix-ui/themes`.
-- **Primitives:** Dialog, Scroll Area, Separator, and Tooltip primitives.
+- **Primitives:** Dialog, Scroll Area, Tabs, and Tooltip primitives.
 
 ## Requirements
 
@@ -101,23 +101,41 @@ Vite prints the network URL, and the page asks for the token when it is not incl
 
 ## Workbench workflow
 
-Needs attention lists blocked Agents across every workspace.
+Needs input lists blocked Agents across every workspace and identifies each Agent's workspace.
 
-Workspaces then group detected Agents separately from standalone Terminals.
+The sidebar switches workspaces, while the tab bar shows each Agent or standalone Terminal in Herdr tab order.
 
-The focused terminal owns the remaining screen, with pane actions in its header and the Agent composer fixed below the output.
+Returning to a workspace restores its last selected tab, while choosing a Needs input item opens that exact Agent.
 
-Use **New agent** to inspect and launch one of the approved runtime presets.
+Split panes stay inside their parent tab, appear side by side on wide screens, and use a readable pane selector on narrow screens.
+
+Each Agent tab keeps its status visible, while a compact context row preserves the current working directory and branch.
+
+The focused terminal owns the remaining screen, with keyboard-selectable pane headers, pane actions, and the Agent composer fixed below the output.
+
+Standalone Terminals use a compact read-only bar instead of disabled prompt controls.
+
+The Agent composer grows with multi-line prompts, protects IME input, shows the 20,000-character limit, and distinguishes rejected requests from unknown delivery.
+
+Use **New agent** to review and launch one of the four approved runtime presets.
+
+Agent launch continues as a visible background action so closing its setup dialog never pretends to cancel server work.
 
 Use the details button for real workspace, runtime, connection, and focused-pane information.
 
 Closing a split pane requires confirmation, while cancelling leaves the pane unchanged.
 
-Text and image drafts are kept separately per Agent during in-app navigation and clear only after a successful send.
+Text and image drafts are kept separately per Agent during in-app navigation and clear only after Herdr accepts the prompt.
+
+If delivery cannot be confirmed, inspect the terminal before choosing **Send again** because the original prompt may already have arrived.
 
 Drafts remain intentionally in memory and do not survive a page reload.
 
-If polling temporarily fails after a successful connection, the workbench keeps the last valid terminal snapshot visible and offers **Retry now**.
+If polling temporarily fails after a successful connection, the workbench keeps the last valid terminal snapshot visible, shows its age, disables mutations, and offers **Retry now**.
+
+If an individual pane read fails, other panes remain usable and the failed pane offers **Retry output**.
+
+On mobile, workspace creation, session details, and appearance live in **More actions** so navigation, search, and terminal work remain reachable at 320px.
 
 ## Send remote images
 
@@ -126,6 +144,8 @@ Press `Ctrl+V` on Windows or Linux, or `Cmd+V` on macOS, anywhere in the workben
 You can also drop an image onto the composer or use the image button.
 
 The composer accepts one PNG, JPEG, GIF, or WebP file up to 8 MiB and can send it without additional text.
+
+A staged attachment shows its destination under the active pane's `.herdr-web/uploads/` directory and must be removed before selecting a replacement.
 
 The bridge verifies the declared type against the file signature, writes a random file under the active pane's `.herdr-web/uploads/` directory, and sends its absolute path to the Agent.
 
@@ -215,7 +235,7 @@ npx playwright install chromium
 
 `src/live-state.ts` maps protocol-19 snapshots into the workbench model in `src/state.ts`, grouping split panes under their detected Agent while retaining shell-only tabs as standalone Terminals.
 
-`src/use-herdr-runtime.ts` polls every 1.5 seconds, refreshes after mutations, and preserves the last valid snapshot during transient failures.
+`src/use-herdr-runtime.ts` polls every 1.5 seconds, separates rejected mutations from unknown outcomes, refreshes after accepted actions, and preserves the last valid snapshot during transient failures.
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 

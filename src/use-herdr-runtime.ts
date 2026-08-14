@@ -9,6 +9,7 @@ import {
 import {
   browserAccessToken,
   HerdrApiClient,
+  HerdrBridgeError,
   type NewLiveSession,
   rememberAccessToken,
 } from "./herdr-api";
@@ -23,6 +24,30 @@ import {
 export type ConnectionStatus = "auth" | "error" | "loading" | "ready";
 
 export type RuntimeConnection = "connected" | "reconnecting";
+export type MutationOutcome = "rejected" | "unknown";
+
+export class HerdrMutationError extends Error {
+  readonly outcome: MutationOutcome;
+  readonly stage: "action" | "prompt" | "upload";
+  readonly uploadedPath?: string;
+
+  constructor(
+    message: string,
+    outcome: MutationOutcome,
+    uploadedPath?: string,
+    stage: "action" | "prompt" | "upload" = "action",
+  ) {
+    super(message);
+    this.name = "HerdrMutationError";
+    this.outcome = outcome;
+    this.stage = stage;
+    this.uploadedPath = uploadedPath;
+  }
+}
+
+interface PromptResult {
+  uploadedPath?: string;
+}
 
 interface HerdrRuntime {
   actionError: string;
@@ -32,11 +57,14 @@ interface HerdrRuntime {
   createSession: (input: NewLiveSession) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
+  lastUpdatedAt: number;
   promptAgent: (
     agentId: string,
     message: string,
     image?: File,
-  ) => Promise<void>;
+    uploadedPath?: string,
+    uploadPaneId?: string,
+  ) => Promise<PromptResult>;
   refresh: () => Promise<void>;
   setAccessToken: (token: string) => void;
   splitPane: (agentId: string, paneId: string) => Promise<void>;
@@ -49,8 +77,15 @@ export function promptWithImage(message: string, path: string): string {
   return `${instruction}\n\nAttached image: \`${path.replaceAll("`", "\\`")}\``;
 }
 
-export function useHerdrRuntime(live: boolean): HerdrRuntime {
-  const [state, dispatch] = useReducer(appReducer, undefined, createDemoState);
+export function useHerdrRuntime(
+  live: boolean,
+  initialState?: HerdrState,
+): HerdrRuntime {
+  const [state, dispatch] = useReducer(
+    appReducer,
+    initialState,
+    (provided) => provided ?? createDemoState(),
+  );
   const [token, setToken] = useState(() => (live ? browserAccessToken() : ""));
   const [status, setStatus] = useState<ConnectionStatus>(
     live ? (token ? "loading" : "auth") : "ready",
@@ -58,6 +93,7 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [connection, setConnection] = useState<RuntimeConnection>("connected");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
   const hasSnapshot = useRef(!live);
   const client = useMemo(
     () => (token ? new HerdrApiClient(token) : null),
@@ -72,6 +108,7 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
       hasSnapshot.current = true;
       setConnection("connected");
       setError("");
+      setLastUpdatedAt(Date.now());
       setStatus("ready");
     } catch (requestError) {
       const message =
@@ -115,19 +152,34 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
   }, [client, live, refresh]);
 
   const mutate = useCallback(
-    async (action: (api: HerdrApiClient) => Promise<unknown>) => {
-      if (!live || !client) return;
+    async <T>(
+      action: (api: HerdrApiClient) => Promise<T>,
+      uploadedPath?: () => string | undefined,
+      stage?: () => "action" | "prompt" | "upload",
+    ): Promise<T | undefined> => {
+      if (!live || !client) return undefined;
       setActionError("");
       try {
-        await action(client);
+        const result = await action(client);
         await refresh();
+        return result;
       } catch (requestError) {
         const message =
           requestError instanceof Error
             ? requestError.message
             : "Herdr action failed";
-        setActionError(message);
-        throw requestError;
+        const error = new HerdrMutationError(
+          message,
+          requestError instanceof HerdrBridgeError ? "rejected" : "unknown",
+          uploadedPath?.(),
+          stage?.(),
+        );
+        setActionError(
+          error.outcome === "unknown"
+            ? "The result could not be confirmed. Check Herdr before trying again."
+            : error.message,
+        );
+        throw error;
       }
     },
     [client, live, refresh],
@@ -157,24 +209,42 @@ export function useHerdrRuntime(live: boolean): HerdrRuntime {
     },
     dispatch,
     error,
-    promptAgent: async (agentId, message, image) => {
+    lastUpdatedAt,
+    promptAgent: async (
+      agentId,
+      message,
+      image,
+      existingUploadedPath,
+      uploadPaneId,
+    ) => {
       if (!live) {
         dispatch({
           type: "agent.replied",
           agentId,
           message: image ? promptWithImage(message, image.name) : message,
         });
-        return;
+        return {};
       }
-      await mutate(async (api) => {
-        const prompt = image
-          ? promptWithImage(
-              message,
-              (await api.uploadImage(agentId, image)).path,
-            )
-          : message;
-        return api.promptAgent(agentId, prompt);
-      });
+      let uploadedPath = existingUploadedPath;
+      let stage: "prompt" | "upload" =
+        image && !uploadedPath ? "upload" : "prompt";
+      await mutate(
+        async (api) => {
+          if (image && !uploadedPath) {
+            uploadedPath = (
+              await api.uploadImage(uploadPaneId ?? agentId, image)
+            ).path;
+            stage = "prompt";
+          }
+          const prompt = uploadedPath
+            ? promptWithImage(message, uploadedPath)
+            : message;
+          return api.promptAgent(agentId, prompt);
+        },
+        () => uploadedPath,
+        () => stage,
+      );
+      return { uploadedPath };
     },
     refresh,
     setAccessToken: (value) => {

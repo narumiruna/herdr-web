@@ -14,3 +14,8 @@
 - Keep imports static and top-level; never use inline or dynamic imports.
 - Keep the workbench terminal-first; use one compact navigation rail and disclose runtime details on demand.
 - Keep navigation, terminal output, composer, and dialogs in the same light or dark appearance.
+- Show Herdr tabs and Agent status in a tab bar; keep the sidebar focused on workspaces and cross-workspace attention.
+- Prefer the current working directory over a duplicated large session title.
+- Use amber for Needs input, blue for Working, green for Done, and reserve red for failures and destructive actions.
+- Preserve Agent drafts across all in-app navigation and never present an unknown mutation result as a safe automatic retry.
+- Keep mobile supervision focused on navigation, search, and the terminal; move lower-frequency actions into one shallow action sheet.

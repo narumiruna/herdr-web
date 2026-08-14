@@ -12,14 +12,24 @@ test("desktop workbench gives the terminal priority", async ({
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "api-review" })).toBeVisible();
+  await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "Needs attention", exact: true }),
+    page.getByRole("region", { name: "Needs input", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Activity" })).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "claude · API review terminal" }),
   ).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "herdr tabs" })).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(3);
+  await expect(page.getByRole("tab", { selected: true })).toContainText(
+    "Needs input",
+  );
+  await expect(page.locator(".workspace-cwd")).toContainText(
+    "~/Projects/herdr",
+  );
+  await expect(page.getByRole("heading", { name: "Agents" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Terminals" })).toHaveCount(0);
   expect(await hasNoPageOverflow(page)).toBe(true);
 
   const lightMetrics = await page.evaluate(() => {
@@ -70,10 +80,53 @@ test("desktop workbench gives the terminal priority", async ({
   );
   expect(lightMetrics.sidebarBrightness).toBeGreaterThan(180);
   expect(lightMetrics.terminalBrightness).toBeGreaterThan(180);
-  expect(lightMetrics.terminalTop).toBeLessThanOrEqual(200);
+  expect(lightMetrics.terminalTop).toBeLessThanOrEqual(225);
   expect(lightMetrics.topbarBrightness).toBeGreaterThan(180);
   expect(lightMetrics.topbarHeight).toBeLessThanOrEqual(56);
   expect(lightMetrics.workspaceHeaderHeight).toBeLessThanOrEqual(60);
+  const contrastRatios = await page.evaluate(() => {
+    const rgb = (value: string) =>
+      (value
+        .match(/[\d.]+/g)
+        ?.slice(0, 3)
+        .map(Number) ?? [0, 0, 0]) as [number, number, number];
+    const luminance = (value: string) => {
+      const channels = rgb(value).map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+      });
+      return (
+        0.2126 * (channels[0] ?? 0) +
+        0.7152 * (channels[1] ?? 0) +
+        0.0722 * (channels[2] ?? 0)
+      );
+    };
+    const ratio = (foreground: string, background: string) => {
+      const values = [luminance(foreground), luminance(background)].sort(
+        (left, right) => right - left,
+      );
+      return ((values[0] ?? 0) + 0.05) / ((values[1] ?? 0) + 0.05);
+    };
+    const pair = (foregroundSelector: string, backgroundSelector: string) =>
+      ratio(
+        getComputedStyle(document.querySelector(foregroundSelector) as Element)
+          .color,
+        getComputedStyle(document.querySelector(backgroundSelector) as Element)
+          .backgroundColor,
+      );
+    return {
+      blockedStatus: pair(".status-blocked", ".status-blocked"),
+      composerHint: pair(".composer-hint", ".message-composer"),
+      needsInput: pair(".attention-banner", ".attention-banner"),
+      workingStatus: pair(".status-working", ".status-working"),
+      workspacePath: pair(".workspace-cwd", "body"),
+    };
+  });
+  for (const ratio of Object.values(contrastRatios)) {
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  }
   await expect(page.getByText("agent runtime", { exact: true })).toHaveCount(0);
   await expect(page.getByText("herdr on GitHub", { exact: true })).toHaveCount(
     0,
@@ -115,6 +168,8 @@ test("desktop workbench gives the terminal priority", async ({
     path: testInfo.outputPath("herdr-terminal-first-dark.png"),
     fullPage: true,
   });
+  await page.reload();
+  await expect(page.locator(".herdr-theme")).toHaveClass(/dark/);
   await page.getByRole("button", { name: "Open details" }).click();
   await expect(
     page.getByRole("dialog", { name: "Session details" }),
@@ -167,7 +222,7 @@ test("command palette works with a keyboard only", async ({ page }) => {
   await page.keyboard.press("Enter");
 
   await expect(
-    page.getByRole("heading", { name: "plugin-index" }),
+    page.getByRole("tab", { name: /plugin-index/i, selected: true }),
   ).toBeVisible();
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
@@ -201,13 +256,18 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await expect(
     page.getByRole("button", { name: "Open navigation" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "api-review" })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: /api-review/i, selected: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "claude · API review terminal" }),
   ).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Message api-review" }),
   ).toBeVisible();
+  await expect(page.locator(".workspace-cwd-compact")).toHaveText(
+    "…/Projects/herdr",
+  );
   expect(await hasNoPageOverflow(page)).toBe(true);
 
   const metrics = await page.evaluate(() => ({
@@ -229,9 +289,8 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   expect(metrics.navTarget).toBeGreaterThanOrEqual(44);
   for (const target of [
     page.getByRole("button", { name: "Open navigation" }),
-    page.getByRole("button", { name: "New agent" }),
     page.getByRole("button", { name: "Open command palette" }),
-    page.getByRole("button", { name: "Open details" }),
+    page.getByRole("button", { name: "Open more actions" }),
     page.getByRole("button", { name: "Attach image" }),
     page.getByRole("button", { name: "Send message" }),
   ]) {
@@ -245,6 +304,23 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
     fullPage: true,
   });
 
+  await page.getByRole("button", { name: "Open more actions" }).click();
+  const actions = page.getByRole("dialog", { name: "More actions" });
+  await expect(actions).toBeVisible();
+  for (const target of [
+    actions.getByRole("button", { name: /Start Agent/i }),
+    actions.getByRole("button", { name: /Session details/i }),
+    actions.getByRole("button", { name: /appearance/i }),
+  ]) {
+    expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
+      44,
+    );
+  }
+  await actions.getByRole("button", { name: "Close dialog" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open more actions" }),
+  ).toBeFocused();
+
   await page.getByRole("button", { name: "Open navigation" }).click();
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
   await expect(navigation).toBeVisible();
@@ -252,7 +328,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
     .getByRole("button", { name: "Open herdr.dev workspace" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "agent-guide" }),
+    page.getByRole("tab", { name: /agent-guide/i, selected: true }),
   ).toBeVisible();
 
   const composer = page.getByRole("textbox", { name: "Message agent-guide" });
@@ -272,18 +348,58 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
 test("supported width extremes avoid horizontal overflow", async ({ page }) => {
   for (const viewport of [
     { width: 320, height: 700 },
+    { width: 640, height: 700 },
     { width: 2560, height: 1440 },
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "api-review" }),
+      page.getByRole("tab", { name: /api-review/i, selected: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("textbox", { name: "Message api-review" }),
     ).toBeVisible();
     expect(await hasNoPageOverflow(page)).toBe(true);
   }
+});
+
+test("mobile split panes stay readable through a pane selector", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Split pane" }).click();
+
+  const paneTabs = page.getByRole("tablist", { name: "Session panes" });
+  await expect(paneTabs.getByRole("tab")).toHaveCount(2);
+  await expect(page.locator(".terminal-pane:visible")).toHaveCount(1);
+  await paneTabs.getByRole("tab").first().click();
+  await expect(paneTabs.getByRole("tab").first()).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("multi-line prompts grow without covering the terminal", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/");
+  const textbox = page.getByRole("textbox", { name: "Message api-review" });
+  const initialHeight = (await textbox.boundingBox())?.height ?? 0;
+
+  await textbox.fill("line one\nline two\nline three\nline four");
+
+  expect((await textbox.boundingBox())?.height ?? 0).toBeGreaterThan(
+    initialHeight,
+  );
+  expect(
+    await page
+      .locator(".message-composer")
+      .evaluate(
+        (element) => element.getBoundingClientRect().bottom <= innerHeight,
+      ),
+  ).toBe(true);
 });
 
 test("mobile composer stages and sends an image attachment", async ({

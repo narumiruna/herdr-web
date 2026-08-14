@@ -79,7 +79,11 @@ export function ConnectionScreen({
                 Connect
               </Button>
             </form>
-            {error && <span className="connection-error">{error}</span>}
+            {error && (
+              <span className="connection-error" role="alert">
+                {error}
+              </span>
+            )}
           </>
         ) : (
           <>
