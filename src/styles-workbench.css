@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("/fonts/symbols-nerd-font-mono.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
 /* The terminal is the product's primary surface. */
 .terminal-shell {
   display: flex;
@@ -45,7 +53,7 @@
   border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-panel);
   color: var(--terminal-muted);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
   font-size: 8.5px;
 }
 .pane-title {
@@ -88,7 +96,7 @@
   min-height: 100%;
   padding: 16px 18px 28px;
   color: var(--terminal-text);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
   font-size: clamp(11px, 0.78vw, 12.5px);
   line-height: 1.58;
   white-space: pre-wrap;
@@ -229,7 +237,7 @@
 .composer-error,
 .composer-progress,
 .composer-disabled-note {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
 }
 .composer-attachment-copy strong {
   overflow: hidden;
@@ -281,7 +289,7 @@
   outline: 0;
   background: transparent;
   color: var(--terminal-text);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
   font-size: 11px;
   line-height: 24px;
 }

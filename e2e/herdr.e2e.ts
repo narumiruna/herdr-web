@@ -120,6 +120,31 @@ test("desktop workbench gives the terminal priority", async ({
   ).toBeVisible();
 });
 
+test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const fontFamily = await page
+    .locator(".terminal-lines")
+    .evaluate((element) => getComputedStyle(element).fontFamily);
+
+  expect(fontFamily).toContain("JetBrains Mono");
+  expect(fontFamily).toContain("Symbols Nerd Font Mono");
+  await page.locator(".terminal-lines").evaluate((terminal) => {
+    const symbol = document.createElement("span");
+    symbol.textContent = " 󰊢 ";
+    terminal.append(symbol);
+  });
+  await page.evaluate(() => document.fonts.ready);
+  const loadedFonts = await page.evaluate(() =>
+    Array.from(document.fonts)
+      .filter((font) => font.status === "loaded")
+      .map((font) => font.family),
+  );
+  expect(loadedFonts).toContain("JetBrains Mono");
+  expect(loadedFonts).toContain("Symbols Nerd Font Mono");
+});
+
 test("command palette works with a keyboard only", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");

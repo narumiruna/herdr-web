@@ -2,6 +2,8 @@ import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/600.css";
 import "@radix-ui/themes/styles.css";
 import "@radix-ui/colors/amber.css";
 import "@radix-ui/colors/amber-dark.css";

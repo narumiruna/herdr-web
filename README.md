@@ -19,6 +19,7 @@ The Terminal-first Workbench keeps herdr's core job visible: find the Agent that
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery during transient bridge disconnections.
 - Unified light and dark appearances across navigation, terminal output, composer, and dialogs.
+- JetBrains Mono terminal text with bundled Nerd Font symbols and no client-side font install.
 - Bearer-token protection for every terminal-control API request.
 
 ## Radix UI
