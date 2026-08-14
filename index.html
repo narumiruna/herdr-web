@@ -6,7 +6,19 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <meta name="theme-color" content="#f6f3ed" />
+    <meta name="theme-color" content="#11110f" />
+    <script>
+      try {
+        const appearance =
+          localStorage.getItem("hedr-appearance") === "light" ? "light" : "dark";
+        document.documentElement.classList.add(appearance);
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", appearance === "dark" ? "#11110f" : "#f6f3ed");
+      } catch {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
     <meta
       name="description"
       content="Hedr is a browser workbench for herdr coding-agent sessions."
