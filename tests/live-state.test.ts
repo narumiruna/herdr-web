@@ -17,11 +17,11 @@ describe("mapLiveSnapshot", () => {
           {
             agent: "pi",
             agent_status: "idle",
-            cwd: "/Users/narumi/workspace/herdr-web",
+            cwd: "/Users/narumi/workspace/herdeer",
             pane_id: "w5:p1",
             revision: 9,
             tab_id: "w5:t1",
-            terminal_title_stripped: "π - herdr-web",
+            terminal_title_stripped: "π - herdeer",
             workspace_id: "w5",
           },
         ],
@@ -42,17 +42,17 @@ describe("mapLiveSnapshot", () => {
           {
             agent: "pi",
             agent_status: "idle",
-            cwd: "/Users/narumi/workspace/herdr-web",
-            foreground_cwd: "/Users/narumi/workspace/herdr-web/src",
+            cwd: "/Users/narumi/workspace/herdeer",
+            foreground_cwd: "/Users/narumi/workspace/herdeer/src",
             pane_id: "w5:p1",
             revision: 9,
             tab_id: "w5:t1",
-            terminal_title_stripped: "π - herdr-web",
+            terminal_title_stripped: "π - herdeer",
             workspace_id: "w5",
           },
           {
             agent_status: "unknown",
-            cwd: "/Users/narumi/workspace/herdr-web",
+            cwd: "/Users/narumi/workspace/herdeer",
             pane_id: "w5:p2",
             revision: 2,
             tab_id: "w5:t1",
@@ -78,7 +78,7 @@ describe("mapLiveSnapshot", () => {
             active_tab_id: "w5:t1",
             agent_status: "idle",
             focused: true,
-            label: "herdr-web",
+            label: "herdeer",
             number: 5,
             pane_count: 2,
             tab_count: 1,
@@ -93,15 +93,15 @@ describe("mapLiveSnapshot", () => {
     expect(state.selectedSessionByWorkspace).toEqual({ w5: "w5:p1" });
     expect(state.workspaces[0]).toMatchObject({
       id: "w5",
-      name: "herdr-web",
-      path: "/Users/narumi/workspace/herdr-web",
+      name: "herdeer",
+      path: "/Users/narumi/workspace/herdeer",
     });
     expect(state.agents).toHaveLength(1);
     expect(state.agents[0]).toMatchObject({
       canPrompt: true,
       id: "w5:p1",
       kind: "agent",
-      label: "π - herdr-web",
+      label: "π - herdeer",
       runtime: "pi",
       status: "idle",
       tabId: "w5:t1",
@@ -109,7 +109,7 @@ describe("mapLiveSnapshot", () => {
     });
     expect(state.agents[0]?.panes).toEqual([
       expect.objectContaining({
-        cwd: "/Users/narumi/workspace/herdr-web/src",
+        cwd: "/Users/narumi/workspace/herdeer/src",
         id: "w5:p1",
         lines: ["user", "hi", "assistant", "Hello!"],
       }),
@@ -212,7 +212,7 @@ describe("mapLiveSnapshot", () => {
             active_tab_id: "w5:t2",
             agent_status: "unknown",
             focused: true,
-            label: "herdr-web",
+            label: "herdeer",
             number: 5,
             pane_count: 3,
             tab_count: 2,

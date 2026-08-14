@@ -6,7 +6,7 @@ Allow a remote browser user to paste, drag, or choose an image in the active Age
 
 The browser stages one validated image with a compact preview.
 
-On send, the authenticated bridge accepts bounded binary image data, verifies its signature, resolves the target pane working directory through `pane.get`, writes a random file under `.herdr-web/uploads`, and then submits the text prompt with that path.
+On send, the authenticated bridge accepts bounded binary image data, verifies its signature, resolves the target pane working directory through `pane.get`, writes a random file under `.herdeer/uploads`, and then submits the text prompt with that path.
 
 Docker will bind-mount a configurable project root at the same absolute path so the container and host Agent see the same file.
 

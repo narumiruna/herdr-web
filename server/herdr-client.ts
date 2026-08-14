@@ -38,7 +38,7 @@ export class HerdrClient {
   }
 
   request<T = unknown>(method: string, params: unknown): Promise<T> {
-    const id = `herdr-web:${randomUUID()}`;
+    const id = `herdeer:${randomUUID()}`;
     return new Promise<T>((resolve, reject) => {
       const socket =
         typeof this.endpoint === "string"

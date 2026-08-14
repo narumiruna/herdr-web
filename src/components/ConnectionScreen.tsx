@@ -2,7 +2,7 @@ import { LockClosedIcon, ReloadIcon } from "@radix-ui/react-icons";
 import { Button, TextField } from "@radix-ui/themes";
 import { type FormEvent, useState } from "react";
 import type { ConnectionStatus } from "../use-herdr-runtime";
-import { HerdrLogo } from "./HerdrLogo";
+import { HerdeerLogo } from "./HerdeerLogo";
 
 interface ConnectionScreenProps {
   error: string;
@@ -31,7 +31,7 @@ export function ConnectionScreen({
         aria-label="Connecting to Herdr"
       >
         <aside className="loading-sidebar">
-          <HerdrLogo />
+          <HerdeerLogo />
           <span className="skeleton skeleton-heading" />
           <span className="skeleton" />
           <span className="skeleton" />
@@ -56,8 +56,8 @@ export function ConnectionScreen({
   return (
     <main className="connection-screen">
       <section className="connection-card" aria-live="polite">
-        <HerdrLogo />
-        <span className="connection-eyebrow">herdr live bridge</span>
+        <HerdeerLogo />
+        <span className="connection-eyebrow">Herdeer bridge</span>
         {status === "auth" ? (
           <>
             <LockClosedIcon className="connection-lock" aria-hidden="true" />
@@ -68,7 +68,7 @@ export function ConnectionScreen({
             </p>
             <form className="connection-form" onSubmit={submit}>
               <TextField.Root
-                aria-label="Herdr web access token"
+                aria-label="Herdeer access token"
                 autoComplete="off"
                 placeholder="Access token"
                 type="password"

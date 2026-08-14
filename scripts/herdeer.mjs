@@ -6,19 +6,19 @@ import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HELP = `Start herdr web for a project directory.
+const HELP = `Start Herdeer for a project directory.
 
-Usage: herdr-web [directory]
+Usage: herdeer [directory]
 
 Arguments:
   directory  Project directory to open (default: current directory)
 
 The command focuses an existing matching Herdr workspace or creates one,
-then starts the authenticated web workbench with the existing just workflow.
+then starts the authenticated Herdeer workbench with the existing just workflow.
 `;
 
 function fail(message) {
-  process.stderr.write(`herdr-web: ${message}\n`);
+  process.stderr.write(`herdeer: ${message}\n`);
   process.exitCode = 1;
 }
 

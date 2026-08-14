@@ -97,7 +97,7 @@ describe("LiveHerdrService", () => {
         size: png.length,
         type: "image_uploaded",
       });
-      expect(result.path).toContain(join(directory, ".herdr-web", "uploads"));
+      expect(result.path).toContain(join(directory, ".herdeer", "uploads"));
       await expect(readFile(result.path)).resolves.toEqual(png);
     } finally {
       await rm(directory, { force: true, recursive: true });

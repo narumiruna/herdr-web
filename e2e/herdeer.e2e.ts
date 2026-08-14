@@ -12,6 +12,8 @@ test("desktop workbench gives the terminal priority", async ({
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.goto("/");
 
+  await expect(page).toHaveTitle("Herdeer — agent workbench");
+  await expect(page.locator(".brand-type strong")).toHaveText("herdeer");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "Needs input", exact: true }),
@@ -135,12 +137,12 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.locator(".topbar-context > strong")).toBeHidden();
 
   await page.screenshot({
-    path: testInfo.outputPath("herdr-terminal-first-desktop.png"),
+    path: testInfo.outputPath("herdeer-terminal-first-desktop.png"),
     fullPage: true,
   });
 
   await page.getByRole("button", { name: "Use dark appearance" }).click();
-  await expect(page.locator(".herdr-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdeer-theme")).toHaveClass(/dark/);
   const darkBrightness = await page.evaluate(() => {
     const brightness = (selector: string) => {
       const color = getComputedStyle(
@@ -165,11 +167,11 @@ test("desktop workbench gives the terminal priority", async ({
   expect(darkBrightness.terminal).toBeLessThan(80);
   expect(darkBrightness.topbar).toBeLessThan(80);
   await page.screenshot({
-    path: testInfo.outputPath("herdr-terminal-first-dark.png"),
+    path: testInfo.outputPath("herdeer-terminal-first-dark.png"),
     fullPage: true,
   });
   await page.reload();
-  await expect(page.locator(".herdr-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdeer-theme")).toHaveClass(/dark/);
   await page.getByRole("button", { name: "Open details" }).click();
   await expect(
     page.getByRole("dialog", { name: "Session details" }),
@@ -300,7 +302,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   }
 
   await page.screenshot({
-    path: testInfo.outputPath("herdr-terminal-first-mobile.png"),
+    path: testInfo.outputPath("herdeer-terminal-first-mobile.png"),
     fullPage: true,
   });
 

@@ -76,7 +76,7 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-describe("live herdr app", () => {
+describe("live Herdeer app", () => {
   test("requires an access token before reading herdr", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -86,6 +86,7 @@ describe("live herdr app", () => {
     expect(
       screen.getByRole("heading", { name: "Enter the access token" }),
     ).toBeVisible();
+    expect(screen.getByLabelText("Herdeer access token")).toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -181,7 +182,7 @@ describe("live herdr app", () => {
 
   test("uploads a selected image and prompts the agent with its host path", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
-    const imagePath = "/repo/.herdr-web/uploads/remote-shot.png";
+    const imagePath = "/repo/.herdeer/uploads/remote-shot.png";
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/images")) {
@@ -288,7 +289,7 @@ describe("live herdr app", () => {
         return new Response(
           JSON.stringify({
             mediaType: "image/png",
-            path: "/repo/tools/.herdr-web/uploads/split.png",
+            path: "/repo/tools/.herdeer/uploads/split.png",
             size: 11,
             type: "image_uploaded",
           }),
@@ -336,7 +337,7 @@ describe("live herdr app", () => {
 
   test("reuses a successful image upload when a rejected prompt is retried", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
-    const imagePath = "/repo/.herdr-web/uploads/retry.png";
+    const imagePath = "/repo/.herdeer/uploads/retry.png";
     let prompts = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

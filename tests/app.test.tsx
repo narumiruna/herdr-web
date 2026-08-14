@@ -16,7 +16,18 @@ function renderApp() {
   return user;
 }
 
-describe("herdr terminal-first workbench", () => {
+describe("Herdeer terminal-first workbench", () => {
+  test("shows the Herdeer product identity", () => {
+    renderApp();
+
+    expect(
+      screen.getByText("herdeer", { selector: ".brand-type strong" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Herdeer navigation" }),
+    ).toBeVisible();
+  });
+
   test("shows each workspace session in a keyboard-accessible tab bar", async () => {
     const user = renderApp();
     const tabList = screen.getByRole("tablist", { name: "herdr tabs" });

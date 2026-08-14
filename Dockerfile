@@ -16,7 +16,7 @@ WORKDIR /app
 
 ENV BRIDGE_HOST=0.0.0.0 \
     HERDR_SOCKET_PATH=/run/herdr/herdr.sock \
-    HERDR_WEB_STATIC_ROOT=/app/dist \
+    HERDEER_STATIC_ROOT=/app/dist \
     PORT=8080
 
 COPY package.json ./

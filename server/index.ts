@@ -6,10 +6,10 @@ import { LiveHerdrService } from "./herdr-service.js";
 import { createHerdrHttpHandler } from "./http-app.js";
 import { createStaticHandler } from "./static-files.js";
 
-const token = process.env.HERDR_WEB_TOKEN?.trim();
+const token = process.env.HERDEER_TOKEN?.trim();
 if (!token) {
   console.error(
-    "HERDR_WEB_TOKEN is required; use `just run` or set it explicitly.",
+    "HERDEER_TOKEN is required; use `just run` or set it explicitly.",
   );
   process.exit(1);
 }
@@ -30,7 +30,7 @@ const endpoint =
         port: tcpPort,
       }
     : socketPath;
-const staticRoot = resolve(process.env.HERDR_WEB_STATIC_ROOT ?? "dist");
+const staticRoot = resolve(process.env.HERDEER_STATIC_ROOT ?? "dist");
 const projectsRoot = process.env.HERDR_PROJECTS_ROOT?.trim() || undefined;
 const client = new HerdrClient(endpoint);
 const service = new LiveHerdrService(client, { projectsRoot });
@@ -55,7 +55,7 @@ const server = createServer((request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`herdr bridge listening on http://${host}:${port}`);
+  console.log(`Herdeer bridge listening on http://${host}:${port}`);
   console.log(
     typeof endpoint === "string"
       ? `herdr socket: ${endpoint}`

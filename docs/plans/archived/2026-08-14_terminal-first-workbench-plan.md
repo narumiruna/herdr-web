@@ -1,6 +1,6 @@
 ## Goal
 
-Redesign herdr web as a Terminal-first Workbench that gives real Agents and terminal output most of the screen, surfaces work that needs attention, and removes duplicated or unsupported status.
+Redesign Herdeer as a Terminal-first Workbench that gives real Agents and terminal output most of the screen, surfaces work that needs attention, and removes duplicated or unsupported status.
 
 ## Approved Experience
 

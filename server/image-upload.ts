@@ -92,7 +92,7 @@ export async function writePaneImage(
 
   const requestedUploadDirectory = join(
     projectDirectory,
-    ".herdr-web",
+    ".herdeer",
     "uploads",
   );
   await mkdir(requestedUploadDirectory, { mode: 0o700, recursive: true });

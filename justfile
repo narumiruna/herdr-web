@@ -6,22 +6,22 @@ default:
 install:
     npm install
 
-# Install the herdr-web command from this checkout.
+# Install the herdeer command from this checkout.
 install-cli: install
     npm link
 
-# Start the live Vite workbench and herdr bridge on available ports.
+# Start the live Vite workbench and Herdeer bridge on available ports.
 run:
     #!/bin/sh
     set -eu
-    token="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
+    token="${HERDEER_TOKEN:-$(node scripts/access-token.mjs)}"
     web_port="${VITE_PORT:-$(node scripts/find-port.mjs 5173)}"
     bridge_port="${BRIDGE_PORT:-$(node scripts/find-port.mjs 8787)}"
     host=$(node scripts/lan-address.mjs)
-    echo "herdr web token: $token"
+    echo "Herdeer token: $token"
     echo "local:   http://localhost:$web_port/?token=$token"
     echo "network: http://$host:$web_port/?token=$token"
-    HERDR_WEB_TOKEN="$token" VITE_PORT="$web_port" BRIDGE_PORT="$bridge_port" npm run dev
+    HERDEER_TOKEN="$token" VITE_PORT="$web_port" BRIDGE_PORT="$bridge_port" npm run dev
 
 # Build the production application.
 build:
@@ -31,16 +31,16 @@ build:
 preview: build
     #!/bin/sh
     set -eu
-    token="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
+    token="${HERDEER_TOKEN:-$(node scripts/access-token.mjs)}"
     port="${PORT:-$(node scripts/find-port.mjs 8787)}"
-    echo "herdr web: http://localhost:$port/?token=$token"
-    HERDR_WEB_TOKEN="$token" PORT="$port" npm start
+    echo "Herdeer: http://localhost:$port/?token=$token"
+    HERDEER_TOKEN="$token" PORT="$port" npm start
 
 # Build and start the production container on an available port.
 up:
     #!/bin/sh
     set -eu
-    runtime_dir=.herdr-web-runtime
+    runtime_dir=.herdeer-runtime
     mkdir -p "$runtime_dir"
     if [ -f "$runtime_dir/socket-proxy.pid" ]; then
         old_pid=$(cat "$runtime_dir/socket-proxy.pid")
@@ -49,10 +49,10 @@ up:
         esac
         rm -f "$runtime_dir/socket-proxy.pid"
     fi
-    export HERDR_WEB_TOKEN="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
+    export HERDEER_TOKEN="${HERDEER_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
-    export HERDR_HOST_UID="${HERDR_HOST_UID:-$(id -u)}"
-    export HERDR_HOST_GID="${HERDR_HOST_GID:-$(id -g)}"
+    export HERDEER_HOST_UID="${HERDEER_HOST_UID:-$(id -u)}"
+    export HERDEER_HOST_GID="${HERDEER_HOST_GID:-$(id -g)}"
     test -d "$HERDR_PROJECTS_ROOT" || { echo "project root not found: $HERDR_PROJECTS_ROOT" >&2; exit 1; }
     socket_path="${HERDR_HOST_SOCKET_PATH:-${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}}"
     test -S "$socket_path" || { echo "herdr socket not found: $socket_path" >&2; exit 1; }
@@ -70,19 +70,19 @@ up:
     trap cleanup EXIT INT TERM
     sleep 0.2
     kill -0 "$proxy_pid"
-    docker compose up --build --detach
-    port=$(docker compose port web 8080 | head -n 1 | sed 's/.*://')
+    docker compose up --build --detach --remove-orphans
+    port=$(docker compose port herdeer 8080 | head -n 1 | sed 's/.*://')
     host=$(node scripts/lan-address.mjs)
     keep_proxy=1
-    echo "local:   http://localhost:$port/?token=$HERDR_WEB_TOKEN"
-    echo "network: http://$host:$port/?token=$HERDR_WEB_TOKEN"
+    echo "local:   http://localhost:$port/?token=$HERDEER_TOKEN"
+    echo "network: http://$host:$port/?token=$HERDEER_TOKEN"
 
 # Stop the production container and host socket proxy.
 down:
     #!/bin/sh
     set -eu
     docker compose down
-    pid_file=.herdr-web-runtime/socket-proxy.pid
+    pid_file=.herdeer-runtime/socket-proxy.pid
     if [ -f "$pid_file" ]; then
         proxy_pid=$(cat "$pid_file")
         case "$(ps -p "$proxy_pid" -o command= 2>/dev/null || true)" in
@@ -90,8 +90,8 @@ down:
         esac
         rm -f "$pid_file"
     fi
-    rm -f .herdr-web-runtime/socket-proxy.log
-    rmdir .herdr-web-runtime 2>/dev/null || true
+    rm -f .herdeer-runtime/socket-proxy.log
+    rmdir .herdeer-runtime 2>/dev/null || true
 
 # Run reducer and component tests once.
 test:
