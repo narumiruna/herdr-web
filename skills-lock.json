@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "writing-plans": {
+      "source": "narumiruna/skills",
+      "sourceType": "github",
+      "skillPath": "skills/writing-research/writing-plans/SKILL.md",
+      "computedHash": "35583276a4ee74d77dd47c0a5dd76bae8a7ebce817800eea2b4f3eacf648e737"
+    },
+    "writing-roadmap": {
+      "source": "narumiruna/skills",
+      "sourceType": "github",
+      "skillPath": "skills/writing-research/writing-roadmap/SKILL.md",
+      "computedHash": "fbae87b9d26ba543a2bc273e76f3e4b117251283689fdf329ca65c12c11c1fe7"
+    }
+  }
+}
