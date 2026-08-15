@@ -15,7 +15,8 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - Real prompts submitted through Herdr's `agent.prompt` API from an optional terminal-side dialog.
 - Per-Agent in-memory text and image drafts that survive empty workspaces, navigation, and failed sends.
 - Remote image paste, drag/drop, and file selection with host-readable Agent attachment paths.
-- Real pane splitting and confirmed pane closing.
+- Real pane splitting, mouse and keyboard split resizing, and confirmed pane closing.
+- A mouse and keyboard resizable desktop navigation rail with a browser-saved width.
 - New Claude Code, Codex, Pi, and OpenCode Agents with visible, fixed approved commands.
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
@@ -124,7 +125,13 @@ Returning to a Space restores its last selected tab, while choosing a Needs inpu
 
 Use the **+** beside the tab strip to start another Agent in the current Space without leaving the terminal context.
 
-Split panes stay inside their parent tab, appear side by side on wide screens, and use a readable pane selector on narrow screens.
+Split panes stay inside their parent tab, follow Herdr's right or down split direction on wide screens, and use a readable pane selector on narrow screens.
+
+Drag the divider between two visible panes to preview a new ratio, then release it to persist the ratio atomically through Herdr's `layout.set_split_ratio` API.
+
+The pane divider also supports arrow keys plus Home and End, while controller loss or a rejected update restores the last confirmed Herdr ratio.
+
+Drag the desktop navigation divider or focus it and use Left, Right, Home, or End to adjust its width; this browser-only preference does not alter Herdr.
 
 Each Agent tab keeps its status visible, while one compact terminal bar combines the current working directory, branch, pane title, connection state, and terminal actions without redundant title rows.
 
@@ -313,7 +320,7 @@ The **Publish** workflow can be rerun manually only from a matching `vX.Y.Z` tag
 
 `server/herdr-client.ts` implements herdr's newline-delimited JSON socket transport.
 
-`server/herdr-service.ts` reads `session.snapshot`, subscribes to structural Herdr events, and exposes prompt, split, close, upload, and approved agent-start operations.
+`server/herdr-service.ts` reads `session.snapshot`, subscribes to structural Herdr events, and exposes prompt, split-ratio, split, close, upload, and approved agent-start operations.
 
 `server/terminal-session.ts` launches Herdr terminal control or observation sessions locally or through the authenticated Docker host proxy, validates ordered NDJSON frames, and applies bounded browser-input backpressure.
 

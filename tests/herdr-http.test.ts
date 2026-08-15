@@ -53,6 +53,9 @@ function fakeService(): HerdrService {
     }),
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
     promptAgent: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
+    setSplitRatio: vi.fn().mockResolvedValue({
+      type: "layout_split_ratio_set",
+    }),
     splitPane: vi.fn().mockResolvedValue({ type: "pane_info" }),
     uploadImage: vi.fn().mockResolvedValue({
       mediaType: "image/png",
@@ -94,6 +97,16 @@ describe("herdr HTTP bridge", () => {
     });
     expect(mutation.status).toBe(403);
     expect(service.promptAgent).not.toHaveBeenCalled();
+    const resize = await fetch(
+      `${baseUrl}/api/herdr/tabs/w5%3At1/split-ratio`,
+      {
+        body: JSON.stringify({ path: [], ratio: 0.6 }),
+        headers,
+        method: "PATCH",
+      },
+    );
+    expect(resize.status).toBe(403);
+    expect(service.setSplitRatio).not.toHaveBeenCalled();
     const control = await fetch(
       `${baseUrl}/api/herdr/panes/w5:p1/terminal-ticket`,
       {
@@ -262,6 +275,44 @@ describe("herdr HTTP bridge", () => {
     expect(await unsupported.json()).toMatchObject({
       error: { code: "terminal_streaming_unavailable" },
     });
+  });
+
+  test("validates and forwards an absolute Herdr split ratio", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+
+    const response = await fetch(
+      `${baseUrl}/api/herdr/tabs/w5%3At1/split-ratio`,
+      {
+        body: JSON.stringify({ path: [], ratio: 0.68 }),
+        headers,
+        method: "PATCH",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(service.setSplitRatio).toHaveBeenCalledWith("w5:t1", [], 0.68);
+
+    for (const body of [
+      { path: ["first"], ratio: 0.5 },
+      { path: [], ratio: 1 },
+      { path: [], ratio: Number.NaN },
+    ]) {
+      const invalid = await fetch(
+        `${baseUrl}/api/herdr/tabs/w5%3At1/split-ratio`,
+        {
+          body: JSON.stringify(body),
+          headers,
+          method: "PATCH",
+        },
+      );
+      expect(invalid.status).toBe(400);
+    }
+    expect(service.setSplitRatio).toHaveBeenCalledOnce();
   });
 
   test("validates and forwards a trimmed agent prompt", async () => {

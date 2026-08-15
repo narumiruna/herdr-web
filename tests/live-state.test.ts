@@ -34,6 +34,13 @@ describe("mapLiveSnapshot", () => {
               { focused: true, pane_id: "w5:p1" },
               { focused: false, pane_id: "w5:p2" },
             ],
+            splits: [
+              {
+                direction: "down" as const,
+                id: "split_0_root",
+                ratio: 0.65,
+              },
+            ],
             tab_id: "w5:t1",
             workspace_id: "w5",
           },
@@ -102,6 +109,7 @@ describe("mapLiveSnapshot", () => {
       id: "w5:p1",
       kind: "agent",
       label: "π - hedr",
+      paneSplit: { direction: "down", ratio: 0.65 },
       runtime: "pi",
       status: "idle",
       tabId: "w5:t1",

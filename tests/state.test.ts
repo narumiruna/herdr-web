@@ -225,6 +225,33 @@ describe("herdr state", () => {
     );
     expect(splitAgent?.panes).toHaveLength(2);
     expect(splitAgent?.activePaneId).toBe("pane-new");
+    expect(splitAgent?.paneSplit).toEqual({ direction: "right", ratio: 0.5 });
     expect(unchangedAgent?.panes).toHaveLength(2);
+  });
+
+  test("resizes only a two-pane layout and clamps its ratio", () => {
+    const state = appReducer(createDemoState(), {
+      type: "pane.split",
+      agentId: "agent-build",
+      paneId: "pane-new",
+    });
+
+    const resized = appReducer(state, {
+      type: "pane.resized",
+      agentId: "agent-build",
+      ratio: 2,
+    });
+    const untouched = appReducer(resized, {
+      type: "pane.resized",
+      agentId: "agent-review",
+      ratio: 0.25,
+    });
+
+    expect(
+      resized.agents.find(({ id }) => id === "agent-build")?.paneSplit?.ratio,
+    ).toBe(0.9);
+    expect(
+      untouched.agents.find(({ id }) => id === "agent-review")?.paneSplit,
+    ).toBeUndefined();
   });
 });

@@ -204,6 +204,20 @@ export class HerdrApiClient {
     );
   }
 
+  setSplitRatio(
+    tabId: string,
+    path: boolean[],
+    ratio: number,
+  ): Promise<unknown> {
+    return this.request(
+      `/api/herdr/tabs/${encodeURIComponent(tabId)}/split-ratio`,
+      {
+        body: JSON.stringify({ path, ratio }),
+        method: "PATCH",
+      },
+    );
+  }
+
   closePane(paneId: string): Promise<unknown> {
     return this.request(`/api/herdr/panes/${encodeURIComponent(paneId)}`, {
       method: "DELETE",

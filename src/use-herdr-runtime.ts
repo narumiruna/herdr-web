@@ -75,6 +75,7 @@ interface HerdrRuntime {
     uploadPaneId?: string,
   ) => Promise<PromptResult>;
   refresh: () => Promise<void>;
+  resizePanes: (agentId: string, tabId: string, ratio: number) => Promise<void>;
   setAccessToken: (token: string) => void;
   splitPane: (agentId: string, paneId: string) => Promise<void>;
   state: HerdrState;
@@ -333,6 +334,21 @@ export function useHerdrRuntime(
       return { uploadedPath };
     },
     refresh,
+    resizePanes: async (agentId, tabId, ratio) => {
+      if (!live) {
+        dispatch({ type: "pane.resized", agentId, ratio });
+        return;
+      }
+      if (!tabId) {
+        const error = new HerdrMutationError(
+          "This session has no Herdr tab to resize.",
+          "rejected",
+        );
+        setActionError(error.message);
+        throw error;
+      }
+      await mutate((api) => api.setSplitRatio(tabId, [], ratio));
+    },
     setAccessToken: (value) => {
       const next = value.trim();
       if (!next) return;

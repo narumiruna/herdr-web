@@ -11,6 +11,12 @@ import {
 import { type Agent, createDemoState } from "../src/state";
 import { HerdrMutationError } from "../src/use-herdr-runtime";
 
+vi.mock("../src/components/InteractiveTerminal", () => ({
+  InteractiveTerminal: ({ paneId }: { paneId: string }) => (
+    <div data-testid={`interactive-${paneId}`} />
+  ),
+}));
+
 function demoAgent(): Agent {
   const agent = createDemoState().agents.find(
     ({ id }) => id === "agent-review",
@@ -27,16 +33,20 @@ interface HarnessProps {
     image?: File,
     uploadedPath?: string,
   ) => Promise<{ uploadedPath?: string }>;
+  onResizePanes?: (ratio: number) => void | Promise<void>;
   onRetryOutput?: () => void;
   onSelectPane?: (paneId: string) => void;
+  terminalStreaming?: boolean;
 }
 
 function Harness({
   actionsEnabled = true,
   agent = demoAgent(),
   onMessage = async () => ({}),
+  onResizePanes = () => undefined,
   onRetryOutput = () => undefined,
   onSelectPane = () => undefined,
+  terminalStreaming = false,
 }: HarnessProps) {
   const [drafts, setDrafts] = useState<Record<string, ComposerDraft>>({});
   const [sending, setSending] = useState<Record<string, boolean>>({});
@@ -72,6 +82,7 @@ function Harness({
           }))
         }
         onMessage={onMessage}
+        onResizePanes={onResizePanes}
         onRetryOutput={onRetryOutput}
         onSendingChange={(agentId, value) =>
           setSending((current) => ({ ...current, [agentId]: value }))
@@ -88,7 +99,7 @@ function Harness({
         terminalControlEnabled
         terminalEnabled
         terminalReason="This bridge is configured for snapshots only."
-        terminalStreaming={false}
+        terminalStreaming={terminalStreaming}
       />
     </Tooltip.Provider>
   );
@@ -182,6 +193,124 @@ describe("TerminalWorkspace decision states", () => {
 
     expect(second).toHaveFocus();
     expect(onSelectPane).toHaveBeenLastCalledWith("pane-shell");
+  });
+
+  test("previews and commits a pane ratio with mouse dragging", async () => {
+    const agent = demoAgent();
+    agent.panes.push({
+      command: "zsh",
+      id: "pane-shell",
+      lines: ["$ pwd"],
+      title: "shell",
+    });
+    agent.paneSplit = { direction: "right", ratio: 0.5 };
+    const onResizePanes = vi.fn();
+    render(<Harness agent={agent} onResizePanes={onResizePanes} />);
+    const separator = screen.getByRole("separator", {
+      name: "Resize terminal panes",
+    });
+    const grid = separator.parentElement;
+    if (!grid) throw new Error("Missing pane grid");
+    vi.spyOn(grid, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 0,
+      right: 1_000,
+      top: 0,
+      width: 1_000,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(separator, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 496,
+      right: 504,
+      top: 0,
+      width: 8,
+      x: 496,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(separator, {
+      button: 0,
+      clientX: 500,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(separator, { clientX: 700, pointerId: 1 });
+    fireEvent.pointerUp(separator, { clientX: 700, pointerId: 1 });
+
+    await waitFor(() => expect(onResizePanes).toHaveBeenCalledOnce());
+    expect(onResizePanes.mock.calls[0]?.[0]).toBeCloseTo(0.702, 2);
+  });
+
+  test("resizes a pane separator from the keyboard", async () => {
+    const agent = demoAgent();
+    agent.panes.push({
+      command: "zsh",
+      id: "pane-shell",
+      lines: ["$ pwd"],
+      title: "shell",
+    });
+    agent.paneSplit = { direction: "down", ratio: 0.5 };
+    const onResizePanes = vi.fn();
+    render(<Harness agent={agent} onResizePanes={onResizePanes} />);
+    const separator = screen.getByRole("separator", {
+      name: "Resize terminal panes",
+    });
+
+    separator.focus();
+    await userEvent.setup().keyboard("{ArrowDown}");
+
+    expect(onResizePanes).toHaveBeenCalledWith(0.55);
+    expect(separator).toHaveAttribute("aria-orientation", "horizontal");
+  });
+
+  test("keeps both interactive terminals visible around the resize handle", () => {
+    const agent = demoAgent();
+    agent.panes.push({
+      command: "zsh",
+      id: "pane-shell",
+      lines: [],
+      title: "shell",
+    });
+    agent.paneSplit = { direction: "right", ratio: 0.6 };
+
+    render(<Harness agent={agent} terminalStreaming />);
+
+    expect(
+      screen.getByTestId(`interactive-${agent.panes[0]?.id}`),
+    ).toBeVisible();
+    expect(screen.getByTestId("interactive-pane-shell")).toBeVisible();
+    expect(
+      screen.getByRole("separator", { name: "Resize terminal panes" }),
+    ).toHaveAttribute("aria-valuenow", "60");
+  });
+
+  test("restores the confirmed pane ratio when Herdr rejects a resize", async () => {
+    const agent = demoAgent();
+    agent.panes.push({
+      command: "zsh",
+      id: "pane-shell",
+      lines: ["$ pwd"],
+      title: "shell",
+    });
+    agent.paneSplit = { direction: "right", ratio: 0.5 };
+    const onResizePanes = vi.fn().mockRejectedValue(new Error("rejected"));
+    render(<Harness agent={agent} onResizePanes={onResizePanes} />);
+    const separator = screen.getByRole("separator", {
+      name: "Resize terminal panes",
+    });
+
+    separator.focus();
+    await userEvent.setup().keyboard("{ArrowRight}");
+
+    await waitFor(() =>
+      expect(separator).toHaveAttribute("aria-valuenow", "50"),
+    );
+    expect(onResizePanes).toHaveBeenCalledWith(0.55);
   });
 
   test("uses a keyboard-accessible pane selector for externally-created extra panes", async () => {

@@ -341,6 +341,63 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
+test("mouse resizing persists navigation width and updates pane proportions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const navigationSeparator = page.getByRole("separator", {
+    name: "Resize navigation",
+  });
+  const navigationBox = await navigationSeparator.boundingBox();
+  if (!navigationBox) throw new Error("Navigation separator is not visible");
+  await page.mouse.move(
+    navigationBox.x + navigationBox.width / 2,
+    navigationBox.y + 100,
+  );
+  await page.mouse.down();
+  await page.mouse.move(280, navigationBox.y + 100);
+  await page.mouse.up();
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("hedr-sidebar-width")))
+    .toBe("280");
+  await page.reload();
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
+
+  await page.getByRole("button", { name: "Split pane" }).click();
+  const paneSeparator = page.getByRole("separator", {
+    name: "Resize terminal panes",
+  });
+  const paneGrid = page.locator(".pane-grid");
+  const paneBox = await paneGrid.boundingBox();
+  const separatorBox = await paneSeparator.boundingBox();
+  if (!paneBox || !separatorBox) throw new Error("Pane split is not visible");
+  await page.mouse.move(
+    separatorBox.x + separatorBox.width / 2,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    paneBox.x + paneBox.width * 0.65,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.up();
+
+  await expect(paneSeparator).toHaveAttribute("aria-valuenow", /6[45]/);
+  const paneWidths = await page
+    .locator(".terminal-pane")
+    .evaluateAll((panes) =>
+      panes.map((pane) => pane.getBoundingClientRect().width),
+    );
+  expect(paneWidths).toHaveLength(2);
+  expect(
+    (paneWidths[0] ?? 0) / ((paneWidths[1] ?? 1) + (paneWidths[0] ?? 0)),
+  ).toBeGreaterThan(0.63);
+  expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
 test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
   page,
 }) => {

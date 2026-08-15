@@ -13,8 +13,10 @@ import {
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { Button, IconButton } from "@radix-ui/themes";
 import {
+  type CSSProperties,
   type DragEvent,
   type FormEvent,
+  Fragment,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -34,6 +36,7 @@ import type { Agent, TerminalPane, Workspace } from "../state";
 import { HerdrMutationError } from "../use-herdr-runtime";
 import { IconTooltip } from "./IconTooltip";
 import { InteractiveTerminal } from "./InteractiveTerminal";
+import { clampPaneRatio, PaneResizeHandle } from "./PaneResizeHandle";
 import { RadixDialog } from "./RadixDialog";
 
 export interface ComposerDraft {
@@ -71,6 +74,7 @@ interface TerminalWorkspaceProps {
   ) => Promise<{ uploadedPath?: string }> | undefined;
   onMessageFailure?: () => void;
   onRetryOutput: () => void | Promise<void>;
+  onResizePanes: (ratio: number) => void | Promise<void>;
   onSendingChange: (agentId: string, sending: boolean) => void;
   onSplitPane: () => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
@@ -298,6 +302,7 @@ export function TerminalWorkspace({
   onMessage,
   onMessageFailure,
   onRetryOutput,
+  onResizePanes,
   onSendingChange,
   onSplitPane,
   onSelectPane,
@@ -313,8 +318,13 @@ export function TerminalWorkspace({
   const [closeError, setCloseError] = useState("");
   const [closing, setClosing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [cwdCopied, setCwdCopied] = useState(false);
+  const [copiedCwdPaneId, setCopiedCwdPaneId] = useState("");
   const [sentAgentId, setSentAgentId] = useState("");
+  const [paneRatio, setPaneRatio] = useState(() =>
+    clampPaneRatio(agent.paneSplit?.ratio ?? 0.5),
+  );
+  const [paneResizeDragging, setPaneResizeDragging] = useState(false);
+  const [paneResizePending, setPaneResizePending] = useState(false);
   const dragDepth = useRef(0);
   const imageInput = useRef<HTMLInputElement>(null);
   const composerForm = useRef<HTMLFormElement>(null);
@@ -326,6 +336,18 @@ export function TerminalWorkspace({
   const activePane =
     agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
   const currentWorkingDirectory = activePane?.cwd || workspace.path;
+  const sourcePaneRatio = clampPaneRatio(agent.paneSplit?.ratio ?? 0.5);
+  const paneSplitDirection = agent.paneSplit?.direction ?? "right";
+  const visiblePanes = agent.panes.filter(
+    (pane) => agent.panes.length <= 2 || pane.id === agent.activePaneId,
+  );
+  const showsPaneSplit = agent.panes.length === 2 && visiblePanes.length === 2;
+  const paneGridStyle = showsPaneSplit
+    ? ({
+        "--pane-first": `${paneRatio}fr`,
+        "--pane-second": `${1 - paneRatio}fr`,
+      } as CSSProperties)
+    : undefined;
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -333,6 +355,12 @@ export function TerminalWorkspace({
     },
     [onDraftChange],
   );
+
+  useEffect(() => {
+    if (!paneResizeDragging && !paneResizePending) {
+      setPaneRatio(sourcePaneRatio);
+    }
+  }, [paneResizeDragging, paneResizePending, sourcePaneRatio]);
 
   useEffect(() => {
     if (!draft.attachment || typeof URL.createObjectURL !== "function") {
@@ -460,13 +488,13 @@ export function TerminalWorkspace({
     void sendDraft();
   };
 
-  const copyWorkingDirectory = async () => {
-    if (!currentWorkingDirectory) return;
+  const copyWorkingDirectory = async (path: string, paneId: string) => {
+    if (!path) return;
     if (navigator.clipboard) {
-      await navigator.clipboard.writeText(currentWorkingDirectory);
+      await navigator.clipboard.writeText(path);
     } else {
       const copyTarget = document.createElement("textarea");
-      copyTarget.value = currentWorkingDirectory;
+      copyTarget.value = path;
       copyTarget.style.position = "fixed";
       copyTarget.style.opacity = "0";
       document.body.append(copyTarget);
@@ -474,8 +502,29 @@ export function TerminalWorkspace({
       document.execCommand("copy");
       copyTarget.remove();
     }
-    setCwdCopied(true);
-    window.setTimeout(() => setCwdCopied(false), 1_500);
+    setCopiedCwdPaneId(paneId);
+    window.setTimeout(
+      () =>
+        setCopiedCwdPaneId((current) => (current === paneId ? "" : current)),
+      1_500,
+    );
+  };
+
+  const commitPaneResize = async (ratio: number) => {
+    const next = clampPaneRatio(ratio);
+    setPaneResizeDragging(false);
+    if (!actionsEnabled || paneResizePending || next === sourcePaneRatio) {
+      setPaneRatio(sourcePaneRatio);
+      return;
+    }
+    setPaneResizePending(true);
+    try {
+      await onResizePanes(next);
+    } catch {
+      setPaneRatio(sourcePaneRatio);
+    } finally {
+      setPaneResizePending(false);
+    }
   };
 
   const confirmClose = async () => {
@@ -498,46 +547,51 @@ export function TerminalWorkspace({
     }
   };
 
-  const terminalContext = (pane: TerminalPane) => (
-    <>
-      {currentWorkingDirectory && (
-        <span className="terminal-toolbar-location">
-          <code className="workspace-cwd" title={currentWorkingDirectory}>
-            <span className="sr-only">
-              Current working directory: {currentWorkingDirectory}
-            </span>
-            <span className="workspace-cwd-full" aria-hidden="true">
-              {currentWorkingDirectory}
-            </span>
-            <span className="workspace-cwd-compact" aria-hidden="true">
-              {compactPath(currentWorkingDirectory)}
-            </span>
+  const terminalContext = (pane: TerminalPane) => {
+    const paneWorkingDirectory = pane.cwd || workspace.path;
+    return (
+      <>
+        {paneWorkingDirectory && (
+          <span className="terminal-toolbar-location">
+            <code className="workspace-cwd" title={paneWorkingDirectory}>
+              <span className="sr-only">
+                Current working directory: {paneWorkingDirectory}
+              </span>
+              <span className="workspace-cwd-full" aria-hidden="true">
+                {paneWorkingDirectory}
+              </span>
+              <span className="workspace-cwd-compact" aria-hidden="true">
+                {compactPath(paneWorkingDirectory)}
+              </span>
+            </code>
+            <button
+              type="button"
+              className="workspace-copy-cwd"
+              aria-label={
+                copiedCwdPaneId === pane.id
+                  ? "Current working directory copied"
+                  : "Copy current working directory"
+              }
+              onClick={() =>
+                void copyWorkingDirectory(paneWorkingDirectory, pane.id)
+              }
+            >
+              {copiedCwdPaneId === pane.id ? <CheckIcon /> : <CopyIcon />}
+            </button>
+          </span>
+        )}
+        {workspace.branch && (
+          <code className="terminal-toolbar-branch" title={workspace.branch}>
+            {workspace.branch}
           </code>
-          <button
-            type="button"
-            className="workspace-copy-cwd"
-            aria-label={
-              cwdCopied
-                ? "Current working directory copied"
-                : "Copy current working directory"
-            }
-            onClick={() => void copyWorkingDirectory()}
-          >
-            {cwdCopied ? <CheckIcon /> : <CopyIcon />}
-          </button>
+        )}
+        <span className="terminal-toolbar-title" title={pane.title}>
+          <CodeIcon aria-hidden="true" />
+          {pane.title}
         </span>
-      )}
-      {workspace.branch && (
-        <code className="terminal-toolbar-branch" title={workspace.branch}>
-          {workspace.branch}
-        </code>
-      )}
-      <span className="terminal-toolbar-title" title={pane.title}>
-        <CodeIcon aria-hidden="true" />
-        {pane.title}
-      </span>
-    </>
-  );
+      </>
+    );
+  };
 
   const terminalStructureActions = (
     pane: TerminalPane,
@@ -618,7 +672,7 @@ export function TerminalWorkspace({
         {agent.panes.length > 1 && (
           <div
             className="pane-switcher"
-            data-two={!terminalStreaming && agent.panes.length === 2}
+            data-two={agent.panes.length === 2}
             role="tablist"
             aria-label="Session panes"
           >
@@ -639,22 +693,34 @@ export function TerminalWorkspace({
         )}
         <div
           className="pane-grid"
-          data-split={!terminalStreaming && agent.panes.length === 2}
+          data-direction={paneSplitDirection}
           data-many={!terminalStreaming && agent.panes.length > 2}
+          data-resizing={paneResizeDragging}
+          data-split={showsPaneSplit}
+          style={paneGridStyle}
         >
-          {agent.panes
-            .filter((pane) =>
-              terminalStreaming
-                ? pane.id === agent.activePaneId
-                : agent.panes.length <= 2 || pane.id === agent.activePaneId,
-            )
-            .map((pane) =>
-              terminalStreaming ? (
+          {visiblePanes.map((pane, index) => (
+            <Fragment key={pane.id}>
+              {index === 1 && showsPaneSplit && (
+                <PaneResizeHandle
+                  direction={paneSplitDirection}
+                  disabled={!actionsEnabled || paneResizePending}
+                  ratio={paneRatio}
+                  onCancel={() => {
+                    setPaneResizeDragging(false);
+                    setPaneRatio(sourcePaneRatio);
+                  }}
+                  onCommit={(ratio) => void commitPaneResize(ratio)}
+                  onDragStart={() => setPaneResizeDragging(true)}
+                  onPreview={setPaneRatio}
+                />
+              )}
+              {terminalStreaming ? (
                 <section
                   className="terminal-pane"
-                  data-focused="true"
+                  data-focused={pane.id === agent.activePaneId}
                   aria-label={`${pane.title} terminal`}
-                  key={pane.id}
+                  onPointerDown={() => onSelectPane(pane.id)}
                 >
                   <InteractiveTerminal
                     actionsEnabled={terminalEnabled}
@@ -679,7 +745,6 @@ export function TerminalWorkspace({
               ) : (
                 <TerminalPaneView
                   pane={pane}
-                  key={pane.id}
                   agentLabel={agent.label}
                   focused={pane.id === agent.activePaneId}
                   canClose={actionsEnabled && agent.panes.length > 1}
@@ -691,8 +756,9 @@ export function TerminalWorkspace({
                   }}
                   onRetryOutput={() => void onRetryOutput()}
                 />
-              ),
-            )}
+              )}
+            </Fragment>
+          ))}
         </div>
 
         {!terminalStreaming && canPrompt ? (

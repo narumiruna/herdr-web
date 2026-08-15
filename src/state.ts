@@ -24,6 +24,11 @@ export interface TerminalPane {
   outputState?: TerminalOutputState;
 }
 
+export interface PaneSplit {
+  direction: "down" | "right";
+  ratio: number;
+}
+
 export type SessionKind = "agent" | "terminal";
 
 export interface Agent {
@@ -47,6 +52,7 @@ export interface Agent {
   deletions: number;
   panes: TerminalPane[];
   activePaneId: string;
+  paneSplit?: PaneSplit;
 }
 
 export type ActivityKind =
@@ -105,6 +111,7 @@ export type HerdrAction =
     }
   | { type: "pane.split"; agentId: string; paneId: string }
   | { type: "pane.selected"; agentId: string; paneId: string }
+  | { type: "pane.resized"; agentId: string; ratio: number }
   | { type: "pane.closed"; agentId: string; paneId: string };
 
 const STATUS_PRIORITY: Record<AgentStatus, number> = {
@@ -421,6 +428,7 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
             },
           ],
           activePaneId: action.paneId,
+          paneSplit: { direction: "right", ratio: 0.5 },
         };
       });
     }
@@ -428,6 +436,19 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       return updateAgent(state, action.agentId, (agent) =>
         agent.panes.some(({ id }) => id === action.paneId)
           ? { ...agent, activePaneId: action.paneId }
+          : agent,
+      );
+    }
+    case "pane.resized": {
+      return updateAgent(state, action.agentId, (agent) =>
+        agent.panes.length === 2
+          ? {
+              ...agent,
+              paneSplit: {
+                direction: agent.paneSplit?.direction ?? "right",
+                ratio: Math.max(0.1, Math.min(0.9, action.ratio)),
+              },
+            }
           : agent,
       );
     }
@@ -440,6 +461,7 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
         return {
           ...agent,
           panes,
+          paneSplit: undefined,
           activePaneId:
             agent.activePaneId === action.paneId
               ? (panes[0]?.id ?? agent.activePaneId)

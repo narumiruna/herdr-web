@@ -265,6 +265,18 @@ export class LiveHerdrService {
     });
   }
 
+  setSplitRatio(
+    tabId: string,
+    path: boolean[],
+    ratio: number,
+  ): Promise<unknown> {
+    return this.client.request("layout.set_split_ratio", {
+      path,
+      ratio,
+      tab_id: tabId,
+    });
+  }
+
   closePane(paneId: string): Promise<unknown> {
     return this.client.request("pane.close", { pane_id: paneId });
   }
