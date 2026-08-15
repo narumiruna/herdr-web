@@ -96,6 +96,7 @@ function Harness({
             setSending((current) => ({ ...current, [agentId]: value }))
           }
           onSplitPane={onSplitPane}
+          onTerminalFontSizeChange={() => undefined}
           onSelectPane={onSelectPane}
           onClosePane={() => undefined}
           onUploadImage={async () => ({
@@ -106,6 +107,7 @@ function Harness({
           })}
           terminalControlEnabled
           terminalEnabled
+          terminalFontSize={13}
           terminalReason="This bridge is configured for snapshots only."
           terminalStreaming={terminalStreaming}
         />

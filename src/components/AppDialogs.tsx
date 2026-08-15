@@ -13,6 +13,7 @@ import { Button, TextField } from "@radix-ui/themes";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeWorkspacePath, workspaceLabelFromPath } from "../herdr-api";
 import type { Agent, HerdrState, RuntimeName, Workspace } from "../state";
+import { TERMINAL_FONT_SIZE_PRESETS } from "../terminal-preferences";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
 
@@ -558,24 +559,32 @@ export function NewSpaceDialog({
   );
 }
 
-interface SettingsDialogProps {
+interface SettingsPreferences {
   appearance: "light" | "dark";
+  terminalFontSize: number;
+}
+
+interface SettingsDialogProps extends SettingsPreferences {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onApply: (appearance: "light" | "dark") => void;
+  onApply: (preferences: SettingsPreferences) => void;
 }
 
 export function SettingsDialog({
   appearance,
   open,
+  terminalFontSize,
   onOpenChange,
   onApply,
 }: SettingsDialogProps) {
-  const [draft, setDraft] = useState(appearance);
+  const [draftAppearance, setDraftAppearance] = useState(appearance);
+  const [draftFontSize, setDraftFontSize] = useState(terminalFontSize);
 
   useEffect(() => {
-    if (open) setDraft(appearance);
-  }, [appearance, open]);
+    if (!open) return;
+    setDraftAppearance(appearance);
+    setDraftFontSize(terminalFontSize);
+  }, [appearance, open, terminalFontSize]);
 
   return (
     <RadixDialog
@@ -589,19 +598,22 @@ export function SettingsDialog({
         className="settings-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onApply(draft);
+          onApply({
+            appearance: draftAppearance,
+            terminalFontSize: draftFontSize,
+          });
           onOpenChange(false);
         }}
       >
         <fieldset className="appearance-options">
           <legend>Appearance</legend>
-          <label data-selected={draft === "dark"}>
+          <label data-selected={draftAppearance === "dark"}>
             <input
               type="radio"
               name="appearance"
               value="dark"
-              checked={draft === "dark"}
-              onChange={() => setDraft("dark")}
+              checked={draftAppearance === "dark"}
+              onChange={() => setDraftAppearance("dark")}
             />
             <MoonIcon aria-hidden="true" />
             <span>
@@ -609,13 +621,13 @@ export function SettingsDialog({
               <small>Optimized for terminal contrast.</small>
             </span>
           </label>
-          <label data-selected={draft === "light"}>
+          <label data-selected={draftAppearance === "light"}>
             <input
               type="radio"
               name="appearance"
               value="light"
-              checked={draft === "light"}
-              onChange={() => setDraft("light")}
+              checked={draftAppearance === "light"}
+              onChange={() => setDraftAppearance("light")}
             />
             <SunIcon aria-hidden="true" />
             <span>
@@ -623,6 +635,27 @@ export function SettingsDialog({
               <small>Light navigation with a dark interactive terminal.</small>
             </span>
           </label>
+        </fieldset>
+        <fieldset className="terminal-size-options">
+          <legend>
+            <span>Terminal text size</span>
+            <small>{draftFontSize} px</small>
+          </legend>
+          {TERMINAL_FONT_SIZE_PRESETS.map(({ label, size }) => (
+            <label key={size} data-selected={draftFontSize === size}>
+              <input
+                type="radio"
+                name="terminal-font-size"
+                value={size}
+                checked={draftFontSize === size}
+                onChange={() => setDraftFontSize(size)}
+              />
+              <span>
+                <strong>{label}</strong>
+                <small>{size} px</small>
+              </span>
+            </label>
+          ))}
         </fieldset>
         <div className="form-actions">
           <Button
@@ -653,6 +686,9 @@ const KEYBINDINGS = [
   ["Send an Agent message", "Enter"],
   ["Insert a message line break", "Shift Enter"],
   ["Paste an image", "⌘ V / Ctrl V"],
+  ["Increase Terminal text", "⌘ + / Ctrl +"],
+  ["Decrease Terminal text", "⌘ - / Ctrl -"],
+  ["Reset Terminal text", "⌘ 0 / Ctrl 0"],
   ["Close a dialog or Terminal search", "Esc"],
 ] as const;
 

@@ -475,6 +475,62 @@
   font-size: 10px;
   line-height: 1.35;
 }
+.terminal-size-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+.terminal-size-options legend {
+  display: flex;
+  width: 100%;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.terminal-size-options legend small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 400;
+}
+.terminal-size-options label {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.terminal-size-options label[data-selected="true"] {
+  border-color: var(--amber-8);
+  background: var(--amber-2);
+  box-shadow: inset 0 0 0 1px var(--amber-7);
+}
+.terminal-size-options label > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.terminal-size-options strong {
+  font-size: 11px;
+}
+.terminal-size-options label small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+}
 .keybindings-heading {
   display: flex;
   align-items: center;
@@ -1038,7 +1094,8 @@
     display: none;
   }
   .runtime-options,
-  .appearance-options {
+  .appearance-options,
+  .terminal-size-options {
     grid-template-columns: 1fr;
   }
   .space-form,

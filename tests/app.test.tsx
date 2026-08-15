@@ -279,6 +279,19 @@ describe("herdr-web terminal-first workbench", () => {
     ).toBeVisible();
   });
 
+  test("restores the saved terminal text size", async () => {
+    window.localStorage.setItem("herdr-web-terminal-font-size", "15");
+    const user = renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+
+    expect(screen.getByRole("radio", { name: /Comfortable/ })).toBeChecked();
+    expect(
+      screen.getByText("15 px", { selector: "legend small" }),
+    ).toBeVisible();
+  });
+
   test("opens Settings and Keybindings from the Space menu", async () => {
     const user = renderApp();
     const openMenu = screen.getByRole("button", { name: "Open menu" });
@@ -287,19 +300,29 @@ describe("herdr-web terminal-first workbench", () => {
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await user.click(screen.getByRole("radio", { name: /Light/ }));
+    await user.click(screen.getByRole("radio", { name: /Compact/ }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(document.documentElement).toHaveClass("dark");
+    expect(window.localStorage.getItem("herdr-web-terminal-font-size")).toBe(
+      "13",
+    );
 
     await user.click(openMenu);
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
     await user.click(screen.getByRole("radio", { name: /Light/ }));
+    await user.click(screen.getByRole("radio", { name: /Comfortable/ }));
     await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(document.documentElement).toHaveClass("light");
+    expect(window.localStorage.getItem("herdr-web-terminal-font-size")).toBe(
+      "15",
+    );
 
     await user.click(openMenu);
     await user.click(screen.getByRole("menuitem", { name: "Keybindings" }));
     expect(screen.getByRole("dialog", { name: "Keybindings" })).toBeVisible();
     expect(screen.getByText("⌘ K / Ctrl K")).toBeVisible();
+    expect(screen.getByText("⌘ + / Ctrl +")).toBeVisible();
+    expect(screen.getByText("⌘ 0 / Ctrl 0")).toBeVisible();
   });
 
   test("sends direction to a blocked agent and resumes the session", async () => {

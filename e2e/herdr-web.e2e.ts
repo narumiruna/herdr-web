@@ -625,6 +625,28 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   ).toBe(true);
 });
 
+test("mobile Settings keeps terminal text presets inside the viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
+  await navigation.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("radio", { name: /Compact/ })).toBeVisible();
+  await expect(
+    settings.getByRole("radio", { name: /Comfortable/ }),
+  ).toBeVisible();
+  expect(await hasNoPageOverflow(page)).toBe(true);
+  const bounds = await settings.boundingBox();
+  expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(320);
+});
+
 test("supported width extremes avoid horizontal overflow", async ({ page }) => {
   for (const viewport of [
     { width: 320, height: 700 },

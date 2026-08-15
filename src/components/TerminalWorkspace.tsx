@@ -83,11 +83,13 @@ interface TerminalWorkspaceProps {
   onResizePanes: (ratio: number) => void | Promise<void>;
   onSendingChange: (agentId: string, sending: boolean) => void;
   onSplitPane: (direction: PaneSplitDirection) => void | Promise<void>;
+  onTerminalFontSizeChange: (fontSize: number) => void;
   onSelectPane: (paneId: string) => void;
   onClosePane: (paneId: string) => void | Promise<void>;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   terminalControlEnabled: boolean;
   terminalEnabled: boolean;
+  terminalFontSize: number;
   terminalReason: string;
   terminalStreaming: boolean;
 }
@@ -311,11 +313,13 @@ export function TerminalWorkspace({
   onResizePanes,
   onSendingChange,
   onSplitPane,
+  onTerminalFontSizeChange,
   onSelectPane,
   onClosePane,
   onUploadImage,
   terminalControlEnabled,
   terminalEnabled,
+  terminalFontSize,
   terminalReason,
   terminalStreaming,
 }: TerminalWorkspaceProps) {
@@ -752,7 +756,9 @@ export function TerminalWorkspace({
                     createTicket={createTerminalTicket}
                     draft={draft}
                     focused={pane.id === agent.activePaneId}
+                    fontSize={terminalFontSize}
                     onDraftChange={onDraftChange}
+                    onFontSizeChange={onTerminalFontSizeChange}
                     onPrompt={(message) => onMessage(message)}
                     onUploadImage={onUploadImage}
                     paneId={pane.id}
