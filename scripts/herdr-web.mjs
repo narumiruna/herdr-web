@@ -6,15 +6,16 @@ import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HELP = `Start herdr-web for a project directory.
+const HELP = `Start the herdr-web workbench, optionally opening a project directory.
 
 Usage: herdr-web [directory]
 
 Arguments:
-  directory  Project directory to open (default: current directory)
+  directory  Project directory to focus or create
 
-The command focuses an existing matching Herdr workspace or creates one,
-then starts the authenticated herdr-web workbench with the existing just workflow.
+With no directory, the command starts herdr-web without changing Herdr workspaces.
+With a directory, it focuses a matching workspace or creates one before startup.
+Use "herdr-web ." to open the current directory.
 `;
 
 function fail(message) {
@@ -80,25 +81,29 @@ function matchingWorkspace(snapshotText, targetDirectory) {
 
 async function startWeb() {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  await new Promise((resolveChild, rejectChild) => {
-    const child = spawn("just", ["run"], {
-      cwd: projectRoot,
-      env: process.env,
-      stdio: "inherit",
+  try {
+    await new Promise((resolveChild, rejectChild) => {
+      const child = spawn("just", ["run"], {
+        cwd: projectRoot,
+        env: process.env,
+        stdio: "inherit",
+      });
+      child.once("error", rejectChild);
+      child.once("exit", (code, signal) => {
+        if (signal) {
+          rejectChild(new Error(`just run stopped by ${signal}`));
+          return;
+        }
+        if (code !== 0) {
+          rejectChild(new Error(`just run exited with status ${code ?? 1}`));
+          return;
+        }
+        resolveChild();
+      });
     });
-    child.once("error", rejectChild);
-    child.once("exit", (code, signal) => {
-      if (signal) {
-        rejectChild(new Error(`just run stopped by ${signal}`));
-        return;
-      }
-      if (code !== 0) {
-        rejectChild(new Error(`just run exited with status ${code ?? 1}`));
-        return;
-      }
-      resolveChild();
-    });
-  });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "Could not start just run");
+  }
 }
 
 const args = process.argv.slice(2);
@@ -107,8 +112,10 @@ if (args.includes("--help") || args.includes("-h")) {
 } else if (args.length > 1 || args[0]?.startsWith("-")) {
   process.stderr.write(HELP);
   fail("Expected zero or one directory argument");
+} else if (args.length === 0) {
+  await startWeb();
 } else {
-  const targetDirectory = canonicalDirectory(args[0] ?? process.cwd());
+  const targetDirectory = canonicalDirectory(args[0]);
   if (targetDirectory) {
     const snapshot = runHerdr(["api", "snapshot"], true);
     if (snapshot !== undefined) {
@@ -126,15 +133,7 @@ if (args.includes("--help") || args.includes("-h")) {
               "--focus",
             ];
         if (runHerdr(action) !== undefined) {
-          try {
-            await startWeb();
-          } catch (error) {
-            fail(
-              error instanceof Error
-                ? error.message
-                : "Could not start just run",
-            );
-          }
+          await startWeb();
         }
       }
     }

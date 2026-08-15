@@ -20,6 +20,11 @@ interface Invocation {
   cwd: string;
 }
 
+interface CliOptions {
+  env?: Record<string, string>;
+  snapshot?: unknown;
+}
+
 async function createFakeCommands(root: string) {
   const binDirectory = resolve(root, "bin");
   const logPath = resolve(root, "calls.ndjson");
@@ -49,7 +54,10 @@ process.exit(Number(process.env[command === "herdr" ? "HERDR_ACTION_EXIT" : "JUS
 
 async function runCli(
   args: string[],
-  snapshot: unknown = { result: { snapshot: { panes: [] } } },
+  {
+    env = {},
+    snapshot = { result: { snapshot: { panes: [] } } },
+  }: CliOptions = {},
 ) {
   const root = await mkdtemp(resolve(tmpdir(), "herdr-web-cli-"));
   const { binDirectory, logPath } = await createFakeCommands(root);
@@ -61,6 +69,7 @@ async function runCli(
       CALL_LOG: logPath,
       HERDR_SNAPSHOT: JSON.stringify(snapshot),
       PATH: `${binDirectory}:${process.env.PATH}`,
+      ...env,
     },
   });
   let invocations: Invocation[] = [];
@@ -115,7 +124,7 @@ describe("herdr-web CLI", () => {
       },
     };
 
-    const result = await runCli([target], snapshot);
+    const result = await runCli([target], { snapshot });
 
     expect(result.status).toBe(0);
     expect(result.invocations[1]).toEqual({
@@ -128,15 +137,46 @@ describe("herdr-web CLI", () => {
     );
   });
 
-  it("defaults to the current directory", async () => {
+  it("starts the web workbench without selecting the current directory", async () => {
     const result = await runCli([]);
 
     expect(result.status).toBe(0);
-    expect(result.invocations[1]).toEqual(
-      expect.objectContaining({
-        args: expect.arrayContaining(["--cwd", result.root]),
-      }),
-    );
+    expect(result.invocations).toEqual([
+      { command: "just", args: ["run"], cwd: projectRoot },
+    ]);
+  });
+
+  it("opens the current directory when explicitly requested", async () => {
+    const result = await runCli(["."]);
+
+    expect(result.status).toBe(0);
+    expect(result.invocations).toEqual([
+      { command: "herdr", args: ["api", "snapshot"], cwd: result.root },
+      {
+        command: "herdr",
+        args: [
+          "workspace",
+          "create",
+          "--cwd",
+          result.root,
+          "--label",
+          basename(result.root),
+          "--focus",
+        ],
+        cwd: result.root,
+      },
+      { command: "just", args: ["run"], cwd: projectRoot },
+    ]);
+  });
+
+  it("reports bare startup failures without invoking Herdr", async () => {
+    const result = await runCli([], { env: { JUST_EXIT: "9" } });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("just run exited with status 9");
+    expect(result.invocations).toEqual([
+      { command: "just", args: ["run"], cwd: projectRoot },
+    ]);
   });
 
   it("rejects an invalid directory before calling Herdr", async () => {
