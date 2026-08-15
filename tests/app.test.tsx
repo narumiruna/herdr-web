@@ -144,7 +144,17 @@ describe("herdr-web terminal-first workbench", () => {
     state.selectedWorkspaceId = "linked-tree";
     state.selectedAgentId = "";
     state.selectedSessionByWorkspace = {};
-    state.agents = [];
+    const blockedAgent = state.agents[0];
+    if (!blockedAgent) throw new Error("Demo state must include an Agent");
+    state.agents = [
+      {
+        ...blockedAgent,
+        id: "blocked-linked-tree",
+        label: "blocked-linked-tree",
+        status: "blocked",
+        workspaceId: "linked-tree",
+      },
+    ];
     state.workspaces = [
       {
         accent: "amber",
@@ -190,15 +200,17 @@ describe("herdr-web terminal-first workbench", () => {
     expect(
       within(nav).getByRole("button", { name: "Open herdr-web Space" }),
     ).toBeVisible();
-    expect(
-      within(nav).getByRole("button", {
-        name: "Open narumi/feat/tree worktree Space",
-      }),
-    ).toHaveAttribute("aria-current", "page");
+    const linkedWorktree = within(nav).getByRole("button", {
+      name: "Open narumi/feat/tree worktree Space",
+    });
+    expect(linkedWorktree).toHaveAttribute("aria-current", "page");
+    expect(within(linkedWorktree).getByText("1 needs input")).toBeVisible();
     expect(
       within(nav).getByRole("group", { name: "herdr-web worktrees" }),
     ).toBeVisible();
-    expect(within(nav).queryByText("worktree-clear-valley-bcba")).toBeVisible();
+    expect(
+      within(linkedWorktree).queryByText("worktree-clear-valley-bcba"),
+    ).not.toBeInTheDocument();
   });
 
   test("switches the Agents panel between grouped and priority order", async () => {

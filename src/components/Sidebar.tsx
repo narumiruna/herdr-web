@@ -146,11 +146,12 @@ export function Sidebar({
     onNewSpace(returnFocus);
   };
   const workspaceRows = workspaceTrees(state.workspaces);
-  const workspaceDetail = (workspace: Workspace) => {
+  const workspaceAttentionDetail = (workspace: Workspace) => {
     const count = attentionByWorkspace.get(workspace.id) ?? 0;
-    if (count > 0) return `${count} needs input`;
-    return workspace.branch;
+    return count > 0 ? `${count} needs input` : "";
   };
+  const workspaceDetail = (workspace: Workspace) =>
+    workspaceAttentionDetail(workspace) || workspace.branch;
   const renderWorkspaceButton = (
     workspace: Workspace,
     variant: "space" | "worktree",
@@ -159,9 +160,8 @@ export function Sidebar({
     const isWorktree = variant === "worktree";
     const label = isWorktree ? worktreeLabel(workspace) : workspace.name;
     const detail = isWorktree
-      ? label === workspace.name
-        ? workspaceDetail(workspace)
-        : workspace.name
+      ? workspaceAttentionDetail(workspace) ||
+        (label === workspace.name ? workspace.branch : workspace.name)
       : workspaceDetail(workspace);
     return (
       <button

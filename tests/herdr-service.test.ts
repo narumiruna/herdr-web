@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import { HerdrApiError, type HerdrClient } from "../server/herdr-client";
 import {
   applyWorktreeBranches,
+  branchlessWorktreeRepoRoots,
   LiveHerdrService,
   parseGitWorktreeBranches,
 } from "../server/herdr-service";
@@ -44,10 +45,13 @@ branch refs/heads/narumi/feat/tree
       ],
     };
 
+    expect(branchlessWorktreeRepoRoots(snapshot)).toEqual(["/repo/herdr-web"]);
+
     applyWorktreeBranches(snapshot, branches);
 
     expect(snapshot.workspaces[0]?.worktree?.branch).toBe("main");
     expect(snapshot.workspaces[1]?.worktree?.branch).toBe("narumi/feat/tree");
+    expect(branchlessWorktreeRepoRoots(snapshot)).toEqual([]);
   });
 
   test("uses the raw protocol spelling when reading pane output", async () => {

@@ -139,12 +139,28 @@ export function applyWorktreeBranches(
 ): void {
   for (const workspace of snapshot.workspaces ?? []) {
     const worktree = workspace.worktree;
-    if (!worktree || worktree.branch) continue;
+    if (!worktree || worktree.branch?.trim()) continue;
     const branch = worktree.checkout_path
       ? branchesByPath.get(worktree.checkout_path)
       : undefined;
     if (branch) worktree.branch = branch;
   }
+}
+
+export function branchlessWorktreeRepoRoots(
+  snapshot: SessionSnapshotResult["snapshot"],
+): string[] {
+  return [
+    ...new Set(
+      (snapshot.workspaces ?? [])
+        .map(({ worktree }) =>
+          worktree && !worktree.branch?.trim()
+            ? worktree.repo_root?.trim()
+            : "",
+        )
+        .filter((repoRoot): repoRoot is string => Boolean(repoRoot)),
+    ),
+  ];
 }
 
 async function loadRepoWorktreeBranches(
@@ -161,13 +177,7 @@ async function loadRepoWorktreeBranches(
 async function enrichSnapshotWorktreeBranches(
   snapshot: SessionSnapshotResult["snapshot"],
 ): Promise<void> {
-  const repoRoots = [
-    ...new Set(
-      (snapshot.workspaces ?? [])
-        .map(({ worktree }) => worktree?.repo_root?.trim())
-        .filter((repoRoot): repoRoot is string => Boolean(repoRoot)),
-    ),
-  ];
+  const repoRoots = branchlessWorktreeRepoRoots(snapshot);
   if (repoRoots.length === 0) return;
 
   const settled = await Promise.allSettled(
