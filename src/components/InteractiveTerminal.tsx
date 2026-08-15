@@ -1,8 +1,11 @@
 import {
   ChatBubbleIcon,
+  CopyIcon,
   EyeOpenIcon,
+  FilePlusIcon,
   ImageIcon,
   MagnifyingGlassIcon,
+  OpenInNewWindowIcon,
   ReloadIcon,
 } from "@radix-ui/react-icons";
 import { Button } from "@radix-ui/themes";
@@ -24,8 +27,10 @@ import {
 import type {
   TerminalTicket,
   TerminalTicketInput,
+  UploadedFile,
   UploadedImage,
 } from "../herdr-api";
+import { MAX_GENERIC_FILE_BYTES } from "../herdr-api";
 import {
   clampTerminalFontSize,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -41,6 +46,26 @@ import {
 } from "./xterm-renderer";
 
 const RECONNECT_DELAYS = [500, 1_000, 2_000, 5_000];
+const TERMINAL_LINK_PATTERN = /https?:\/\/[^\s"'<>]+|(?:~|\/)[^\s"'<>]*/gu;
+
+function safeBrowserUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function terminalLinkAction(
+  value: string,
+): "browser" | "host-path" | undefined {
+  if (safeBrowserUrl(value)) return "browser";
+  if (value.startsWith("/") || value.startsWith("~/")) return "host-path";
+  return undefined;
+}
 
 type TerminalStatus =
   | "connecting"
@@ -68,6 +93,7 @@ interface InteractiveTerminalProps {
   onDraftChange: (agentId: string, update: Partial<ComposerDraft>) => void;
   onFontSizeChange: (fontSize: number) => void;
   onPrompt: (message: string) => Promise<unknown> | undefined;
+  onUploadFile?: (paneId: string, file: File) => Promise<UploadedFile>;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   paneId: string;
   toolbarActions?: ReactNode;
@@ -143,6 +169,7 @@ export function InteractiveTerminal({
   onDraftChange,
   onFontSizeChange,
   onPrompt,
+  onUploadFile,
   onUploadImage,
   paneId,
   toolbarActions,
@@ -150,6 +177,7 @@ export function InteractiveTerminal({
 }: InteractiveTerminalProps) {
   const host = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const genericFileInput = useRef<HTMLInputElement>(null);
   const pasteSink = useRef<HTMLTextAreaElement>(null);
   const promptInput = useRef<HTMLTextAreaElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -186,8 +214,14 @@ export function InteractiveTerminal({
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchWholeWord, setSearchWholeWord] = useState(false);
+  const [searchRegex, setSearchRegex] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptSending, setPromptSending] = useState(false);
+  const [fileUploading, setFileUploading] = useState(false);
+  const [selectionText, setSelectionText] = useState("");
+  const [fileUploadError, setFileUploadError] = useState("");
   const [promptError, setPromptError] = useState("");
   const [ctrlArmed, setCtrlArmed] = useState(false);
   createTicketRef.current = createTicket;
@@ -307,8 +341,12 @@ export function InteractiveTerminal({
           }
           if (message.type === "terminal.frame") {
             reconnectAttempt.current = 0;
+            const scrollLine = terminal.buffer?.active?.viewportY ?? 0;
             if (message.full) terminal.reset();
-            terminal.write(decodeBase64(message.bytes));
+            terminal.write(decodeBase64(message.bytes), () => {
+              if (message.full && scrollLine > 0)
+                terminal.scrollToLine(scrollLine);
+            });
             writable.current = mode === "control" && flowWritable.current;
             setStatus(mode === "control" ? "live" : "read-only");
             return;
@@ -479,6 +517,53 @@ export function InteractiveTerminal({
         lastSentSize.current = size;
       }
     });
+    const terminalWithOptionalLinks = terminal as Terminal & {
+      onSelectionChange?: (callback: () => void) => { dispose(): void };
+      registerLinkProvider?: Terminal["registerLinkProvider"];
+    };
+    const selection = terminalWithOptionalLinks.onSelectionChange?.(() => {
+      setSelectionText(terminal.getSelection());
+    }) ?? { dispose() {} };
+    const links = terminalWithOptionalLinks.registerLinkProvider?.({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = terminal.buffer?.active
+          ?.getLine(bufferLineNumber - 1)
+          ?.translateToString(true);
+        if (!line) {
+          callback(undefined);
+          return;
+        }
+        const found = Array.from(line.matchAll(TERMINAL_LINK_PATTERN)).flatMap(
+          (match) => {
+            const text = match[0];
+            const action = terminalLinkAction(text);
+            const index = match.index ?? -1;
+            if (!action || index < 0) return [];
+            return [
+              {
+                activate: () => {
+                  if (action === "browser") {
+                    window.open(
+                      safeBrowserUrl(text),
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  } else {
+                    void navigator.clipboard?.writeText(text);
+                  }
+                },
+                range: {
+                  end: { x: index + text.length + 1, y: bufferLineNumber },
+                  start: { x: index + 1, y: bufferLineNumber },
+                },
+                text,
+              },
+            ];
+          },
+        );
+        callback(found.length > 0 ? found : undefined);
+      },
+    }) ?? { dispose() {} };
     terminal.attachCustomWheelEventHandler((event) => {
       if (!actionsEnabled || !writable.current || event.deltaY === 0)
         return true;
@@ -587,6 +672,8 @@ export function InteractiveTerminal({
       observer?.disconnect();
       data.dispose();
       resize.dispose();
+      selection.dispose();
+      links.dispose();
       renderer.dispose();
       terminal.dispose();
       terminalRef.current = undefined;
@@ -674,6 +761,61 @@ export function InteractiveTerminal({
 
   const canUploadImages =
     structuredActionsEnabled && sessionMode === "control" && status === "live";
+  const canUploadFiles =
+    canUploadImages && Boolean(onUploadFile) && !fileUploading;
+
+  const uploadGenericFile = async (file: File | undefined) => {
+    if (!file || !canUploadFiles) return;
+    setFileUploadError("");
+    if (file.size === 0 || file.size > MAX_GENERIC_FILE_BYTES) {
+      setFileUploadError("File size must be between 1 byte and 16 MiB.");
+      return;
+    }
+    setFileUploading(true);
+    try {
+      const uploaded = await onUploadFile?.(paneId, file);
+      if (!uploaded?.path)
+        throw new Error("The bridge did not return a file path.");
+      if (!insertImagePaths([uploaded.path])) {
+        setFileUploadError(
+          "The file was uploaded, but its path could not be inserted because this terminal is not writable.",
+        );
+      }
+    } catch (error) {
+      setFileUploadError(
+        error instanceof Error ? error.message : "File upload failed.",
+      );
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
+  const searchOptions = {
+    caseSensitive: searchCaseSensitive,
+    regex: searchRegex,
+    wholeWord: searchWholeWord,
+  };
+
+  const runSearch = (direction: "next" | "previous", value = search) => {
+    if (!value) return;
+    if (direction === "previous")
+      searchRef.current?.findPrevious(value, searchOptions);
+    else searchRef.current?.findNext(value, searchOptions);
+  };
+
+  const openDetachedPane = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("session", agentId);
+    url.searchParams.set("pane", paneId);
+    url.searchParams.set("detached", "1");
+    const opened = window.open(
+      url,
+      `herdr-pane-${paneId}`,
+      "popup,noopener,noreferrer",
+    );
+    if (!opened)
+      setError("The detached pane window was blocked by the browser.");
+  };
 
   const searchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
@@ -682,9 +824,9 @@ export function InteractiveTerminal({
       return;
     }
     if (event.key === "Enter" && event.shiftKey) {
-      searchRef.current?.findPrevious(search);
+      runSearch("previous");
     } else if (event.key === "Enter") {
-      searchRef.current?.findNext(search);
+      runSearch("next");
     }
   };
 
@@ -732,6 +874,33 @@ export function InteractiveTerminal({
             onClick={() => fileInput.current?.click()}
           >
             <ImageIcon />
+          </button>
+          <input
+            ref={genericFileInput}
+            className="composer-file-input"
+            type="file"
+            aria-label="Choose file for terminal"
+            onChange={(event) => {
+              void uploadGenericFile(
+                event.currentTarget.files?.item(0) ?? undefined,
+              );
+              event.currentTarget.value = "";
+            }}
+          />
+          <button
+            type="button"
+            aria-label="Upload file and insert path"
+            disabled={!canUploadFiles}
+            onClick={() => genericFileInput.current?.click()}
+          >
+            <FilePlusIcon />
+          </button>
+          <button
+            type="button"
+            aria-label="Detach pane"
+            onClick={openDetachedPane}
+          >
+            <OpenInNewWindowIcon />
           </button>
           {canPrompt && (
             <button
@@ -784,23 +953,98 @@ export function InteractiveTerminal({
         </button>
       </div>
       {searchOpen && (
-        <label className="terminal-search">
-          <span className="sr-only">Search terminal output</span>
-          <MagnifyingGlassIcon aria-hidden="true" />
-          <input
-            ref={searchInput}
-            value={search}
-            placeholder="Search terminal"
-            onChange={(event) => {
-              setSearch(event.target.value);
-              searchRef.current?.findNext(event.target.value, {
-                incremental: true,
-              });
-            }}
-            onKeyDown={searchKey}
-          />
+        <search className="terminal-search">
+          <label>
+            <span className="sr-only">Search terminal output</span>
+            <MagnifyingGlassIcon aria-hidden="true" />
+            <input
+              ref={searchInput}
+              value={search}
+              placeholder="Search terminal"
+              onChange={(event) => {
+                setSearch(event.target.value);
+                searchRef.current?.findNext(event.target.value, {
+                  ...searchOptions,
+                  incremental: true,
+                });
+              }}
+              onKeyDown={searchKey}
+            />
+          </label>
+          <button type="button" onClick={() => runSearch("previous")}>
+            Previous
+          </button>
+          <button type="button" onClick={() => runSearch("next")}>
+            Next
+          </button>
+          <label>
+            <input
+              type="checkbox"
+              checked={searchCaseSensitive}
+              onChange={(event) => setSearchCaseSensitive(event.target.checked)}
+            />
+            Case
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={searchWholeWord}
+              onChange={(event) => setSearchWholeWord(event.target.checked)}
+            />
+            Word
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={searchRegex}
+              onChange={(event) => setSearchRegex(event.target.checked)}
+            />
+            Regex
+          </label>
           <span>Enter next · Shift+Enter previous · Esc close</span>
-        </label>
+        </search>
+      )}
+      {selectionText && (
+        <div
+          className="terminal-selection-toolbar"
+          role="toolbar"
+          aria-label="Terminal selection actions"
+        >
+          <span>{selectionText.length.toLocaleString()} selected</span>
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(selectionText)}
+          >
+            <CopyIcon /> Copy
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch(selectionText);
+              setSearchOpen(true);
+              searchRef.current?.findNext(selectionText, searchOptions);
+            }}
+          >
+            <MagnifyingGlassIcon /> Search
+          </button>
+          {canPrompt && (
+            <button
+              type="button"
+              disabled={!structuredActionsEnabled}
+              onClick={() => {
+                onDraftChange(agentId, { message: selectionText });
+                setPromptOpen(true);
+              }}
+            >
+              <ChatBubbleIcon /> Prompt
+            </button>
+          )}
+        </div>
+      )}
+      {fileUploadError && (
+        <div className="terminal-inline-error" role="alert">
+          {fileUploadError}
+        </div>
       )}
       <textarea
         ref={pasteSink}

@@ -1,8 +1,16 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import {
+  type FileUploadInput,
+  MAX_FILE_BYTES,
+  type UploadedFile,
+  validateFile,
+} from "./file-upload.js";
 import { HerdrApiError } from "./herdr-client.js";
 import type {
+  AgentLifecycleAction,
   CreateSessionInput,
+  CreateTerminalInput,
   CreateWorkspaceInput,
   PaneSplitDirection,
 } from "./herdr-service.js";
@@ -15,11 +23,19 @@ import {
 import type { TerminalTicketStore } from "./terminal-tickets.js";
 
 export interface HerdrService {
+  agentLifecycle?(
+    target: string,
+    action: AgentLifecycleAction,
+  ): Promise<unknown>;
   closePane(paneId: string): Promise<unknown>;
+  closeTab?(tabId: string): Promise<unknown>;
   createSession(input: CreateSessionInput): Promise<unknown>;
+  createTerminal?(input: CreateTerminalInput): Promise<unknown>;
   createWorkspace(input: CreateWorkspaceInput): Promise<unknown>;
   getState(): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
+  moveTab?(tabId: string, direction: "left" | "right"): Promise<unknown>;
+  renameTab?(tabId: string, label: string): Promise<unknown>;
   setSplitRatio(
     tabId: string,
     path: boolean[],
@@ -31,6 +47,7 @@ export interface HerdrService {
     onEvent: (event: unknown) => void,
     onReady?: () => void,
   ): Promise<void>;
+  uploadFile?(paneId: string, input: FileUploadInput): Promise<UploadedFile>;
   uploadImage(paneId: string, input: ImageUploadInput): Promise<UploadedImage>;
 }
 
@@ -164,6 +181,25 @@ function cleanSplitPath(value: unknown): boolean[] {
 function cleanSplitDirection(value: unknown): PaneSplitDirection {
   if (value !== "right" && value !== "down") {
     throw new TypeError("direction must be right or down");
+  }
+  return value;
+}
+
+function cleanHorizontalDirection(value: unknown): "left" | "right" {
+  if (value !== "left" && value !== "right") {
+    throw new TypeError("direction must be left or right");
+  }
+  return value;
+}
+
+function cleanAgentLifecycleAction(value: unknown): AgentLifecycleAction {
+  if (
+    value !== "archive" &&
+    value !== "clear" &&
+    value !== "restart" &&
+    value !== "stop"
+  ) {
+    throw new TypeError("action must be restart, stop, archive, or clear");
   }
   return value;
 }
@@ -397,6 +433,34 @@ export function createHerdrHttpHandler({
         );
         return;
       }
+      const file = url.pathname.match(/^\/api\/herdr\/panes\/([^/]+)\/files$/);
+      if (request.method === "POST" && file?.[1]) {
+        if (!service.uploadFile) {
+          sendJson(response, 404, {
+            error: {
+              code: "file_upload_unavailable",
+              message: "Generic file upload is unavailable",
+            },
+          });
+          return;
+        }
+        const mediaType = request.headers["content-type"]
+          ?.split(";", 1)[0]
+          ?.trim()
+          .toLowerCase();
+        const input: FileUploadInput = {
+          data: await readBody(request, MAX_FILE_BYTES),
+          filename: request.headers["x-herdr-filename"]?.toString(),
+          mediaType: mediaType ?? "",
+        };
+        validateFile(input);
+        sendJson(
+          response,
+          200,
+          await service.uploadFile(cleanId(file[1]), input),
+        );
+        return;
+      }
       const prompt = url.pathname.match(
         /^\/api\/herdr\/agents\/([^/]+)\/prompt$/,
       );
@@ -443,6 +507,111 @@ export function createHerdrHttpHandler({
       const close = url.pathname.match(/^\/api\/herdr\/panes\/([^/]+)$/);
       if (request.method === "DELETE" && close?.[1]) {
         sendJson(response, 200, await service.closePane(cleanId(close[1])));
+        return;
+      }
+      const tab = url.pathname.match(/^\/api\/herdr\/tabs\/([^/]+)$/);
+      if (request.method === "PATCH" && tab?.[1]) {
+        if (!service.renameTab) {
+          sendJson(response, 404, {
+            error: {
+              code: "tab_rename_unavailable",
+              message: "Herdr tab rename is unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          200,
+          await service.renameTab(
+            cleanId(tab[1]),
+            cleanText(body.label, "label", 80),
+          ),
+        );
+        return;
+      }
+      if (request.method === "DELETE" && tab?.[1]) {
+        if (!service.closeTab) {
+          sendJson(response, 404, {
+            error: {
+              code: "tab_close_unavailable",
+              message: "Herdr tab close is unavailable",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, await service.closeTab(cleanId(tab[1])));
+        return;
+      }
+      const moveTab = url.pathname.match(/^\/api\/herdr\/tabs\/([^/]+)\/move$/);
+      if (request.method === "POST" && moveTab?.[1]) {
+        if (!service.moveTab) {
+          sendJson(response, 404, {
+            error: {
+              code: "tab_move_unavailable",
+              message: "Herdr tab ordering is unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          200,
+          await service.moveTab(
+            cleanId(moveTab[1]),
+            cleanHorizontalDirection(body.direction),
+          ),
+        );
+        return;
+      }
+      const lifecycle = url.pathname.match(
+        /^\/api\/herdr\/agents\/([^/]+)\/lifecycle$/,
+      );
+      if (request.method === "POST" && lifecycle?.[1]) {
+        if (!service.agentLifecycle) {
+          sendJson(response, 404, {
+            error: {
+              code: "agent_lifecycle_unavailable",
+              message: "Herdr Agent lifecycle controls are unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          200,
+          await service.agentLifecycle(
+            cleanId(lifecycle[1]),
+            cleanAgentLifecycleAction(body.action),
+          ),
+        );
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/herdr/terminals"
+      ) {
+        if (!service.createTerminal) {
+          sendJson(response, 404, {
+            error: {
+              code: "terminal_lifecycle_unavailable",
+              message: "Herdr terminal creation is unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          201,
+          await service.createTerminal({
+            label: cleanText(body.label, "label", 80),
+            workspaceId: cleanText(body.workspaceId, "workspaceId", 128),
+          }),
+        );
         return;
       }
       if (

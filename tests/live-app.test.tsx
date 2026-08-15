@@ -330,6 +330,75 @@ describe("live herdr-web app", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
   });
 
+  test("preserves lifecycle mutation errors in the global action alert", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/lifecycle")) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "agent_restart_blocked",
+                message: "Restart blocked by Herdr",
+              },
+            }),
+            { headers: { "content-type": "application/json" }, status: 409 },
+          );
+        }
+        return new Response(JSON.stringify(payload), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.click(
+      screen.getByRole("button", { name: "Session lifecycle actions" }),
+    );
+    await user.click(screen.getByText("Restart Agent"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Restart blocked by Herdr",
+    );
+  });
+
+  test("renders detached pane deep links without the full workbench", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?token=test-token&session=w9%3Ap1&pane=w9%3Ap1&detached=1",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(payload), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+      ),
+    );
+
+    render(<App live />);
+
+    expect(
+      await screen.findByRole("main", { name: "Detached pane π - live-test" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Open navigation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /π - live-test.*Idle/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message π - live-test")).toBeVisible();
+    expect(window.location.search).toBe("");
+  });
+
   test("uploads a selected image and prompts the agent with its host path", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     const imagePath = "/home/user/.herdr-web/uploads/remote-shot.png";

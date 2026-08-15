@@ -7,15 +7,18 @@ import {
   useState,
 } from "react";
 import {
+  type AgentLifecycleAction,
   browserAccessToken,
   HerdrApiClient,
   HerdrBridgeError,
   type NewLiveSession,
+  type NewLiveTerminal,
   type NewLiveWorkspace,
   normalizeWorkspacePath,
   rememberAccessToken,
   type TerminalTicket,
   type TerminalTicketInput,
+  type UploadedFile,
   type UploadedImage,
   workspaceLabelFromPath,
 } from "./herdr-api";
@@ -61,9 +64,15 @@ interface HerdrRuntime {
   accessRole: AccessRole;
   actionError: string;
   clearActionError: () => void;
+  agentLifecycle: (
+    agentId: string,
+    action: AgentLifecycleAction,
+  ) => Promise<void>;
   closePane: (agentId: string, paneId: string) => Promise<void>;
+  closeTab: (agentId: string, tabId: string) => Promise<void>;
   connection: RuntimeConnection;
   createSession: (input: NewLiveSession) => Promise<void>;
+  createTerminal: (input: NewLiveTerminal) => Promise<void>;
   createWorkspace: (input: NewLiveWorkspace) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
@@ -76,6 +85,12 @@ interface HerdrRuntime {
     uploadPaneId?: string,
   ) => Promise<PromptResult>;
   refresh: () => Promise<void>;
+  moveTab: (
+    agentId: string,
+    tabId: string,
+    direction: "left" | "right",
+  ) => Promise<void>;
+  renameTab: (agentId: string, tabId: string, label: string) => Promise<void>;
   resizePanes: (agentId: string, tabId: string, ratio: number) => Promise<void>;
   setAccessToken: (token: string) => void;
   splitPane: (
@@ -89,6 +104,7 @@ interface HerdrRuntime {
     paneId: string,
     input: TerminalTicketInput,
   ) => Promise<TerminalTicket>;
+  uploadFile: (paneId: string, file: File) => Promise<UploadedFile>;
   uploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
 }
 
@@ -257,12 +273,23 @@ export function useHerdrRuntime(
     actionError,
     clearActionError: () => setActionError(""),
     connection,
+    agentLifecycle: async (agentId, action) => {
+      if (!live) return;
+      await mutate((api) => api.agentLifecycle(agentId, action));
+    },
     closePane: async (agentId, paneId) => {
       if (!live) {
         dispatch({ type: "pane.closed", agentId, paneId });
         return;
       }
       await mutate((api) => api.closePane(paneId));
+    },
+    closeTab: async (agentId, tabId) => {
+      if (!live) {
+        dispatch({ type: "session.closed", agentId });
+        return;
+      }
+      await mutate((api) => api.closeTab(tabId));
     },
     createSession: async (input) => {
       if (!live) {
@@ -274,6 +301,17 @@ export function useHerdrRuntime(
         return;
       }
       await mutate((api) => api.createSession(input));
+    },
+    createTerminal: async (input) => {
+      if (!live) {
+        dispatch({
+          type: "terminal.created",
+          id: `terminal-web-${Date.now()}`,
+          ...input,
+        });
+        return;
+      }
+      await mutate((api) => api.createTerminal(input));
     },
     createWorkspace: async (input) => {
       if (!live) {
@@ -339,6 +377,20 @@ export function useHerdrRuntime(
       return { uploadedPath };
     },
     refresh,
+    moveTab: async (agentId, tabId, direction) => {
+      if (!live) {
+        dispatch({ type: "tab.moved", agentId, direction });
+        return;
+      }
+      await mutate((api) => api.moveTab(tabId, direction));
+    },
+    renameTab: async (agentId, tabId, label) => {
+      if (!live) {
+        dispatch({ type: "session.renamed", agentId, label });
+        return;
+      }
+      await mutate((api) => api.renameTab(tabId, label));
+    },
     resizePanes: async (agentId, tabId, ratio) => {
       if (!live) {
         dispatch({ type: "pane.resized", agentId, ratio });
@@ -381,6 +433,10 @@ export function useHerdrRuntime(
     terminalTicket: async (paneId, input) => {
       if (!client) throw new Error("A live Herdr connection is required");
       return client.terminalTicket(paneId, input);
+    },
+    uploadFile: async (paneId, file) => {
+      if (!client) throw new Error("A live Herdr connection is required");
+      return client.uploadFile(paneId, file);
     },
     uploadImage: async (paneId, image) => {
       if (!client) throw new Error("A live Herdr connection is required");

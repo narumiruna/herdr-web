@@ -246,6 +246,45 @@ branch refs/heads/narumi/feat/tree
     }
   });
 
+  test("stores an allowed generic file with a random host path", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-file-project-"));
+    const dataHome = await mkdtemp(join(tmpdir(), "herdr-web-data-"));
+    const uploadsRoot = join(dataHome, "uploads");
+    const data = Buffer.from("hello terminal file\n");
+    const request = vi.fn().mockResolvedValue({
+      pane: { foreground_cwd: directory, pane_id: "w5:p1" },
+      type: "pane_info",
+    });
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { uploadsRoot },
+    );
+
+    try {
+      const result = await service.uploadFile("w5:p1", {
+        data,
+        filename: "notes.md",
+        mediaType: "text/markdown",
+      });
+
+      expect(result).toMatchObject({
+        mediaType: "text/markdown",
+        size: data.length,
+        type: "file_uploaded",
+      });
+      expect(result.path).toContain(uploadsRoot);
+      expect(result.path.endsWith(".md")).toBe(true);
+      await expect(readFile(result.path)).resolves.toEqual(data);
+      await expect(readdir(directory)).resolves.toEqual([]);
+    } finally {
+      await Promise.all(
+        [directory, dataHome].map((path) =>
+          rm(path, { force: true, recursive: true }),
+        ),
+      );
+    }
+  });
+
   test("rejects empty, unsupported, spoofed, and oversized images before reading pane state", async () => {
     const request = vi.fn();
     const service = new LiveHerdrService({ request } as unknown as HerdrClient);

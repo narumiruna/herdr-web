@@ -4,7 +4,9 @@ import {
   ColumnsIcon,
   CopyIcon,
   Cross2Icon,
+  EnterFullScreenIcon,
   ExclamationTriangleIcon,
+  ExitFullScreenIcon,
   ImageIcon,
   LockClosedIcon,
   PaperPlaneIcon,
@@ -31,6 +33,7 @@ import {
   SUPPORTED_IMAGE_TYPES,
   type TerminalTicket,
   type TerminalTicketInput,
+  type UploadedFile,
   type UploadedImage,
 } from "../herdr-api";
 import type {
@@ -86,6 +89,7 @@ interface TerminalWorkspaceProps {
   onTerminalFontSizeChange: (fontSize: number) => void;
   onSelectPane: (paneId: string) => void;
   onClosePane: (paneId: string) => void | Promise<void>;
+  onUploadFile?: (paneId: string, file: File) => Promise<UploadedFile>;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   terminalControlEnabled: boolean;
   terminalEnabled: boolean;
@@ -316,6 +320,7 @@ export function TerminalWorkspace({
   onTerminalFontSizeChange,
   onSelectPane,
   onClosePane,
+  onUploadFile,
   onUploadImage,
   terminalControlEnabled,
   terminalEnabled,
@@ -324,6 +329,7 @@ export function TerminalWorkspace({
   terminalStreaming,
 }: TerminalWorkspaceProps) {
   const [dragging, setDragging] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [closingPane, setClosingPane] = useState<TerminalPane>();
   const [closeError, setCloseError] = useState("");
   const [closing, setClosing] = useState(false);
@@ -347,10 +353,13 @@ export function TerminalWorkspace({
     agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
   const sourcePaneRatio = clampPaneRatio(agent.paneSplit?.ratio ?? 0.5);
   const paneSplitDirection = agent.paneSplit?.direction ?? "right";
-  const visiblePanes = agent.panes.filter(
-    (pane) => agent.panes.length <= 2 || pane.id === agent.activePaneId,
-  );
-  const showsPaneSplit = agent.panes.length === 2 && visiblePanes.length === 2;
+  const visiblePanes = focusMode
+    ? agent.panes.filter((pane) => pane.id === activePane?.id)
+    : agent.panes.filter(
+        (pane) => agent.panes.length <= 2 || pane.id === agent.activePaneId,
+      );
+  const showsPaneSplit =
+    !focusMode && agent.panes.length === 2 && visiblePanes.length === 2;
   const paneGridStyle = showsPaneSplit
     ? ({
         "--pane-first": `${paneRatio}fr`,
@@ -370,6 +379,11 @@ export function TerminalWorkspace({
       setPaneRatio(sourcePaneRatio);
     }
   }, [paneResizeDragging, paneResizePending, sourcePaneRatio]);
+
+  useEffect(() => {
+    if (activePane) return;
+    setFocusMode(false);
+  }, [activePane]);
 
   useEffect(() => {
     if (!draft.attachment || typeof URL.createObjectURL !== "function") {
@@ -519,22 +533,25 @@ export function TerminalWorkspace({
     );
   };
 
-  const commitPaneResize = async (ratio: number) => {
-    const next = clampPaneRatio(ratio);
-    setPaneResizeDragging(false);
-    if (!actionsEnabled || paneResizePending || next === sourcePaneRatio) {
-      setPaneRatio(sourcePaneRatio);
-      return;
-    }
-    setPaneResizePending(true);
-    try {
-      await onResizePanes(next);
-    } catch {
-      setPaneRatio(sourcePaneRatio);
-    } finally {
-      setPaneResizePending(false);
-    }
-  };
+  const commitPaneResize = useCallback(
+    async (ratio: number) => {
+      const next = clampPaneRatio(ratio);
+      setPaneResizeDragging(false);
+      if (!actionsEnabled || paneResizePending || next === sourcePaneRatio) {
+        setPaneRatio(sourcePaneRatio);
+        return;
+      }
+      setPaneResizePending(true);
+      try {
+        await onResizePanes(next);
+      } catch {
+        setPaneRatio(sourcePaneRatio);
+      } finally {
+        setPaneResizePending(false);
+      }
+    },
+    [actionsEnabled, onResizePanes, paneResizePending, sourcePaneRatio],
+  );
 
   const confirmClose = async () => {
     if (!actionsEnabled || !closingPane || closing) return;
@@ -555,6 +572,84 @@ export function TerminalWorkspace({
       setClosing(false);
     }
   };
+
+  const selectRelativePane = useCallback(
+    (offset: number) => {
+      if (agent.panes.length < 2) return;
+      const current = Math.max(
+        0,
+        agent.panes.findIndex(({ id }) => id === agent.activePaneId),
+      );
+      const next = agent.panes.at(
+        (current + offset + agent.panes.length) % agent.panes.length,
+      );
+      if (next) onSelectPane(next.id);
+    },
+    [agent.activePaneId, agent.panes, onSelectPane],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".main-workspace")) return;
+      const editable = target.closest(
+        "input, textarea, [contenteditable='true']",
+      );
+      if (editable && event.key !== "Escape") return;
+      const shortcut = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.key}`;
+      if (shortcut === "Alt+ArrowLeft" || shortcut === "Alt+ArrowUp") {
+        event.preventDefault();
+        selectRelativePane(-1);
+      } else if (
+        shortcut === "Alt+ArrowRight" ||
+        shortcut === "Alt+ArrowDown"
+      ) {
+        event.preventDefault();
+        selectRelativePane(1);
+      } else if (
+        shortcut === "Alt+Shift+ArrowLeft" ||
+        shortcut === "Alt+Shift+ArrowUp"
+      ) {
+        event.preventDefault();
+        void commitPaneResize(paneRatio - 0.05);
+      } else if (
+        shortcut === "Alt+Shift+ArrowRight" ||
+        shortcut === "Alt+Shift+ArrowDown"
+      ) {
+        event.preventDefault();
+        void commitPaneResize(paneRatio + 0.05);
+      } else if (event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFocusMode((current) => !current);
+      } else if (event.altKey && event.key.toLowerCase() === "\\") {
+        event.preventDefault();
+        if (actionsEnabled && agent.panes.length < 2) void onSplitPane("right");
+      } else if (event.altKey && event.key.toLowerCase() === "-") {
+        event.preventDefault();
+        if (actionsEnabled && agent.panes.length < 2) void onSplitPane("down");
+      } else if (event.altKey && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        if (actionsEnabled && agent.panes.length > 1 && activePane) {
+          setCloseError("");
+          setClosingPane(activePane);
+        }
+      } else if (event.key === "Escape" && focusMode) {
+        event.preventDefault();
+        setFocusMode(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    actionsEnabled,
+    activePane,
+    agent.panes.length,
+    commitPaneResize,
+    focusMode,
+    onSplitPane,
+    paneRatio,
+    selectRelativePane,
+  ]);
 
   const terminalContext = (pane: TerminalPane) => {
     const paneWorkingDirectory = pane.cwd || workspace.path;
@@ -612,6 +707,23 @@ export function TerminalWorkspace({
     };
     return (
       <>
+        <IconTooltip
+          label={focusMode ? "Exit pane focus mode" : "Focus this pane"}
+        >
+          <IconButton
+            type="button"
+            variant="ghost"
+            color="gray"
+            aria-pressed={focusMode}
+            aria-label={focusMode ? "Exit pane focus mode" : "Focus this pane"}
+            onClick={() => {
+              onSelectPane(pane.id);
+              setFocusMode((current) => !current);
+            }}
+          >
+            {focusMode ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
+          </IconButton>
+        </IconTooltip>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <IconButton
@@ -661,7 +773,7 @@ export function TerminalWorkspace({
   };
 
   return (
-    <main className="main-workspace">
+    <main className="main-workspace" data-focus-mode={focusMode}>
       {agent.status === "blocked" && (
         <section className="attention-banner" aria-label="Agent needs input">
           <ExclamationTriangleIcon aria-hidden="true" />
@@ -760,6 +872,7 @@ export function TerminalWorkspace({
                     onDraftChange={onDraftChange}
                     onFontSizeChange={onTerminalFontSizeChange}
                     onPrompt={(message) => onMessage(message)}
+                    onUploadFile={onUploadFile}
                     onUploadImage={onUploadImage}
                     paneId={pane.id}
                     toolbarContext={terminalContext(pane)}

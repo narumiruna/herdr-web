@@ -988,7 +988,8 @@
 @media (max-width: 700px) {
   .topbar-actions .desktop-new-agent,
   .topbar-actions .desktop-details,
-  .topbar-actions .desktop-appearance {
+  .topbar-actions .desktop-appearance,
+  .topbar-actions .desktop-notifications {
     display: none;
   }
   .topbar-actions .mobile-more-trigger {
@@ -1013,6 +1014,9 @@
   }
   .topbar-actions {
     gap: 5px;
+  }
+  .work-status-summary {
+    display: none;
   }
   .topbar-actions > .rt-Button {
     min-height: 44px;

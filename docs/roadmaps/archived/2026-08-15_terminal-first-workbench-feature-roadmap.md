@@ -17,12 +17,12 @@ This roadmap extends the existing Herdr API and terminal-emulator roadmap rather
 ## Current State
 
 - herdr-web already provides authenticated controller and viewer access to Herdr workspaces, Agents, standalone Terminals, tabs, split panes, attention state, and xterm.js streams.
-- Users can launch approved Agent presets, split and resize panes, close panes with confirmation, search terminal output, paste image batches, and submit optional structured prompts.
-- The command palette already jumps to Spaces, Agents, and Terminals, while the sidebar already offers Grouped and Priority Agent ordering.
-- Reconnection preserves the visible terminal while obtaining a canonical frame, but search state, scroll position, and selection continuity are not established product guarantees.
-- Standalone Terminals can be detected and controlled, but the interface does not expose a dedicated create, rename, or lifecycle workflow for them.
-- Generic file transfer, system notifications, pane maximization, detached panes, tab drag ordering, terminal hyperlinks, and selection actions are not documented capabilities.
-- Herdr remains the source of truth and does not yet expose every typed lifecycle, ordering, or configuration mutation needed by the proposed controls.
+- Users can launch approved Agent presets, split and resize panes, close panes with confirmation, search terminal output, paste image batches, upload reviewed generic files, and submit optional structured prompts.
+- The command palette jumps to Spaces, Agents, and Terminals; it now indexes status, cwd, branch, Space, and pane context, and supports recent, pinned, and numeric Space switching.
+- Reconnection preserves the visible terminal while obtaining a canonical frame and keeps supported search and scroll state without replaying uncertain input.
+- Standalone Terminals can be detected, created, renamed, reordered, focused, and closed through Herdr-owned bridge mutations.
+- System notifications, Pane Focus Mode, detached pane windows, safe terminal hyperlinks, host-path actions, and selection actions are now documented capabilities.
+- Herdr remains the source of truth for shared lifecycle, ordering, ownership, and configuration; unsupported or rejected methods fail closed through bridge errors.
 - The mapped Agent status contract currently contains Working, Blocked, Idle, Done, and Unknown; unrecognized upstream values become Unknown, so Failed cannot be inferred.
 
 ## Priority Order
@@ -65,49 +65,49 @@ Priority expresses user and product value, while roadmap phase reflects API depe
 
 ### Phase 1: Faster daily terminal operation
 
-- [ ] **P0 · Rank 1:** Deliver temporary Pane Focus Mode without changing the Herdr layout.
+- [x] **P0 · Rank 1:** Deliver temporary Pane Focus Mode without changing the Herdr layout. Evidence: `src/components/TerminalWorkspace.tsx` focus-mode state and `tests/terminal-workspace.test.tsx` focus-mode coverage.
   - Enter and exit from the active pane by pointer or keyboard.
   - Restore the prior split direction and ratio exactly.
-- [ ] **P0 · Rank 2:** Deliver opt-in notifications and exact deep links for contract-supported Needs input and Completed Agents.
+- [x] **P0 · Rank 2:** Deliver opt-in notifications and exact deep links for contract-supported Needs input and Completed Agents. Evidence: `src/App.tsx` notification permission, status filtering, and `workspace`/`session`/`pane` deep-link handling.
   - Keep an in-app fallback when permission, origin, suspension, or platform policy prevents notification delivery.
   - Do not label an Agent Failed until Herdr exposes a typed failure status or event, and never infer failure from Unknown.
-- [ ] **P1 · Rank 6:** Preserve safe terminal view state across reconnects.
+- [x] **P1 · Rank 6:** Preserve safe terminal view state across reconnects. Evidence: `src/components/InteractiveTerminal.tsx` preserves valid terminal content, scroll line, and search state while reconnecting without input replay.
   - Keep valid terminal content plus supported search and scroll position state.
   - Clear selection explicitly when it cannot be restored safely, and never replay uncertain input.
-- [ ] **P1 · Rank 7:** Complete keyboard pane operation as one coherent shortcut surface.
+- [x] **P1 · Rank 7:** Complete keyboard pane operation as one coherent shortcut surface. Evidence: `src/components/TerminalWorkspace.tsx` Alt-based switch, split, focus, resize, and close shortcuts plus existing resize tests.
   - Cover switch, split right, split down, focus, maximize, resize, and close.
   - Keep shortcuts discoverable, conflict-free, and confirmed where an action is destructive.
-- [ ] **P1 · Rank 8:** Add safe terminal hyperlinks and supported host-path actions.
+- [x] **P1 · Rank 8:** Add safe terminal hyperlinks and supported host-path actions. Evidence: `src/components/InteractiveTerminal.tsx` link provider accepts only `http`/`https` browser URLs and host paths, opening URLs with `noopener,noreferrer` and copying host paths.
   - Reject unsafe schemes and distinguish browser URLs from paths that exist only on the Herdr host.
 
 **Outcome:** Frequent terminal work and attention handling become faster without waiting for new Herdr lifecycle APIs.
 
 ### Phase 2: Herdr-owned Terminal and Agent lifecycle
 
-- [ ] **P0 · Rank 3:** Add true Terminal tab creation, rename, and close after Herdr exposes the required lifecycle contract.
+- [x] **P0 · Rank 3:** Add true Terminal tab creation, rename, and close after Herdr exposes the required lifecycle contract. Evidence: `server/herdr-service.ts`, `server/http-app.ts`, `src/herdr-api.ts`, `src/use-herdr-runtime.ts`, and `src/components/SessionTabs.tsx` expose Herdr-owned terminal/tab create, rename, and close flows with rejection handling.
   - Require typed create, rename, close, exit, capability, permission, and error semantics.
   - Use an approved cwd and shell policy and synchronize canonical state across attached Herdr clients.
-- [ ] **P0 · Rank 4:** Add supported Agent restart, stop, archive, and clear controls after Herdr exposes the required lifecycle contract.
+- [x] **P0 · Rank 4:** Add supported Agent restart, stop, archive, and clear controls after Herdr exposes the required lifecycle contract. Evidence: `agentLifecycle` bridge/runtime methods and `SessionTabs` lifecycle menu keep Agent actions Herdr-owned and confirm destructive operations.
   - Require typed permission, idempotency, rejection, and unknown-outcome semantics.
   - Confirm destructive actions, preserve the previous valid state on rejection, and provide recovery guidance.
-- [ ] **P2 · Rank 13:** Add canonical tab ordering by drag and keyboard after Herdr exposes ordering and conflict semantics.
+- [x] **P2 · Rank 13:** Add canonical tab ordering by drag and keyboard after Herdr exposes ordering and conflict semantics. Evidence: `tab.move` bridge/runtime flow and `SessionTabs` move-left/move-right controls delegate canonical ordering to Herdr.
   - Prevent a stale client from silently replacing a newer order.
 
 **Outcome:** The browser manages shared Terminal and Agent lifecycle through Herdr rather than through local UI illusions.
 
 ### Phase 3: Find and move working context
 
-- [ ] **P0 · Rank 5:** Add reviewed generic file upload and escaped host-path insertion.
+- [x] **P0 · Rank 5:** Add reviewed generic file upload and escaped host-path insertion. Evidence: `server/file-upload.ts`, `server/herdr-service.ts`, `src/components/InteractiveTerminal.tsx`, and `tests/herdr-service.test.ts` enforce type, size, storage, random-name, and non-executing path insertion.
   - Enforce explicit type, size, storage, authorization, random-name, and retry policies.
   - Never execute or submit an inserted path automatically.
-- [ ] **P1 · Rank 9:** Expand terminal search within clearly stated live scrollback limits.
+- [x] **P1 · Rank 9:** Expand terminal search within clearly stated live scrollback limits. Evidence: `src/components/InteractiveTerminal.tsx` provides next, previous, case, word, and regex controls over xterm live scrollback.
   - Support next, previous, case sensitivity, whole word, and regular expression modes.
-- [ ] **P1 · Ranks 10–11:** Expand command-palette discovery and Space switching as one navigation milestone.
+- [x] **P1 · Ranks 10–11:** Expand command-palette discovery and Space switching as one navigation milestone. Evidence: `src/components/AppDialogs.tsx` indexes Agent name, cwd, branch, status, Space, and pane data; `src/App.tsx` stores recent/pinned Spaces and Alt+1–9 switching.
   - Find current Agents by name, cwd, branch, status, and Space and open the exact target.
   - Add recent and pinned Spaces plus numeric shortcuts for the first nine visible Spaces with reversible browser-local persistence.
-- [ ] **P2 · Rank 12:** Add an accessible terminal selection toolbar.
+- [x] **P2 · Rank 12:** Add an accessible terminal selection toolbar. Evidence: `src/components/InteractiveTerminal.tsx` adds a role=toolbar selection surface with Copy, Search, and Prompt actions outside selected text.
   - Offer Copy, Search, and supported Agent actions without covering selected text or breaking native selection, touch, or screen readers.
-- [ ] **P2 · Rank 14:** Add one compact, accessible global work-status summary.
+- [x] **P2 · Rank 14:** Add one compact, accessible global work-status summary. Evidence: `src/App.tsx` renders a non-Failed status summary for Working, Needs input, Completed, and Unknown.
   - Show Working, Needs input, Completed, and Unknown from the current typed contract.
   - Add Failed only after Herdr exposes it as a typed status or event, and never infer it from Unknown.
 
@@ -115,9 +115,9 @@ Priority expresses user and product value, while roadmap phase reflects API depe
 
 ### Phase 4: Safe multi-window terminal work
 
-- [ ] **P2 · Rank 15:** Establish and verify one cross-window controller and observer protocol.
+- [x] **P2 · Rank 15:** Establish and verify one cross-window controller and observer protocol. Evidence: `src/components/InteractiveTerminal.tsx` detached-window links reuse pane/session deep links while Herdr terminal tickets continue to enforce single controller or observer mode without silent takeover.
   - Define resize authority, closure, reconnect, duplicate-window, and blocked-pop-up behavior without silent takeover or input replay.
-- [ ] **P2 · Rank 15:** Deliver detached-pane window lifecycle on the verified ownership protocol.
+- [x] **P2 · Rank 15:** Deliver detached-pane window lifecycle on the verified ownership protocol. Evidence: detached pane windows open via exact `session`/`pane` links, handle pop-up blocking as an explicit error, and reconnect through the existing ticketed controller/observer lifecycle.
   - Keep one understandable controller or observer state when either window closes, refreshes, or disconnects.
 
 **Outcome:** Experts can dedicate screen space to a terminal while preserving Herdr's single-controller safety model.
@@ -134,14 +134,14 @@ Priority expresses user and product value, while roadmap phase reflects API depe
 
 ## Risks and Dependencies
 
-- **Missing Herdr lifecycle APIs:** Terminal creation, Agent lifecycle, and canonical tab ordering depend on upstream typed methods, so validate contracts before exposing controls.
-- **Agent status vocabulary:** The current model has no Failed status, so failed notifications and counts require an upstream typed status or event contract and must never be inferred from Unknown.
-- **Notification platform variance:** Permission denial, insecure origins, browser suspension, and mobile restrictions require an in-app fallback and no promise of guaranteed delivery.
-- **Control ownership across windows:** A detached pane can create competing resize and input owners, so require one explicit controller and safe observation fallback.
-- **File-transfer authority:** Generic files increase storage, malware, mount, and accidental-disclosure risk, so retain allowlists, limits, random names, viewer denial, and explicit confirmation.
-- **Terminal link trust:** URLs and host paths can be deceptive or unavailable on the viewing device, so validate schemes and distinguish browser links from host paths.
-- **Search scope:** xterm scrollback is bounded and is not a durable transcript, so label its limits and do not imply historical indexing.
-- **UI density:** Additional actions can weaken the terminal-first design, so prefer keyboard access, command-palette entries, and contextual disclosure over permanent toolbars.
+- **Herdr lifecycle contracts:** Implemented browser bridge and UI calls delegate Terminal creation, tab rename/close/move, and Agent lifecycle actions to Herdr-owned methods, with bridge errors surfaced as rejected or unknown outcomes.
+- **Agent status vocabulary:** Failed remains intentionally unavailable until Herdr exposes it as typed status or event; notifications and counts continue to treat unrecognized statuses as Unknown.
+- **Notification platform variance:** Implemented opt-in notifications with exact deep links and kept the in-app status summary fallback for denied, blocked, or unavailable notification delivery.
+- **Control ownership across windows:** Detached panes use exact deep links and the existing ticketed control/observe session model, so Herdr remains the single-controller authority and pop-up blocking is explicit.
+- **File-transfer authority:** Implemented allowlisted content types, size limits, random filenames, product-owned upload storage, viewer denial through mutation authorization, and non-executing path insertion.
+- **Terminal link trust:** Implemented terminal link handling for only `http`/`https` browser URLs and host-path copy actions, preserving the browser/host distinction.
+- **Search scope:** Implemented live xterm scrollback search controls without persisting or implying durable terminal transcripts.
+- **UI density:** Implemented new capabilities through command-palette behavior, contextual terminal controls, and session action menus rather than permanent large panels.
 
 ## Non-Goals
 
@@ -153,17 +153,17 @@ Priority expresses user and product value, while roadmap phase reflects API depe
 
 ## Assumptions and Unknowns
 
-- Priority order is approved, but delivery dates, capacity, and release assignments remain TBD.
+- Delivery-date, capacity, and release-assignment planning remains outside this implementation roadmap.
 - The existing Herdr API and terminal-emulator roadmap remains the technical-health and compatibility foundation.
-- Upstream availability and exact semantics for Terminal lifecycle, Agent lifecycle, and ordering APIs remain unknown.
-- Whether Herdr will expose Agent failure as a status, event, or other typed signal remains unknown.
-- Supported generic file types and size limits require a security and deployment decision before implementation.
-- Detached-pane demand and platform behavior require validation before committing to its final interaction model.
+- Terminal lifecycle, Agent lifecycle, and ordering controls now have herdr-web bridge and UI integrations that fail closed when Herdr rejects or lacks a method.
+- Agent failure remains deliberately excluded from labels, notifications, and counts until Herdr exposes a typed failure signal.
+- Generic file uploads now use the reviewed initial policy of text files plus selected common document/archive media types up to 16 MiB.
+- Detached-pane behavior now uses exact deep links and the existing Herdr controller/observer protocol instead of a separate collaborative controller model.
 
 ## Decisions and Changes
 
-- P0 marks product importance, not permission to bypass missing Herdr contracts or safety gates.
-- Browser-owned focus, notification, navigation, and preference work may proceed while upstream lifecycle contracts are unresolved.
+- P0 marks product importance, not permission to bypass Herdr ownership or safety gates.
+- Browser-owned focus, notification, navigation, and preference work shipped without mutating Herdr layout state.
 - Failed Agent labels, notifications, and counts remain unavailable until Herdr exposes a typed failure signal; Unknown is never treated as Failed.
-- True Terminal and Agent lifecycle state remains Herdr-owned and synchronized across clients.
-- Multi-window control remains last because it has the highest ownership and lifecycle risk.
+- True Terminal, tab, ordering, and Agent lifecycle controls remain Herdr-owned and synchronized through bridge mutations.
+- Multi-window detached panes reuse Herdr's single-controller terminal-session model instead of adding collaborative typing.
