@@ -357,6 +357,45 @@
   cursor: not-allowed;
   opacity: 0.42;
 }
+.terminal-selection-toolbar {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--terminal-border);
+  background: var(--terminal-panel);
+  color: var(--terminal-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
+.terminal-selection-toolbar button {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--terminal-border);
+  border-radius: 5px;
+  background: var(--terminal-elevated);
+  color: var(--terminal-text);
+  cursor: pointer;
+  font: inherit;
+}
+.terminal-selection-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.terminal-inline-error {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--red-8);
+  background: var(--red-3);
+  color: var(--red-12);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
 .terminal-paste-sink {
   position: absolute;
   width: 1px;
@@ -397,7 +436,17 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 10px;
 }
-.terminal-search input {
+.terminal-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.terminal-search label:first-child {
+  min-width: 160px;
+  flex: 1;
+}
+.terminal-search input[type="text"],
+.terminal-search label:first-child input {
   min-width: 80px;
   flex: 1;
   padding: 5px 7px;
@@ -407,7 +456,23 @@
   background: var(--terminal);
   color: var(--terminal-text);
 }
-.terminal-search input:focus-visible {
+.terminal-search input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--amber-9);
+}
+.terminal-search button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--terminal-border);
+  border-radius: 5px;
+  background: var(--terminal-panel);
+  color: var(--terminal-text);
+  cursor: pointer;
+  font: inherit;
+}
+.terminal-search input:focus-visible,
+.terminal-search button:focus-visible {
   border-color: var(--amber-8);
   box-shadow: 0 0 0 1px var(--amber-8);
 }

@@ -312,6 +312,41 @@ describe("TerminalWorkspace decision states", () => {
     ).toHaveAttribute("aria-valuenow", "60");
   });
 
+  test("toggles pane focus mode without mutating the Herdr split", async () => {
+    const agent = demoAgent();
+    agent.panes.push({
+      command: "zsh",
+      id: "pane-shell",
+      lines: ["$ pwd"],
+      title: "shell",
+    });
+    agent.paneSplit = { direction: "right", ratio: 0.6 };
+    render(<Harness agent={agent} />);
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Focus this pane" })[0],
+    );
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-focus-mode", "true");
+    expect(
+      screen.queryByRole("separator", { name: "Resize terminal panes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "shell terminal" }),
+    ).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-focus-mode",
+      "false",
+    );
+    expect(
+      screen.getByRole("separator", { name: "Resize terminal panes" }),
+    ).toHaveAttribute("aria-valuenow", "60");
+  });
+
   test("restores the confirmed pane ratio when Herdr rejects a resize", async () => {
     const agent = demoAgent();
     agent.panes.push({

@@ -1,4 +1,5 @@
 import {
+  BellIcon,
   CheckCircledIcon,
   Cross2Icon,
   DotsHorizontalIcon,
@@ -73,6 +74,34 @@ export function App({
     if (saved === "light" || saved === "dark") return saved;
     return "dark";
   });
+  const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<string[]>(() => {
+    const saved =
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "pinned-workspaces")
+        : null;
+    try {
+      const parsed = JSON.parse(saved ?? "[]") as unknown;
+      return Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [recentWorkspaceIds, setRecentWorkspaceIds] = useState<string[]>(() => {
+    const saved =
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "recent-workspaces")
+        : null;
+    try {
+      const parsed = JSON.parse(saved ?? "[]") as unknown;
+      return Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
   const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
     const saved =
       typeof window.localStorage?.getItem === "function"
@@ -102,6 +131,11 @@ export function App({
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keybindingsOpen, setKeybindingsOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    () =>
+      typeof window.Notification === "function" &&
+      Notification.permission === "granted",
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
@@ -125,6 +159,7 @@ export function App({
   const settingsWasOpen = useRef(false);
   const keybindingsWereOpen = useRef(false);
   const detailsWereOpen = useRef(false);
+  const notifiedAgentState = useRef<Record<string, string>>({});
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
     state.workspaces[0];
@@ -140,6 +175,17 @@ export function App({
   const canCreateSpace =
     runtime.connection === "connected" && runtime.accessRole === "controller";
   const canStartAgent = canCreateSpace && pendingLaunch?.status !== "starting";
+  const statusCounts = state.agents.reduce(
+    (counts, session) => {
+      if (session.kind !== "agent") return counts;
+      if (session.status === "blocked") counts.needsInput += 1;
+      else if (session.status === "done") counts.completed += 1;
+      else if (session.status === "working") counts.working += 1;
+      else counts.unknown += 1;
+      return counts;
+    },
+    { completed: 0, needsInput: 0, unknown: 0, working: 0 },
+  );
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -153,6 +199,12 @@ export function App({
     },
     [],
   );
+
+  const rememberWorkspace = useCallback((workspaceId: string) => {
+    setRecentWorkspaceIds((current) =>
+      [workspaceId, ...current.filter((id) => id !== workspaceId)].slice(0, 9),
+    );
+  }, []);
 
   useEffect(() => {
     if (commandWasOpen.current && !commandOpen) commandTrigger.current?.focus();
@@ -225,6 +277,26 @@ export function App({
     if (typeof window.localStorage?.setItem === "function") {
       writeProductStorage(
         window.localStorage,
+        "pinned-workspaces",
+        JSON.stringify(pinnedWorkspaceIds),
+      );
+    }
+  }, [pinnedWorkspaceIds]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(
+        window.localStorage,
+        "recent-workspaces",
+        JSON.stringify(recentWorkspaceIds),
+      );
+    }
+  }, [recentWorkspaceIds]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(
+        window.localStorage,
         "sidebar-width",
         String(sidebarWidth),
       );
@@ -291,10 +363,96 @@ export function App({
         event.preventDefault();
         setCommandOpen((current) => !current);
       }
+      if (event.altKey && /^[1-9]$/.test(event.key)) {
+        const workspaceId = state.workspaces[Number(event.key) - 1]?.id;
+        if (workspaceId) {
+          event.preventDefault();
+          rememberWorkspace(workspaceId);
+          runtime.dispatch({ type: "workspace.selected", workspaceId });
+        }
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [rememberWorkspace, runtime, state.workspaces]);
+
+  useEffect(() => {
+    if (runtime.status !== "ready") return;
+    const url = new URL(window.location.href);
+    const sessionId = url.searchParams.get("session")?.trim();
+    const workspaceId = url.searchParams.get("workspace")?.trim();
+    const paneId = url.searchParams.get("pane")?.trim();
+    const linkedSession = state.agents.find(({ id }) => id === sessionId);
+    if (sessionId && linkedSession) {
+      runtime.dispatch({ type: "agent.selected", agentId: sessionId });
+      if (paneId && linkedSession.panes.some(({ id }) => id === paneId)) {
+        runtime.dispatch({ type: "pane.selected", agentId: sessionId, paneId });
+      }
+      url.searchParams.delete("session");
+      url.searchParams.delete("workspace");
+      url.searchParams.delete("pane");
+      window.history.replaceState(
+        {},
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    } else if (
+      workspaceId &&
+      state.workspaces.some(({ id }) => id === workspaceId)
+    ) {
+      runtime.dispatch({ type: "workspace.selected", workspaceId });
+      url.searchParams.delete("workspace");
+      window.history.replaceState(
+        {},
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    }
+  }, [runtime, state.agents, state.workspaces]);
+
+  useEffect(() => {
+    if (!notificationsEnabled || typeof window.Notification !== "function")
+      return;
+    if (Notification.permission !== "granted") return;
+    for (const session of state.agents) {
+      if (session.kind !== "agent") continue;
+      const previous = notifiedAgentState.current[session.id];
+      notifiedAgentState.current[session.id] = session.status;
+      if (previous === undefined || previous === session.status) continue;
+      if (session.status !== "blocked" && session.status !== "done") continue;
+      const target = state.workspaces.find(
+        ({ id }) => id === session.workspaceId,
+      );
+      const url = new URL(window.location.href);
+      url.searchParams.set("workspace", session.workspaceId);
+      url.searchParams.set("session", session.id);
+      const notification = new Notification(
+        session.status === "blocked"
+          ? `${session.label} needs input`
+          : `${session.label} completed`,
+        {
+          body: `${target?.name ?? "Herdr"} · ${session.currentStep || session.summary}`,
+          tag: `herdr-web-${session.id}-${session.status}`,
+        },
+      );
+      notification.onclick = () => {
+        window.focus();
+        window.history.pushState(
+          {},
+          "",
+          `${url.pathname}${url.search}${url.hash}`,
+        );
+        runtime.dispatch({ type: "agent.selected", agentId: session.id });
+        notification.close();
+      };
+    }
+  }, [notificationsEnabled, runtime, state.agents, state.workspaces]);
+
+  const requestNotifications = async () => {
+    if (typeof window.Notification !== "function") return;
+    const permission = await Notification.requestPermission();
+    setNotificationsEnabled(permission === "granted");
+  };
 
   if (runtime.status !== "ready") {
     return (
@@ -341,7 +499,15 @@ export function App({
     setKeybindingsOpen(true);
   };
   const selectWorkspace = (workspaceId: string) => {
+    rememberWorkspace(workspaceId);
     runtime.dispatch({ type: "workspace.selected", workspaceId });
+  };
+  const togglePinnedWorkspace = (workspaceId: string) => {
+    setPinnedWorkspaceIds((current) =>
+      current.includes(workspaceId)
+        ? current.filter((id) => id !== workspaceId)
+        : [workspaceId, ...current].slice(0, 9),
+    );
   };
   const selectAgent = (agentId: string) => {
     runtime.dispatch({ type: "agent.selected", agentId });
@@ -357,6 +523,70 @@ export function App({
       throw error;
     }
   };
+  const createTerminal = async (returnFocus?: HTMLElement | null) => {
+    if (!workspace?.id || !canStartAgent) return;
+    const label = window.prompt("Terminal tab name", "Terminal")?.trim();
+    returnFocus?.focus();
+    if (!label) return;
+    try {
+      await runtime.createTerminal({ label, workspaceId: workspace.id });
+    } catch {
+      runtime.clearActionError();
+    }
+  };
+
+  const renameSession = async (session: typeof agent) => {
+    if (!session?.tabId) return;
+    const label = window.prompt("Rename tab", session.label)?.trim();
+    if (!label || label === session.label) return;
+    try {
+      await runtime.renameTab(session.id, session.tabId, label);
+    } catch {
+      runtime.clearActionError();
+    }
+  };
+
+  const closeSession = async (session: typeof agent) => {
+    if (!session?.tabId) return;
+    if (!window.confirm(`Close ${session.label} tab for every Herdr client?`))
+      return;
+    try {
+      await runtime.closeTab(session.id, session.tabId);
+    } catch {
+      runtime.clearActionError();
+    }
+  };
+
+  const moveSession = async (
+    session: NonNullable<typeof agent>,
+    direction: "left" | "right",
+  ) => {
+    if (!session.tabId) return;
+    try {
+      await runtime.moveTab(session.id, session.tabId, direction);
+    } catch {
+      runtime.clearActionError();
+    }
+  };
+
+  const runAgentLifecycle = async (
+    session: NonNullable<typeof agent>,
+    action: "archive" | "clear" | "restart" | "stop",
+  ) => {
+    const destructive =
+      action === "archive" || action === "clear" || action === "stop";
+    if (
+      destructive &&
+      !window.confirm(`${action} ${session.label} for every Herdr client?`)
+    )
+      return;
+    try {
+      await runtime.agentLifecycle(session.id, action);
+    } catch {
+      runtime.clearActionError();
+    }
+  };
+
   const createSession = (
     details: {
       label: string;
@@ -453,6 +683,41 @@ export function App({
               </div>
 
               <div className="topbar-actions">
+                <div
+                  className="work-status-summary"
+                  role="status"
+                  aria-label={`${statusCounts.needsInput} Agents need input, ${statusCounts.working} working, ${statusCounts.completed} completed, ${statusCounts.unknown} unknown`}
+                >
+                  <span data-kind="needs-input">
+                    {statusCounts.needsInput} needs input
+                  </span>
+                  <span data-kind="working">
+                    {statusCounts.working} working
+                  </span>
+                  <span data-kind="completed">
+                    {statusCounts.completed} done
+                  </span>
+                  {statusCounts.unknown > 0 && (
+                    <span data-kind="unknown">
+                      {statusCounts.unknown} unknown
+                    </span>
+                  )}
+                </div>
+                {typeof window.Notification === "function" &&
+                  Notification.permission !== "granted" && (
+                    <IconTooltip label="Enable browser notifications">
+                      <IconButton
+                        type="button"
+                        variant="soft"
+                        color="gray"
+                        className="desktop-notifications"
+                        aria-label="Enable browser notifications"
+                        onClick={() => void requestNotifications()}
+                      >
+                        <BellIcon />
+                      </IconButton>
+                    </IconTooltip>
+                  )}
                 {workspace && (
                   <Button
                     type="button"
@@ -654,7 +919,14 @@ export function App({
                 sessions={workspaceTabs}
                 selectedId={agent.id}
                 canCreateSession={canStartAgent}
+                onAgentLifecycle={runAgentLifecycle}
+                onCloseSession={closeSession}
+                onMoveSession={moveSession}
                 onNewSession={openSessionDialog}
+                onNewTerminal={(returnFocus) =>
+                  void createTerminal(returnFocus)
+                }
+                onRenameSession={renameSession}
                 onSelect={selectAgent}
               >
                 <TerminalWorkspace
@@ -697,6 +969,7 @@ export function App({
                   onResizePanes={(ratio) =>
                     runtime.resizePanes(agent.id, agent.tabId ?? "", ratio)
                   }
+                  onUploadFile={runtime.uploadFile}
                   onUploadImage={runtime.uploadImage}
                   onSelectPane={(paneId) =>
                     runtime.dispatch({
@@ -763,9 +1036,12 @@ export function App({
         <CommandPalette
           open={commandOpen}
           onOpenChange={setCommandOpen}
+          pinnedWorkspaceIds={pinnedWorkspaceIds}
+          recentWorkspaceIds={recentWorkspaceIds}
           state={state}
           onSelectWorkspace={selectWorkspace}
           onSelectAgent={selectAgent}
+          onTogglePinnedWorkspace={togglePinnedWorkspace}
         />
         {workspace && (
           <NewSessionDialog

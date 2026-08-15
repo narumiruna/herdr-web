@@ -1,5 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  type FileUploadInput,
+  type UploadedFile,
+  validateFile,
+  writePaneFile,
+} from "./file-upload.js";
 import { HerdrApiError, type HerdrClient } from "./herdr-client.js";
 import {
   type ImageUploadInput,
@@ -44,6 +50,13 @@ interface TabCreatedResponse {
   tab: { tab_id: string };
   root_pane: { pane_id: string };
 }
+
+export interface CreateTerminalInput {
+  label: string;
+  workspaceId: string;
+}
+
+export type AgentLifecycleAction = "archive" | "clear" | "restart" | "stop";
 
 interface PaneInfoResponse {
   type: "pane_info";
@@ -332,11 +345,7 @@ export class LiveHerdrService {
     }
   }
 
-  async uploadImage(
-    paneId: string,
-    input: ImageUploadInput,
-  ): Promise<UploadedImage> {
-    validateImage(input);
+  private async paneCwd(paneId: string): Promise<string> {
     const result = await this.client.request<PaneInfoResponse>("pane.get", {
       pane_id: paneId,
     });
@@ -347,8 +356,29 @@ export class LiveHerdrService {
     if (!cwd) {
       throw new TypeError("Herdr pane did not report a working directory");
     }
+    return cwd;
+  }
+
+  async uploadImage(
+    paneId: string,
+    input: ImageUploadInput,
+  ): Promise<UploadedImage> {
+    validateImage(input);
     return writePaneImage(
-      cwd,
+      await this.paneCwd(paneId),
+      input,
+      this.options.projectsRoot,
+      this.options.uploadsRoot,
+    );
+  }
+
+  async uploadFile(
+    paneId: string,
+    input: FileUploadInput,
+  ): Promise<UploadedFile> {
+    validateFile(input);
+    return writePaneFile(
+      await this.paneCwd(paneId),
       input,
       this.options.projectsRoot,
       this.options.uploadsRoot,
@@ -381,6 +411,33 @@ export class LiveHerdrService {
 
   closePane(paneId: string): Promise<unknown> {
     return this.client.request("pane.close", { pane_id: paneId });
+  }
+
+  closeTab(tabId: string): Promise<unknown> {
+    return this.client.request("tab.close", { tab_id: tabId });
+  }
+
+  createTerminal(input: CreateTerminalInput): Promise<unknown> {
+    return this.client.request("tab.create", {
+      focus: true,
+      label: input.label,
+      workspace_id: input.workspaceId,
+    });
+  }
+
+  renameTab(tabId: string, label: string): Promise<unknown> {
+    return this.client.request("tab.rename", { label, tab_id: tabId });
+  }
+
+  moveTab(tabId: string, direction: "left" | "right"): Promise<unknown> {
+    return this.client.request("tab.move", { direction, tab_id: tabId });
+  }
+
+  agentLifecycle(
+    target: string,
+    action: AgentLifecycleAction,
+  ): Promise<unknown> {
+    return this.client.request(`agent.${action}`, { target });
   }
 
   createWorkspace(input: CreateWorkspaceInput): Promise<unknown> {

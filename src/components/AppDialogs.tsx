@@ -20,9 +20,12 @@ import { StatusPill } from "./StatusPill";
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  pinnedWorkspaceIds?: string[];
+  recentWorkspaceIds?: string[];
   state: HerdrState;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectAgent: (agentId: string) => void;
+  onTogglePinnedWorkspace?: (workspaceId: string) => void;
 }
 
 type CommandResult =
@@ -36,32 +39,49 @@ function resultDomId(result: CommandResult): string {
 export function CommandPalette({
   open,
   onOpenChange,
+  pinnedWorkspaceIds = [],
+  recentWorkspaceIds = [],
   state,
   onSelectWorkspace,
   onSelectAgent,
+  onTogglePinnedWorkspace,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const normalizedQuery = query.trim().toLowerCase();
   const results = useMemo<CommandResult[]>(() => {
+    const matches = (value: string) =>
+      value.toLowerCase().includes(normalizedQuery);
+    const workspaceRank = (workspace: Workspace) => {
+      const pinned = pinnedWorkspaceIds.indexOf(workspace.id);
+      if (pinned >= 0) return pinned;
+      const recent = recentWorkspaceIds.indexOf(workspace.id);
+      if (recent >= 0) return 100 + recent;
+      return 1_000 + state.workspaces.indexOf(workspace);
+    };
     const workspaces = state.workspaces
       .filter((workspace) =>
-        `${workspace.name} ${workspace.branch} ${workspace.path}`
-          .toLowerCase()
-          .includes(normalizedQuery),
+        matches(
+          `${workspace.name} ${workspace.branch} ${workspace.path} ${workspace.worktree?.repoName ?? ""}`,
+        ),
       )
+      .slice()
+      .sort((left, right) => workspaceRank(left) - workspaceRank(right))
       .map((workspace) => ({
         id: workspace.id,
         kind: "workspace" as const,
         workspace,
       }));
     const sessions = state.agents
-      .filter((session) =>
-        `${session.label} ${session.runtime} ${session.summary}`
-          .toLowerCase()
-          .includes(normalizedQuery),
-      )
+      .filter((session) => {
+        const workspace = state.workspaces.find(
+          ({ id }) => id === session.workspaceId,
+        );
+        return matches(
+          `${session.label} ${session.runtime} ${session.summary} ${session.currentStep} ${session.status} ${workspace?.name ?? ""} ${workspace?.branch ?? ""} ${workspace?.path ?? ""} ${session.panes.map(({ cwd, title }) => `${title} ${cwd ?? ""}`).join(" ")}`,
+        );
+      })
       .map((session) => ({
         id: session.id,
         kind: "session" as const,
@@ -88,6 +108,8 @@ export function CommandPalette({
     normalizedQuery,
     state.agents,
     state.selectedWorkspaceId,
+    pinnedWorkspaceIds,
+    recentWorkspaceIds,
     state.workspaces,
   ]);
 
@@ -131,6 +153,8 @@ export function CommandPalette({
   const resultButton = (result: CommandResult) => {
     const index = results.indexOf(result);
     if (result.kind === "workspace") {
+      const pinned = pinnedWorkspaceIds.includes(result.workspace.id);
+      const recent = recentWorkspaceIds.includes(result.workspace.id);
       return (
         <button
           id={resultDomId(result)}
@@ -152,7 +176,16 @@ export function CommandPalette({
             <strong>{result.workspace.name}</strong>
             <small>{result.workspace.branch || result.workspace.path}</small>
           </span>
-          <kbd>space</kbd>
+          <span className="command-result-tags">
+            {pinned && <kbd>pinned</kbd>}
+            {!pinned && recent && <kbd>recent</kbd>}
+            <kbd>space</kbd>
+          </span>
+          {onTogglePinnedWorkspace && (
+            <span className="command-pin">
+              {pinned ? "Ctrl P unpins" : "Ctrl P pins"}
+            </span>
+          )}
         </button>
       );
     }
@@ -232,6 +265,13 @@ export function CommandPalette({
             } else if (event.key === "End") {
               event.preventDefault();
               move(results.length - 1);
+            } else if (
+              event.ctrlKey &&
+              event.key.toLowerCase() === "p" &&
+              results[activeIndex]?.kind === "workspace"
+            ) {
+              event.preventDefault();
+              onTogglePinnedWorkspace?.(results[activeIndex].workspace.id);
             } else if (event.key === "Enter" && results[activeIndex]) {
               event.preventDefault();
               choose(results[activeIndex]);
@@ -285,6 +325,10 @@ export function CommandPalette({
         </span>
         <span>
           <kbd>↵</kbd> open
+        </span>
+        <span>
+          <kbd>ctrl</kbd>
+          <kbd>p</kbd> pin Space
         </span>
         <span>
           <kbd>esc</kbd> close

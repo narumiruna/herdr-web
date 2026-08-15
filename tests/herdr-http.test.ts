@@ -45,18 +45,29 @@ async function startApi(
 
 function fakeService(): HerdrService {
   return {
+    agentLifecycle: vi.fn().mockResolvedValue({ type: "agent_restarted" }),
     closePane: vi.fn().mockResolvedValue({ type: "ok" }),
+    closeTab: vi.fn().mockResolvedValue({ type: "tab_closed" }),
     createSession: vi.fn().mockResolvedValue({ type: "agent_started" }),
+    createTerminal: vi.fn().mockResolvedValue({ type: "tab_created" }),
     createWorkspace: vi.fn().mockResolvedValue({
       type: "workspace_created",
       workspace: { workspace_id: "w6" },
     }),
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
+    moveTab: vi.fn().mockResolvedValue({ type: "tab_moved" }),
     promptAgent: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
+    renameTab: vi.fn().mockResolvedValue({ type: "tab_renamed" }),
     setSplitRatio: vi.fn().mockResolvedValue({
       type: "layout_split_ratio_set",
     }),
     splitPane: vi.fn().mockResolvedValue({ type: "pane_info" }),
+    uploadFile: vi.fn().mockResolvedValue({
+      mediaType: "text/plain",
+      path: "/home/user/.herdr-web/uploads/file.txt",
+      size: 11,
+      type: "file_uploaded",
+    }),
     uploadImage: vi.fn().mockResolvedValue({
       mediaType: "image/png",
       path: "/home/user/.herdr-web/uploads/image.png",
@@ -193,6 +204,54 @@ describe("herdr HTTP bridge", () => {
     });
     expect(invalid.status).toBe(400);
     expect(service.createWorkspace).toHaveBeenCalledOnce();
+  });
+
+  test("routes Herdr-owned terminal, tab, and Agent lifecycle mutations", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+
+    expect(
+      await fetch(`${baseUrl}/api/herdr/terminals`, {
+        body: JSON.stringify({ label: "Shell", workspaceId: "w5" }),
+        headers,
+        method: "POST",
+      }),
+    ).toHaveProperty("status", 201);
+    expect(service.createTerminal).toHaveBeenCalledWith({
+      label: "Shell",
+      workspaceId: "w5",
+    });
+
+    await fetch(`${baseUrl}/api/herdr/tabs/w5%3At1`, {
+      body: JSON.stringify({ label: "Renamed" }),
+      headers,
+      method: "PATCH",
+    });
+    expect(service.renameTab).toHaveBeenCalledWith("w5:t1", "Renamed");
+
+    await fetch(`${baseUrl}/api/herdr/tabs/w5%3At1/move`, {
+      body: JSON.stringify({ direction: "left" }),
+      headers,
+      method: "POST",
+    });
+    expect(service.moveTab).toHaveBeenCalledWith("w5:t1", "left");
+
+    await fetch(`${baseUrl}/api/herdr/agents/w5%3Ap1/lifecycle`, {
+      body: JSON.stringify({ action: "restart" }),
+      headers,
+      method: "POST",
+    });
+    expect(service.agentLifecycle).toHaveBeenCalledWith("w5:p1", "restart");
+
+    await fetch(`${baseUrl}/api/herdr/tabs/w5%3At1`, {
+      headers,
+      method: "DELETE",
+    });
+    expect(service.closeTab).toHaveBeenCalledWith("w5:t1");
   });
 
   test("issues a short-lived one-use terminal ticket without exposing the bearer token", async () => {

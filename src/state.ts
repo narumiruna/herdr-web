@@ -122,6 +122,15 @@ export type HerdrAction =
       command: string;
     }
   | {
+      type: "terminal.created";
+      id: string;
+      workspaceId: string;
+      label: string;
+    }
+  | { type: "session.closed"; agentId: string }
+  | { type: "session.renamed"; agentId: string; label: string }
+  | { type: "tab.moved"; agentId: string; direction: "left" | "right" }
+  | {
       type: "pane.split";
       agentId: string;
       paneId: string;
@@ -422,6 +431,108 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
           },
           ...state.activities,
         ],
+      };
+    }
+    case "terminal.created": {
+      const workspace = state.workspaces.find(
+        ({ id }) => id === action.workspaceId,
+      );
+      const label = action.label.trim();
+      if (!workspace || !label) return state;
+      const paneId = `${action.id}-main`;
+      const terminal: Agent = {
+        id: action.id,
+        kind: "terminal",
+        workspaceId: workspace.id,
+        label,
+        runtime: "Shell",
+        model: "",
+        status: "unknown",
+        summary: "Standalone terminal",
+        currentStep: "",
+        started: "just now",
+        tabId: action.id,
+        tabNumber:
+          Math.max(
+            state.agents.filter(
+              ({ workspaceId }) => workspaceId === workspace.id,
+            ).length,
+            ...state.agents
+              .filter(({ workspaceId }) => workspaceId === workspace.id)
+              .map(({ tabNumber }) => tabNumber ?? 0),
+          ) + 1,
+        updated: "just now",
+        contextPercent: 0,
+        filesChanged: 0,
+        additions: 0,
+        deletions: 0,
+        activePaneId: paneId,
+        panes: [
+          {
+            command: "shell",
+            id: paneId,
+            lines: [`$ cd ${workspace.path}`, "$ "],
+            title: label,
+          },
+        ],
+      };
+      return {
+        ...state,
+        agents: [...state.agents, terminal],
+        selectedAgentId: terminal.id,
+        selectedSessionByWorkspace: {
+          ...state.selectedSessionByWorkspace,
+          [workspace.id]: terminal.id,
+        },
+      };
+    }
+    case "session.closed": {
+      const closed = state.agents.find(({ id }) => id === action.agentId);
+      if (!closed) return state;
+      const agents = state.agents.filter(({ id }) => id !== action.agentId);
+      const replacement = tabsForWorkspace(state, closed.workspaceId).find(
+        ({ id }) => id !== action.agentId,
+      );
+      return {
+        ...state,
+        agents,
+        selectedAgentId:
+          state.selectedAgentId === action.agentId
+            ? (replacement?.id ?? "")
+            : state.selectedAgentId,
+        selectedSessionByWorkspace: {
+          ...state.selectedSessionByWorkspace,
+          [closed.workspaceId]: replacement?.id ?? "",
+        },
+      };
+    }
+    case "session.renamed": {
+      const label = action.label.trim();
+      if (!label) return state;
+      return updateAgent(state, action.agentId, (agent) => ({
+        ...agent,
+        label,
+        panes: agent.panes.map((pane) =>
+          pane.id === agent.activePaneId ? { ...pane, title: label } : pane,
+        ),
+      }));
+    }
+    case "tab.moved": {
+      const target = state.agents.find(({ id }) => id === action.agentId);
+      if (!target?.tabNumber) return state;
+      const sessions = tabsForWorkspace(state, target.workspaceId);
+      const index = sessions.findIndex(({ id }) => id === target.id);
+      const swap = sessions[index + (action.direction === "left" ? -1 : 1)];
+      if (!swap?.tabNumber) return state;
+      return {
+        ...state,
+        agents: state.agents.map((agent) =>
+          agent.id === target.id
+            ? { ...agent, tabNumber: swap.tabNumber }
+            : agent.id === swap.id
+              ? { ...agent, tabNumber: target.tabNumber }
+              : agent,
+        ),
       };
     }
     case "pane.split": {

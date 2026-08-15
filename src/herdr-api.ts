@@ -25,6 +25,13 @@ export interface NewLiveSession {
   workspaceId: string;
 }
 
+export interface NewLiveTerminal {
+  label: string;
+  workspaceId: string;
+}
+
+export type AgentLifecycleAction = "archive" | "clear" | "restart" | "stop";
+
 export interface NewLiveWorkspace {
   cwd: string;
   label?: string;
@@ -56,7 +63,15 @@ export interface UploadedImage {
   type: "image_uploaded";
 }
 
+export interface UploadedFile {
+  mediaType: string;
+  path: string;
+  size: number;
+  type: "file_uploaded";
+}
+
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const MAX_GENERIC_FILE_BYTES = 16 * 1024 * 1024;
 export const MAX_PROMPT_CHARACTERS = 20_000;
 
 export function normalizeWorkspacePath(value: string): string {
@@ -198,6 +213,20 @@ export class HerdrApiClient {
     );
   }
 
+  uploadFile(paneId: string, file: File): Promise<UploadedFile> {
+    return this.request(
+      `/api/herdr/panes/${encodeURIComponent(paneId)}/files`,
+      {
+        body: file,
+        headers: {
+          "content-type": file.type || "application/octet-stream",
+          "x-herdr-filename": file.name,
+        },
+        method: "POST",
+      },
+    );
+  }
+
   splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown> {
     return this.request(
       `/api/herdr/panes/${encodeURIComponent(paneId)}/split`,
@@ -233,6 +262,43 @@ export class HerdrApiClient {
       body: JSON.stringify(input),
       method: "POST",
     });
+  }
+
+  createTerminal(input: NewLiveTerminal): Promise<unknown> {
+    return this.request("/api/herdr/terminals", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  renameTab(tabId: string, label: string): Promise<unknown> {
+    return this.request(`/api/herdr/tabs/${encodeURIComponent(tabId)}`, {
+      body: JSON.stringify({ label }),
+      method: "PATCH",
+    });
+  }
+
+  closeTab(tabId: string): Promise<unknown> {
+    return this.request(`/api/herdr/tabs/${encodeURIComponent(tabId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  moveTab(tabId: string, direction: "left" | "right"): Promise<unknown> {
+    return this.request(`/api/herdr/tabs/${encodeURIComponent(tabId)}/move`, {
+      body: JSON.stringify({ direction }),
+      method: "POST",
+    });
+  }
+
+  agentLifecycle(
+    target: string,
+    action: AgentLifecycleAction,
+  ): Promise<unknown> {
+    return this.request(
+      `/api/herdr/agents/${encodeURIComponent(target)}/lifecycle`,
+      { body: JSON.stringify({ action }), method: "POST" },
+    );
   }
 
   createWorkspace(input: NewLiveWorkspace): Promise<CreatedLiveWorkspace> {
