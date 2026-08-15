@@ -1,4 +1,5 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
+import { Theme } from "@radix-ui/themes";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -8,7 +9,11 @@ import {
   EMPTY_COMPOSER_DRAFT,
   TerminalWorkspace,
 } from "../src/components/TerminalWorkspace";
-import { type Agent, createDemoState } from "../src/state";
+import {
+  type Agent,
+  createDemoState,
+  type PaneSplitDirection,
+} from "../src/state";
 import { HerdrMutationError } from "../src/use-herdr-runtime";
 
 vi.mock("../src/components/InteractiveTerminal", () => ({
@@ -36,6 +41,7 @@ interface HarnessProps {
   onResizePanes?: (ratio: number) => void | Promise<void>;
   onRetryOutput?: () => void;
   onSelectPane?: (paneId: string) => void;
+  onSplitPane?: (direction: PaneSplitDirection) => void | Promise<void>;
   terminalStreaming?: boolean;
 }
 
@@ -46,6 +52,7 @@ function Harness({
   onResizePanes = () => undefined,
   onRetryOutput = () => undefined,
   onSelectPane = () => undefined,
+  onSplitPane = () => undefined,
   terminalStreaming = false,
 }: HarnessProps) {
   const [drafts, setDrafts] = useState<Record<string, ComposerDraft>>({});
@@ -53,55 +60,57 @@ function Harness({
   const draft = drafts[agent.id] ?? EMPTY_COMPOSER_DRAFT;
 
   return (
-    <Tooltip.Provider>
-      <TerminalWorkspace
-        actionsEnabled={actionsEnabled}
-        agent={agent}
-        createTerminalTicket={async () => ({
-          expiresAt: Date.now() + 30_000,
-          path: "/api/herdr/terminal",
-          ticket: "test-ticket",
-          type: "terminal_ticket",
-        })}
-        draft={draft}
-        isSending={sending[agent.id] === true}
-        workspace={createDemoState().workspaces[0]}
-        onClearDraft={(agentId) =>
-          setDrafts((current) => ({
-            ...current,
-            [agentId]: EMPTY_COMPOSER_DRAFT,
-          }))
-        }
-        onDraftChange={(agentId, update) =>
-          setDrafts((current) => ({
-            ...current,
-            [agentId]: {
-              ...(current[agentId] ?? EMPTY_COMPOSER_DRAFT),
-              ...update,
-            },
-          }))
-        }
-        onMessage={onMessage}
-        onResizePanes={onResizePanes}
-        onRetryOutput={onRetryOutput}
-        onSendingChange={(agentId, value) =>
-          setSending((current) => ({ ...current, [agentId]: value }))
-        }
-        onSplitPane={() => undefined}
-        onSelectPane={onSelectPane}
-        onClosePane={() => undefined}
-        onUploadImage={async () => ({
-          mediaType: "image/png",
-          path: "/repo/.hedr/uploads/test.png",
-          size: 1,
-          type: "image_uploaded",
-        })}
-        terminalControlEnabled
-        terminalEnabled
-        terminalReason="This bridge is configured for snapshots only."
-        terminalStreaming={terminalStreaming}
-      />
-    </Tooltip.Provider>
+    <Theme>
+      <Tooltip.Provider>
+        <TerminalWorkspace
+          actionsEnabled={actionsEnabled}
+          agent={agent}
+          createTerminalTicket={async () => ({
+            expiresAt: Date.now() + 30_000,
+            path: "/api/herdr/terminal",
+            ticket: "test-ticket",
+            type: "terminal_ticket",
+          })}
+          draft={draft}
+          isSending={sending[agent.id] === true}
+          workspace={createDemoState().workspaces[0]}
+          onClearDraft={(agentId) =>
+            setDrafts((current) => ({
+              ...current,
+              [agentId]: EMPTY_COMPOSER_DRAFT,
+            }))
+          }
+          onDraftChange={(agentId, update) =>
+            setDrafts((current) => ({
+              ...current,
+              [agentId]: {
+                ...(current[agentId] ?? EMPTY_COMPOSER_DRAFT),
+                ...update,
+              },
+            }))
+          }
+          onMessage={onMessage}
+          onResizePanes={onResizePanes}
+          onRetryOutput={onRetryOutput}
+          onSendingChange={(agentId, value) =>
+            setSending((current) => ({ ...current, [agentId]: value }))
+          }
+          onSplitPane={onSplitPane}
+          onSelectPane={onSelectPane}
+          onClosePane={() => undefined}
+          onUploadImage={async () => ({
+            mediaType: "image/png",
+            path: "/repo/.hedr/uploads/test.png",
+            size: 1,
+            type: "image_uploaded",
+          })}
+          terminalControlEnabled
+          terminalEnabled
+          terminalReason="This bridge is configured for snapshots only."
+          terminalStreaming={terminalStreaming}
+        />
+      </Tooltip.Provider>
+    </Theme>
   );
 }
 
@@ -193,6 +202,18 @@ describe("TerminalWorkspace decision states", () => {
 
     expect(second).toHaveFocus();
     expect(onSelectPane).toHaveBeenLastCalledWith("pane-shell");
+  });
+
+  test("offers Herdr's split right and split down directions", async () => {
+    const onSplitPane = vi.fn();
+    render(<Harness onSplitPane={onSplitPane} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Split pane" }));
+    expect(screen.getByRole("menuitem", { name: "Split right" })).toBeVisible();
+    await user.click(screen.getByRole("menuitem", { name: "Split down" }));
+
+    expect(onSplitPane).toHaveBeenCalledWith("down");
   });
 
   test("previews and commits a pane ratio with mouse dragging", async () => {

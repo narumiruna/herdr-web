@@ -395,6 +395,7 @@ describe("Hedr terminal-first workbench", () => {
     const user = renderApp();
 
     await user.click(screen.getByRole("button", { name: "Split pane" }));
+    await user.click(screen.getByRole("menuitem", { name: "Split right" }));
     expect(screen.getByRole("button", { name: "Split pane" })).toHaveAttribute(
       "title",
       "This session already has two panes.",

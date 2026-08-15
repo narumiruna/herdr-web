@@ -212,11 +212,13 @@ describe("herdr state", () => {
       type: "pane.split",
       agentId: "agent-build",
       paneId: "pane-new",
+      direction: "down",
     });
     const unchanged = appReducer(split, {
       type: "pane.split",
       agentId: "agent-build",
       paneId: "pane-third",
+      direction: "right",
     });
 
     const splitAgent = split.agents.find(({ id }) => id === "agent-build");
@@ -225,7 +227,7 @@ describe("herdr state", () => {
     );
     expect(splitAgent?.panes).toHaveLength(2);
     expect(splitAgent?.activePaneId).toBe("pane-new");
-    expect(splitAgent?.paneSplit).toEqual({ direction: "right", ratio: 0.5 });
+    expect(splitAgent?.paneSplit).toEqual({ direction: "down", ratio: 0.5 });
     expect(unchangedAgent?.panes).toHaveLength(2);
   });
 
@@ -234,6 +236,7 @@ describe("herdr state", () => {
       type: "pane.split",
       agentId: "agent-build",
       paneId: "pane-new",
+      direction: "right",
     });
 
     const resized = appReducer(state, {

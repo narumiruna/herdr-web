@@ -4,6 +4,7 @@ import { HerdrApiError } from "./herdr-client.js";
 import type {
   CreateSessionInput,
   CreateWorkspaceInput,
+  PaneSplitDirection,
 } from "./herdr-service.js";
 import {
   type ImageUploadInput,
@@ -24,7 +25,7 @@ export interface HerdrService {
     path: boolean[],
     ratio: number,
   ): Promise<unknown>;
-  splitPane(paneId: string): Promise<unknown>;
+  splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown>;
   subscribeEvents?(
     signal: AbortSignal,
     onEvent: (event: unknown) => void,
@@ -156,6 +157,13 @@ function cleanSplitPath(value: unknown): boolean[] {
     value.some((segment) => typeof segment !== "boolean")
   ) {
     throw new TypeError("path must be an array of at most 32 booleans");
+  }
+  return value;
+}
+
+function cleanSplitDirection(value: unknown): PaneSplitDirection {
+  if (value !== "right" && value !== "down") {
+    throw new TypeError("direction must be right or down");
   }
   return value;
 }
@@ -403,7 +411,17 @@ export function createHerdrHttpHandler({
       }
       const split = url.pathname.match(/^\/api\/herdr\/panes\/([^/]+)\/split$/);
       if (request.method === "POST" && split?.[1]) {
-        sendJson(response, 200, await service.splitPane(cleanId(split[1])));
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          200,
+          await service.splitPane(
+            cleanId(split[1]),
+            cleanSplitDirection(
+              body.direction === undefined ? "right" : body.direction,
+            ),
+          ),
+        );
         return;
       }
       const splitRatio = url.pathname.match(

@@ -126,6 +126,19 @@ describe("LiveHerdrService", () => {
     );
   });
 
+  test("splits a pane in Herdr's requested direction", async () => {
+    const request = vi.fn().mockResolvedValue({ type: "pane_info" });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await service.splitPane("w5:p1", "down");
+
+    expect(request).toHaveBeenCalledWith("pane.split", {
+      direction: "down",
+      focus: true,
+      target_pane_id: "w5:p1",
+    });
+  });
+
   test("sets an exact split ratio through Herdr's layout API", async () => {
     const request = vi.fn().mockResolvedValue({
       layout: { root: { ratio: 0.68, type: "split" } },

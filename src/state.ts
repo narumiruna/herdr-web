@@ -24,8 +24,10 @@ export interface TerminalPane {
   outputState?: TerminalOutputState;
 }
 
+export type PaneSplitDirection = "down" | "right";
+
 export interface PaneSplit {
-  direction: "down" | "right";
+  direction: PaneSplitDirection;
   ratio: number;
 }
 
@@ -109,7 +111,12 @@ export type HerdrAction =
       runtime: RuntimeName;
       command: string;
     }
-  | { type: "pane.split"; agentId: string; paneId: string }
+  | {
+      type: "pane.split";
+      agentId: string;
+      paneId: string;
+      direction: PaneSplitDirection;
+    }
   | { type: "pane.selected"; agentId: string; paneId: string }
   | { type: "pane.resized"; agentId: string; ratio: number }
   | { type: "pane.closed"; agentId: string; paneId: string };
@@ -428,7 +435,7 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
             },
           ],
           activePaneId: action.paneId,
-          paneSplit: { direction: "right", ratio: 0.5 },
+          paneSplit: { direction: action.direction, ratio: 0.5 },
         };
       });
     }

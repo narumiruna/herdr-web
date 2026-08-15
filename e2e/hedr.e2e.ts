@@ -367,6 +367,7 @@ test("mouse resizing persists navigation width and updates pane proportions", as
   await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
 
   await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("menuitem", { name: "Split right" }).click();
   const paneSeparator = page.getByRole("separator", {
     name: "Resize terminal panes",
   });
@@ -395,6 +396,34 @@ test("mouse resizing persists navigation width and updates pane proportions", as
   expect(
     (paneWidths[0] ?? 0) / ((paneWidths[1] ?? 1) + (paneWidths[0] ?? 0)),
   ).toBeGreaterThan(0.63);
+  expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
+test("split down stacks panes using Herdr's direction", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Split pane" }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Split right" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Split down" }).click();
+
+  const paneGrid = page.locator(".pane-grid");
+  const separator = page.getByRole("separator", {
+    name: "Resize terminal panes",
+  });
+  await expect(paneGrid).toHaveAttribute("data-direction", "down");
+  await expect(separator).toHaveAttribute("aria-orientation", "horizontal");
+  const paneBoxes = await page.locator(".terminal-pane").evaluateAll((panes) =>
+    panes.map((pane) => {
+      const box = pane.getBoundingClientRect();
+      return { left: box.left, top: box.top };
+    }),
+  );
+  expect(paneBoxes).toHaveLength(2);
+  expect(paneBoxes[1]?.top ?? 0).toBeGreaterThan(paneBoxes[0]?.top ?? 0);
+  expect(paneBoxes[1]?.left).toBe(paneBoxes[0]?.left);
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
@@ -614,6 +643,7 @@ test("mobile split panes stay readable through a pane selector", async ({
   await page.setViewportSize({ width: 390, height: 700 });
   await page.goto("/");
   await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("menuitem", { name: "Split down" }).click();
 
   const paneTabs = page.getByRole("tablist", { name: "Session panes" });
   await expect(paneTabs.getByRole("tab")).toHaveCount(2);

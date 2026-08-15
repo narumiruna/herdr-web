@@ -1,5 +1,5 @@
 import type { LiveSnapshotPayload } from "./live-state";
-import type { RuntimeName } from "./state";
+import type { PaneSplitDirection, RuntimeName } from "./state";
 
 interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -197,10 +197,13 @@ export class HerdrApiClient {
     );
   }
 
-  splitPane(paneId: string): Promise<unknown> {
+  splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown> {
     return this.request(
       `/api/herdr/panes/${encodeURIComponent(paneId)}/split`,
-      { method: "POST" },
+      {
+        body: JSON.stringify({ direction }),
+        method: "POST",
+      },
     );
   }
 

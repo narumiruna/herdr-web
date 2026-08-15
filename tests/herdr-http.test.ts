@@ -277,6 +277,38 @@ describe("herdr HTTP bridge", () => {
     });
   });
 
+  test("validates and forwards Herdr pane split directions", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+
+    const down = await fetch(`${baseUrl}/api/herdr/panes/w5%3Ap1/split`, {
+      body: JSON.stringify({ direction: "down" }),
+      headers,
+      method: "POST",
+    });
+    expect(down.status).toBe(200);
+    expect(service.splitPane).toHaveBeenCalledWith("w5:p1", "down");
+
+    const compatibleDefault = await fetch(
+      `${baseUrl}/api/herdr/panes/w5%3Ap2/split`,
+      { headers, method: "POST" },
+    );
+    expect(compatibleDefault.status).toBe(200);
+    expect(service.splitPane).toHaveBeenLastCalledWith("w5:p2", "right");
+
+    const invalid = await fetch(`${baseUrl}/api/herdr/panes/w5%3Ap3/split`, {
+      body: JSON.stringify({ direction: "left" }),
+      headers,
+      method: "POST",
+    });
+    expect(invalid.status).toBe(400);
+    expect(service.splitPane).toHaveBeenCalledTimes(2);
+  });
+
   test("validates and forwards an absolute Herdr split ratio", async () => {
     const service = fakeService();
     const baseUrl = await startApi(service);

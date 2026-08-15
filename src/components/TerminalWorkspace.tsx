@@ -9,9 +9,10 @@ import {
   LockClosedIcon,
   PaperPlaneIcon,
   ReloadIcon,
+  RowsIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { Button, IconButton } from "@radix-ui/themes";
+import { Button, DropdownMenu, IconButton } from "@radix-ui/themes";
 import {
   type CSSProperties,
   type DragEvent,
@@ -32,7 +33,12 @@ import {
   type TerminalTicketInput,
   type UploadedImage,
 } from "../herdr-api";
-import type { Agent, TerminalPane, Workspace } from "../state";
+import type {
+  Agent,
+  PaneSplitDirection,
+  TerminalPane,
+  Workspace,
+} from "../state";
 import { HerdrMutationError } from "../use-herdr-runtime";
 import { IconTooltip } from "./IconTooltip";
 import { InteractiveTerminal } from "./InteractiveTerminal";
@@ -76,7 +82,7 @@ interface TerminalWorkspaceProps {
   onRetryOutput: () => void | Promise<void>;
   onResizePanes: (ratio: number) => void | Promise<void>;
   onSendingChange: (agentId: string, sending: boolean) => void;
-  onSplitPane: () => void | Promise<void>;
+  onSplitPane: (direction: PaneSplitDirection) => void | Promise<void>;
   onSelectPane: (paneId: string) => void;
   onClosePane: (paneId: string) => void | Promise<void>;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
@@ -596,45 +602,60 @@ export function TerminalWorkspace({
   const terminalStructureActions = (
     pane: TerminalPane,
     includeClose: boolean,
-  ) => (
-    <>
-      <IconTooltip label="Split pane">
-        <IconButton
-          type="button"
-          variant="ghost"
-          color="gray"
-          aria-label="Split pane"
-          title={
-            agent.panes.length >= 2
-              ? "This session already has two panes."
-              : undefined
-          }
-          disabled={!actionsEnabled || agent.panes.length >= 2}
-          onClick={() =>
-            void Promise.resolve(onSplitPane()).catch(() => undefined)
-          }
-        >
-          <ColumnsIcon />
-        </IconButton>
-      </IconTooltip>
-      {includeClose && actionsEnabled && (
-        <IconTooltip label={`Close ${pane.title} pane`}>
-          <IconButton
-            type="button"
-            variant="ghost"
-            color="gray"
-            aria-label={`Close ${pane.title} pane`}
-            onClick={() => {
-              setCloseError("");
-              setClosingPane(pane);
-            }}
-          >
-            <Cross2Icon />
-          </IconButton>
-        </IconTooltip>
-      )}
-    </>
-  );
+  ) => {
+    const splitDisabled = !actionsEnabled || agent.panes.length >= 2;
+    const split = (direction: PaneSplitDirection) => {
+      void Promise.resolve(onSplitPane(direction)).catch(() => undefined);
+    };
+    return (
+      <>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            <IconButton
+              type="button"
+              variant="ghost"
+              color="gray"
+              aria-label="Split pane"
+              title={
+                agent.panes.length >= 2
+                  ? "This session already has two panes."
+                  : "Split pane"
+              }
+              disabled={splitDisabled}
+            >
+              <ColumnsIcon />
+            </IconButton>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" sideOffset={6} size="1">
+            <DropdownMenu.Item onSelect={() => split("right")}>
+              <ColumnsIcon aria-hidden="true" />
+              Split right
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => split("down")}>
+              <RowsIcon aria-hidden="true" />
+              Split down
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+        {includeClose && actionsEnabled && (
+          <IconTooltip label={`Close ${pane.title} pane`}>
+            <IconButton
+              type="button"
+              variant="ghost"
+              color="gray"
+              aria-label={`Close ${pane.title} pane`}
+              onClick={() => {
+                setCloseError("");
+                setClosingPane(pane);
+              }}
+            >
+              <Cross2Icon />
+            </IconButton>
+          </IconTooltip>
+        )}
+      </>
+    );
+  };
 
   return (
     <main className="main-workspace">

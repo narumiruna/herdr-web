@@ -668,8 +668,8 @@ export function App({
                       [agentId]: value,
                     }))
                   }
-                  onSplitPane={() =>
-                    runtime.splitPane(agent.id, agent.activePaneId)
+                  onSplitPane={(direction) =>
+                    runtime.splitPane(agent.id, agent.activePaneId, direction)
                   }
                   onResizePanes={(ratio) =>
                     runtime.resizePanes(agent.id, agent.tabId ?? "", ratio)
