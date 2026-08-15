@@ -8,7 +8,7 @@ Publish the application as the public npm package `herdr-web` and expose the ins
 
 The upstream `herdr` executable and API names remain unchanged.
 
-The herdr-web product UI, `HERDR_WEB_*` configuration, `.herdr-web` runtime directories, GitHub repository URL, and GHCR image remain unchanged because they are not npm or CLI identifiers.
+The herdr-web product UI, `HERDR_WEB_*` configuration, `.herdr-web` runtime directories, and GitHub repository URL remain unchanged because they are not npm or CLI identifiers.
 
 ## Plan
 

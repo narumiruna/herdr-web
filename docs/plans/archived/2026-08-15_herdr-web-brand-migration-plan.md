@@ -41,7 +41,7 @@ Use `herdr-web` consistently for this product, including release titles, UI copy
 ## Completion Checklist
 
 - [x] Future GitHub Release titles and publication summaries use `herdr-web X.Y.Z`.
-- [x] npm provenance metadata and GHCR documentation target `narumiruna/herdr-web`.
+- [x] npm provenance metadata targets `narumiruna/herdr-web`.
 - [x] Product configuration and runtime identifiers use `HERDR_WEB_*` and `.herdr-web*`, while upstream `HERDR_*` names remain unchanged.
 - [x] Existing local upload data is not modified or staged; its compatibility ignore remains in `.gitignore`.
 - [x] A case-insensitive retired-identifier scan of tracked content and paths returns no matches.

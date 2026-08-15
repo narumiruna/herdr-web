@@ -305,7 +305,7 @@ Set `PAT_TOKEN` to a GitHub personal access token with permission to update repo
 
 Configure npm Trusted Publishing for package `herdr-web` with this GitHub repository, workflow `publish.yml`, and environment `release`; no npm token is stored in GitHub.
 
-GHCR images and GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
+GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
 
 Version bumps, publication, and GitHub Releases use the `release` environment so optional deployment-branch or reviewer protection can be configured in repository settings.
 
@@ -318,12 +318,6 @@ The PAT-authenticated commit starts CI, while its tag independently starts `.git
 Release verifies that the stable semver tag belongs to `main`, matches both package files, and creates a GitHub Release with generated release notes.
 
 Publish performs the same metadata checks, runs the repository and Chromium test gates, and sends `herdr-web` to the public npm registry through npm Trusted Publishing.
-
-It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, then pushes immutable version, minor, major, commit, and `latest` tags to `ghcr.io/narumiruna/herdr-web`.
-
-```sh
-docker pull ghcr.io/narumiruna/herdr-web:latest
-```
 
 The **Publish** and **Release** workflows can be rerun manually only from a matching `vX.Y.Z` tag, and Publish skips an npm version that already exists.
 
