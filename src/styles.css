@@ -276,10 +276,25 @@ select:focus-visible,
   color: var(--amber-12);
 }
 .attention-list,
-.workspace-list {
+.workspace-list,
+.workspace-tree,
+.worktree-list {
   display: flex;
   flex-direction: column;
+}
+.attention-list,
+.workspace-list {
   gap: 4px;
+}
+.workspace-tree,
+.worktree-list {
+  gap: 2px;
+}
+.worktree-list {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .attention-item {
   display: grid;
@@ -346,6 +361,43 @@ select:focus-visible,
 .workspace-item[data-active="true"] {
   box-shadow: inset 2px 0 0 var(--amber-9);
 }
+.worktree-item {
+  grid-template-columns: 28px minmax(0, 1fr) 14px;
+  min-height: 32px;
+  padding-block: 3px;
+  padding-left: 19px;
+}
+.worktree-rail {
+  position: relative;
+  display: grid;
+  width: 28px;
+  min-height: 28px;
+  place-items: center;
+  color: var(--ink-muted);
+}
+.worktree-elbow {
+  position: absolute;
+  top: -6px;
+  left: 4px;
+  width: 16px;
+  height: 20px;
+  border-bottom: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+}
+.worktree-dot {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  background: var(--panel);
+}
+.worktree-dot[data-active="true"] {
+  border-color: var(--grass-10);
+  background: var(--grass-10);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--grass-10) 22%, transparent);
+}
 .workspace-glyph,
 .command-result-icon {
   display: grid;
@@ -385,8 +437,18 @@ select:focus-visible,
   white-space: nowrap;
 }
 .workspace-copy small {
+  overflow: hidden;
   color: var(--amber-12);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worktree-item .workspace-copy strong {
+  font-size: 12px;
+}
+.worktree-item .workspace-copy small {
+  color: var(--ink-muted);
+  font-size: 10px;
 }
 .workspace-chevron {
   color: var(--ink-muted);

@@ -16,7 +16,14 @@ interface LiveWorkspace {
   tab_count: number;
   tokens?: Record<string, string>;
   workspace_id: string;
-  worktree?: { branch?: string; checkout_path?: string } | null;
+  worktree?: {
+    branch?: string;
+    checkout_path?: string;
+    is_linked_worktree?: boolean;
+    repo_key?: string;
+    repo_name?: string;
+    repo_root?: string;
+  } | null;
 }
 
 interface LiveTab {
@@ -210,14 +217,27 @@ function mapWorkspace(
   const pane = panes.find(
     ({ workspace_id: workspaceId }) => workspaceId === workspace.workspace_id,
   );
+  const branch = workspace.worktree?.branch ?? workspace.tokens?.branch ?? "";
+  const checkoutPath = workspace.worktree?.checkout_path ?? pane?.cwd ?? "";
+  const worktree = workspace.worktree
+    ? {
+        branch,
+        checkoutPath,
+        isLinked: workspace.worktree.is_linked_worktree === true,
+        repoKey: workspace.worktree.repo_key ?? "",
+        repoName: workspace.worktree.repo_name ?? "",
+        repoRoot: workspace.worktree.repo_root ?? "",
+      }
+    : undefined;
   return {
     accent: (["amber", "blue", "grass"] as const)[index % 3] ?? "amber",
     ahead: 0,
     behind: 0,
-    branch: workspace.worktree?.branch ?? workspace.tokens?.branch ?? "",
+    branch,
     id: workspace.workspace_id,
     name: workspace.label,
-    path: workspace.worktree?.checkout_path ?? pane?.cwd ?? "",
+    path: checkoutPath,
+    worktree,
   };
 }
 

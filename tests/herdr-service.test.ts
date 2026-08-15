@@ -3,9 +3,57 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { HerdrApiError, type HerdrClient } from "../server/herdr-client";
-import { LiveHerdrService } from "../server/herdr-service";
+import {
+  applyWorktreeBranches,
+  branchlessWorktreeRepoRoots,
+  LiveHerdrService,
+  parseGitWorktreeBranches,
+} from "../server/herdr-service";
 
 describe("LiveHerdrService", () => {
+  test("parses and applies Git worktree branch metadata", () => {
+    const branches = parseGitWorktreeBranches(`worktree /repo/herdr-web
+HEAD abc
+branch refs/heads/main
+
+worktree /repo/.herdr/worktree
+HEAD def
+branch refs/heads/narumi/feat/tree
+`);
+    const snapshot: {
+      workspaces: Array<{
+        worktree: {
+          branch?: string;
+          checkout_path: string;
+          repo_root: string;
+        };
+      }>;
+    } = {
+      workspaces: [
+        {
+          worktree: {
+            checkout_path: "/repo/herdr-web",
+            repo_root: "/repo/herdr-web",
+          },
+        },
+        {
+          worktree: {
+            checkout_path: "/repo/.herdr/worktree",
+            repo_root: "/repo/herdr-web",
+          },
+        },
+      ],
+    };
+
+    expect(branchlessWorktreeRepoRoots(snapshot)).toEqual(["/repo/herdr-web"]);
+
+    applyWorktreeBranches(snapshot, branches);
+
+    expect(snapshot.workspaces[0]?.worktree?.branch).toBe("main");
+    expect(snapshot.workspaces[1]?.worktree?.branch).toBe("narumi/feat/tree");
+    expect(branchlessWorktreeRepoRoots(snapshot)).toEqual([]);
+  });
+
   test("uses the raw protocol spelling when reading pane output", async () => {
     const request = vi
       .fn()

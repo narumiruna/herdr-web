@@ -139,6 +139,80 @@ describe("herdr-web terminal-first workbench", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
+  test("groups linked worktree Spaces under their repository Space", () => {
+    const state = createDemoState();
+    state.selectedWorkspaceId = "linked-tree";
+    state.selectedAgentId = "";
+    state.selectedSessionByWorkspace = {};
+    const blockedAgent = state.agents[0];
+    if (!blockedAgent) throw new Error("Demo state must include an Agent");
+    state.agents = [
+      {
+        ...blockedAgent,
+        id: "blocked-linked-tree",
+        label: "blocked-linked-tree",
+        status: "blocked",
+        workspaceId: "linked-tree",
+      },
+    ];
+    state.workspaces = [
+      {
+        accent: "amber",
+        ahead: 0,
+        behind: 0,
+        branch: "main",
+        id: "repo-root",
+        name: "herdr-web",
+        path: "/repo/herdr-web",
+        worktree: {
+          branch: "main",
+          checkoutPath: "/repo/herdr-web",
+          isLinked: false,
+          repoKey: "/repo/herdr-web/.git",
+          repoName: "herdr-web",
+          repoRoot: "/repo/herdr-web",
+        },
+      },
+      {
+        accent: "blue",
+        ahead: 0,
+        behind: 0,
+        branch: "narumi/feat/tree",
+        id: "linked-tree",
+        name: "worktree-clear-valley-bcba",
+        path: "/repo/.herdr/worktree-clear-valley-bcba",
+        worktree: {
+          branch: "narumi/feat/tree",
+          checkoutPath: "/repo/.herdr/worktree-clear-valley-bcba",
+          isLinked: true,
+          repoKey: "/repo/herdr-web/.git",
+          repoName: "herdr-web",
+          repoRoot: "/repo/herdr-web",
+        },
+      },
+    ];
+
+    render(<App initialState={state} live={false} />);
+
+    const nav = screen.getByRole("navigation", {
+      name: "herdr-web navigation",
+    });
+    expect(
+      within(nav).getByRole("button", { name: "Open herdr-web Space" }),
+    ).toBeVisible();
+    const linkedWorktree = within(nav).getByRole("button", {
+      name: "Open narumi/feat/tree worktree Space",
+    });
+    expect(linkedWorktree).toHaveAttribute("aria-current", "page");
+    expect(within(linkedWorktree).getByText("1 needs input")).toBeVisible();
+    expect(
+      within(nav).getByRole("group", { name: "herdr-web worktrees" }),
+    ).toBeVisible();
+    expect(
+      within(linkedWorktree).queryByText("worktree-clear-valley-bcba"),
+    ).not.toBeInTheDocument();
+  });
+
   test("switches the Agents panel between grouped and priority order", async () => {
     const user = renderApp();
     const agents = screen.getByRole("region", { name: "Agents" });
