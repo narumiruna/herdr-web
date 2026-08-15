@@ -41,11 +41,11 @@ describe("Hedr terminal-first workbench", () => {
     expect(document.documentElement).toHaveClass("light");
   });
 
-  test("shows the Hedr product identity", () => {
+  test("shows the herdr-web product identity", () => {
     renderApp();
 
     expect(
-      screen.getByText("hedr", { selector: ".brand-type strong" }),
+      screen.getByText("herdr-web", { selector: ".brand-type strong" }),
     ).toBeVisible();
     expect(
       screen.getAllByRole("img", { name: "Hedr terminal mark" })[0],

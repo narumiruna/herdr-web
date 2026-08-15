@@ -40,7 +40,7 @@ export function HedrLogo({ compact = false }: HedrLogoProps) {
       </svg>
       {!compact && (
         <div className="brand-type">
-          <strong>hedr</strong>
+          <strong>herdr-web</strong>
         </div>
       )}
     </div>

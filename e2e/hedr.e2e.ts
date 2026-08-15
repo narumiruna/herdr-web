@@ -48,7 +48,7 @@ test("desktop workbench gives the terminal priority", async ({
   await page.goto("/");
 
   await expect(page).toHaveTitle("Hedr — agent workbench");
-  await expect(page.locator(".brand-type strong")).toHaveText("hedr");
+  await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "Needs input", exact: true }),
