@@ -39,6 +39,7 @@ import {
 } from "./components/TerminalWorkspace";
 import { readProductStorage, writeProductStorage } from "./product-storage";
 import { type HerdrState, type RuntimeName, tabsForWorkspace } from "./state";
+import { parseTerminalFontSize } from "./terminal-preferences";
 import { useHerdrRuntime } from "./use-herdr-runtime";
 
 interface AppProps {
@@ -89,6 +90,13 @@ export function App({
       ? clampSidebarWidth(saved)
       : DEFAULT_SIDEBAR_WIDTH;
   });
+  const [terminalFontSize, setTerminalFontSize] = useState(() =>
+    parseTerminalFontSize(
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "terminal-font-size")
+        : null,
+    ),
+  );
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
@@ -222,6 +230,16 @@ export function App({
       );
     }
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(
+        window.localStorage,
+        "terminal-font-size",
+        String(terminalFontSize),
+      );
+    }
+  }, [terminalFontSize]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -697,7 +715,9 @@ export function App({
                   }}
                   terminalControlEnabled={runtime.accessRole === "controller"}
                   terminalEnabled={runtime.status === "ready"}
+                  terminalFontSize={terminalFontSize}
                   terminalReason={state.capabilities.terminalReason}
+                  onTerminalFontSizeChange={setTerminalFontSize}
                   terminalStreaming={state.capabilities.terminalStreaming}
                 />
               </SessionTabs>
@@ -763,8 +783,12 @@ export function App({
         <SettingsDialog
           appearance={appearance}
           open={settingsOpen}
+          terminalFontSize={terminalFontSize}
           onOpenChange={setSettingsOpen}
-          onApply={setAppearance}
+          onApply={(preferences) => {
+            setAppearance(preferences.appearance);
+            setTerminalFontSize(preferences.terminalFontSize);
+          }}
         />
         <KeybindingsDialog
           open={keybindingsOpen}

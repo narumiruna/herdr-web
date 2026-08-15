@@ -26,11 +26,19 @@ import type {
   TerminalTicketInput,
   UploadedImage,
 } from "../herdr-api";
+import {
+  clampTerminalFontSize,
+  DEFAULT_TERMINAL_FONT_SIZE,
+} from "../terminal-preferences";
 import { RadixDialog } from "./RadixDialog";
 import { TerminalImageDialog } from "./TerminalImageDialog";
 import type { ComposerDraft } from "./TerminalWorkspace";
 import { terminalImageInput } from "./terminal-images";
 import { useTerminalImages } from "./use-terminal-images";
+import {
+  initializeTerminalRenderer,
+  waitForTerminalFonts,
+} from "./xterm-renderer";
 
 const RECONNECT_DELAYS = [500, 1_000, 2_000, 5_000];
 
@@ -56,7 +64,9 @@ interface InteractiveTerminalProps {
   ) => Promise<TerminalTicket>;
   draft: ComposerDraft;
   focused: boolean;
+  fontSize: number;
   onDraftChange: (agentId: string, update: Partial<ComposerDraft>) => void;
+  onFontSizeChange: (fontSize: number) => void;
   onPrompt: (message: string) => Promise<unknown> | undefined;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   paneId: string;
@@ -129,7 +139,9 @@ export function InteractiveTerminal({
   createTicket,
   draft,
   focused,
+  fontSize,
   onDraftChange,
+  onFontSizeChange,
   onPrompt,
   onUploadImage,
   paneId,
@@ -143,7 +155,11 @@ export function InteractiveTerminal({
   const searchInput = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<Terminal | undefined>(undefined);
   const fitRef = useRef<FitAddon | undefined>(undefined);
+  const scheduleFitRef = useRef<(() => void) | undefined>(undefined);
   const createTicketRef = useRef(createTicket);
+  const fontSizeRef = useRef(fontSize);
+  const onFontSizeChangeRef = useRef(onFontSizeChange);
+  const lastSentSize = useRef("");
   const searchRef = useRef<SearchAddon | undefined>(undefined);
   const socketRef = useRef<WebSocket | undefined>(undefined);
   const connectGeneration = useRef(0);
@@ -175,6 +191,8 @@ export function InteractiveTerminal({
   const [promptError, setPromptError] = useState("");
   const [ctrlArmed, setCtrlArmed] = useState(false);
   createTicketRef.current = createTicket;
+  fontSizeRef.current = fontSize;
+  onFontSizeChangeRef.current = onFontSizeChange;
 
   const send = useCallback((message: object): boolean => {
     const socket = socketRef.current;
@@ -245,6 +263,7 @@ export function InteractiveTerminal({
       setSessionMode(mode);
       flowWritable.current = true;
       writable.current = false;
+      lastSentSize.current = "";
       ctrlArmedRef.current = false;
       setCtrlArmed(false);
       setError("");
@@ -268,11 +287,11 @@ export function InteractiveTerminal({
           if (generation !== connectGeneration.current || mode !== "control") {
             return;
           }
-          send({
-            cols: Math.max(1, terminal.cols),
-            rows: Math.max(1, terminal.rows),
-            type: "terminal.resize",
-          });
+          const cols = Math.max(1, terminal.cols);
+          const rows = Math.max(1, terminal.rows);
+          if (send({ cols, rows, type: "terminal.resize" })) {
+            lastSentSize.current = `${cols}x${rows}`;
+          }
         };
         socket.onmessage = (event) => {
           if (generation !== connectGeneration.current) return;
@@ -376,20 +395,44 @@ export function InteractiveTerminal({
     const element = host.current;
     if (!element) return;
     const terminal = new Terminal({
-      allowProposedApi: false,
+      allowProposedApi: true,
       convertEol: false,
       cursorBlink: true,
+      cursorInactiveStyle: "outline",
       cursorStyle: "block",
+      customGlyphs: true,
       fontFamily: '"JetBrains Mono", "Symbols Nerd Font Mono", monospace',
-      fontSize: 13,
+      fontSize: clampTerminalFontSize(fontSizeRef.current),
+      fontWeight: "400",
+      fontWeightBold: "600",
       lineHeight: 1.2,
+      rescaleOverlappingGlyphs: true,
       screenReaderMode: true,
       scrollback: 5_000,
+      smoothScrollDuration: 80,
       theme: {
         background: "#0c0c0c",
+        black: "#171717",
+        blue: "#3b9eff",
+        brightBlack: "#6f6f6b",
+        brightBlue: "#70b8ff",
+        brightCyan: "#3db9cf",
+        brightGreen: "#65ba75",
+        brightMagenta: "#cf91d8",
+        brightRed: "#ff8d85",
+        brightWhite: "#eeeeec",
+        brightYellow: "#ffe629",
         cursor: "#ffc53d",
+        cursorAccent: "#0c0c0c",
+        cyan: "#12a594",
         foreground: "#eeeeec",
-        selectionBackground: "#5c3d0577",
+        green: "#46a758",
+        magenta: "#ab4aba",
+        red: "#e5484d",
+        selectionBackground: "#5c3d05aa",
+        selectionInactiveBackground: "#5c3d0570",
+        white: "#b4b4b0",
+        yellow: "#f5d90a",
       },
     });
     const fit = new FitAddon();
@@ -397,7 +440,20 @@ export function InteractiveTerminal({
     terminal.loadAddon(fit);
     terminal.loadAddon(searchAddon);
     terminal.open(element);
+    element.dataset.renderer = "canvas";
+    const renderer = initializeTerminalRenderer(terminal, {
+      onRendererChange: (kind) => {
+        element.dataset.renderer = kind;
+        element.dataset.unicodeVersion = terminal.unicode.activeVersion;
+      },
+    });
     terminalRef.current = terminal;
+    void renderer.ready.then((kind) => {
+      if (terminalRef.current !== terminal) return;
+      element.dataset.renderer = kind;
+      element.dataset.rendererReady = "true";
+      element.dataset.unicodeVersion = terminal.unicode.activeVersion;
+    });
     fitRef.current = fit;
     searchRef.current = searchAddon;
     const data = terminal.onData((value) => {
@@ -417,7 +473,11 @@ export function InteractiveTerminal({
     });
     const resize = terminal.onResize(({ cols, rows }) => {
       if (!actionsEnabled || !writable.current) return;
-      send({ cols, rows, type: "terminal.resize" });
+      const size = `${cols}x${rows}`;
+      if (size === lastSentSize.current) return;
+      if (send({ cols, rows, type: "terminal.resize" })) {
+        lastSentSize.current = size;
+      }
     });
     terminal.attachCustomWheelEventHandler((event) => {
       if (!actionsEnabled || !writable.current || event.deltaY === 0)
@@ -433,6 +493,28 @@ export function InteractiveTerminal({
       return false;
     });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === "keydown" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        ["+", "-", "0", "=", "_"].includes(event.key)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = fontSizeRef.current;
+        const next =
+          event.key === "0"
+            ? DEFAULT_TERMINAL_FONT_SIZE
+            : clampTerminalFontSize(
+                current + (["+", "="].includes(event.key) ? 1 : -1),
+              );
+        if (next !== current) {
+          fontSizeRef.current = next;
+          onFontSizeChangeRef.current(next);
+        }
+        terminal.focus();
+        return false;
+      }
       if (
         event.type === "keydown" &&
         event.shiftKey &&
@@ -453,37 +535,71 @@ export function InteractiveTerminal({
       }
       return true;
     });
-    const fitTerminal = () => {
+    let fitFrame: number | undefined;
+    let startFrame: number | undefined;
+    let fitReady = false;
+    let disposed = false;
+    const fitTerminalNow = () => {
       try {
         fit.fit();
       } catch {
         // The terminal can be temporarily hidden while a responsive dialog moves focus.
       }
     };
+    const scheduleFit = () => {
+      if (!fitReady || disposed || fitFrame !== undefined) return;
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = undefined;
+        fitTerminalNow();
+      });
+    };
+    scheduleFitRef.current = scheduleFit;
     const observer =
       typeof ResizeObserver === "function"
-        ? new ResizeObserver(fitTerminal)
+        ? new ResizeObserver(scheduleFit)
         : undefined;
     observer?.observe(element);
-    window.addEventListener("resize", fitTerminal);
-    const frame = window.requestAnimationFrame(() => {
-      fitTerminal();
-      void connectTerminal(controlEnabled ? "control" : "observe");
+    window.addEventListener("resize", scheduleFit);
+    void waitForTerminalFonts(
+      document.fonts,
+      clampTerminalFontSize(fontSizeRef.current),
+    ).then(() => {
+      if (disposed) return;
+      element.dataset.fonts = "ready";
+      startFrame = window.requestAnimationFrame(() => {
+        startFrame = undefined;
+        if (disposed) return;
+        fitReady = true;
+        fitTerminalNow();
+        void connectTerminal(controlEnabled ? "control" : "observe");
+      });
     });
     return () => {
+      disposed = true;
       connectGeneration.current += 1;
       closeSocket();
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", fitTerminal);
+      if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+      if (startFrame !== undefined) window.cancelAnimationFrame(startFrame);
+      window.removeEventListener("resize", scheduleFit);
       observer?.disconnect();
       data.dispose();
       resize.dispose();
+      renderer.dispose();
       terminal.dispose();
       terminalRef.current = undefined;
       fitRef.current = undefined;
+      scheduleFitRef.current = undefined;
       searchRef.current = undefined;
     };
   }, [actionsEnabled, closeSocket, connectTerminal, controlEnabled, send]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const next = clampTerminalFontSize(fontSize);
+    if (terminal.options.fontSize !== next) terminal.options.fontSize = next;
+    scheduleFitRef.current?.();
+  }, [fontSize]);
 
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus();
@@ -572,6 +688,7 @@ export function InteractiveTerminal({
   return (
     <section
       className="interactive-terminal"
+      data-font-size={fontSize}
       data-status={status}
       aria-label={`${agentLabel} terminal controls`}
       onDragOver={(event) => event.preventDefault()}

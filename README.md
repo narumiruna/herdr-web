@@ -22,7 +22,8 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
 - Dark appearance by default with a saved light option, while interactive terminals stay on a high-contrast dark palette for reliable ANSI and TUI readability.
-- JetBrains Mono terminal text with bundled Nerd Font symbols and no client-side font install.
+- JetBrains Mono terminal text with bundled Nerd Font symbols, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback.
+- Browser-saved Compact, Default, and Comfortable terminal text sizes with focused-terminal zoom shortcuts.
 - Controller and optional independent viewer tokens, same-origin WebSockets, and short-lived one-use terminal tickets.
 
 ## Radix UI
@@ -103,7 +104,7 @@ just run
 
 When updating from an earlier checkout, rename product-owned token, view-token, port, and host-identity variables to the documented `HERDR_WEB_*` form; upstream Herdr variables remain `HERDR_*`.
 
-Saved appearance, Agent ordering, sidebar width, and session token values migrate to `herdr-web-*` browser keys on first use.
+Saved appearance, terminal text size, Agent ordering, sidebar width, and session token values migrate to `herdr-web-*` browser keys on first use.
 
 Without `just`, set a token explicitly before running the development processes:
 
@@ -123,7 +124,7 @@ Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surfac
 
 Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
 
-Use **Menu** for saved appearance settings, the workbench keybinding reference, and an explicit Herdr reload.
+Use **Menu** for saved appearance and terminal text-size settings, the workbench keybinding reference, and an explicit Herdr reload.
 
 Returning to a Space restores its last selected tab, while choosing a Needs input or Agents item opens that exact Agent.
 
@@ -144,6 +145,8 @@ Each Agent tab keeps its status visible, while one compact terminal bar combines
 The focused terminal owns the remaining screen and is the primary interaction surface.
 
 Typing, paste, mouse input, terminal applications, and resize are forwarded through a dedicated WebSocket to one Herdr terminal session.
+
+The terminal waits for its bundled fonts before the authoritative fit, uses Unicode 11 widths, and prefers WebGL while automatically retaining the built-in renderer when WebGL is unavailable or loses context.
 
 Use the terminal toolbar to search output, stage image paths, or open the optional Agent prompt dialog.
 
@@ -181,6 +184,8 @@ On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigat
 - Use `Cmd+C` on macOS or `Ctrl+Shift+C` elsewhere to copy a terminal selection.
 - Use `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux for normal text paste or to stage a clipboard image.
 - Use `Cmd+Shift+F` or `Ctrl+Shift+F` to search terminal output.
+- Use `Cmd/Ctrl` + `+` or `Cmd/Ctrl` + `-` while the terminal is focused to adjust text size, and use `Cmd/Ctrl` + `0` to restore 13 px.
+- Choose Compact, Default, or Comfortable under **Menu → Settings**; the selected size is saved only in this browser.
 - Use the image toolbar button to stage a local image.
 - Use the mobile **Esc**, **Ctrl**, and **Tab** key row when the soft keyboard does not expose terminal modifiers.
 - Use **Prompt Agent** when you intentionally want Herdr's semantic `agent.prompt` action instead of terminal input.

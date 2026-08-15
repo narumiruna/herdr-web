@@ -7,7 +7,8 @@ const xterm = vi.hoisted(() => ({
   instances: [] as Array<{
     data?: (value: string) => void;
     focus: ReturnType<typeof vi.fn>;
-    options?: unknown;
+    key?: (event: KeyboardEvent) => boolean;
+    options?: Record<string, unknown>;
     reset: ReturnType<typeof vi.fn>;
     resize?: (size: { cols: number; rows: number }) => void;
     write: ReturnType<typeof vi.fn>;
@@ -18,13 +19,16 @@ vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     cols = 80;
     rows = 24;
+    options: Record<string, unknown>;
+    unicode = { activeVersion: "6" };
     private instance: (typeof xterm.instances)[number] = {
       focus: vi.fn(),
       reset: vi.fn(),
       write: vi.fn(),
     };
-    constructor(options: unknown) {
-      this.instance.options = options;
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+      this.instance.options = this.options;
       xterm.instances.push(this.instance);
     }
     loadAddon() {}
@@ -51,7 +55,9 @@ vi.mock("@xterm/xterm", () => ({
       this.instance.data?.(value);
     }
     attachCustomWheelEventHandler() {}
-    attachCustomKeyEventHandler() {}
+    attachCustomKeyEventHandler(callback: (event: KeyboardEvent) => boolean) {
+      this.instance.key = callback;
+    }
   },
 }));
 vi.mock("@xterm/addon-fit", () => ({
@@ -64,6 +70,16 @@ vi.mock("@xterm/addon-search", () => ({
     findNext() {}
     findPrevious() {}
   },
+}));
+vi.mock("../src/components/xterm-renderer", () => ({
+  initializeTerminalRenderer: (
+    _terminal: unknown,
+    options?: { onRendererChange?: (kind: string) => void },
+  ) => {
+    options?.onRendererChange?.("canvas");
+    return { dispose: vi.fn(), ready: Promise.resolve("canvas") };
+  },
+  waitForTerminalFonts: () => Promise.resolve(),
 }));
 
 import { InteractiveTerminal } from "../src/components/InteractiveTerminal";
@@ -146,7 +162,9 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
     createTicket,
     draft: { ...EMPTY_COMPOSER_DRAFT },
     focused: true,
+    fontSize: 13,
     onDraftChange: vi.fn(),
+    onFontSizeChange: vi.fn(),
     onPrompt: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
     onUploadImage,
     paneId: "w5:p1",
@@ -173,10 +191,20 @@ describe("InteractiveTerminal", () => {
     expect(socket.url).toContain("ticket=one-use-ticket");
     expect(socket.url).not.toContain("Bearer");
     expect(xterm.instances[0]?.options).toMatchObject({
+      allowProposedApi: true,
+      cursorInactiveStyle: "outline",
+      customGlyphs: true,
+      fontSize: 13,
+      fontWeight: "400",
+      fontWeightBold: "600",
+      rescaleOverlappingGlyphs: true,
+      smoothScrollDuration: 80,
       theme: {
         background: "#0c0c0c",
+        brightBlue: "#70b8ff",
         cursor: "#ffc53d",
         foreground: "#eeeeec",
+        selectionInactiveBackground: "#5c3d0570",
       },
     });
     rerender(
@@ -198,6 +226,7 @@ describe("InteractiveTerminal", () => {
 
     xterm.instances[0]?.data?.("echo hi\r");
     xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
+    xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
     expect(
       socket.sent
         .map((value) => JSON.parse(value))
@@ -211,6 +240,62 @@ describe("InteractiveTerminal", () => {
       { cols: 80, rows: 24, type: "terminal.resize" },
       { cols: 100, rows: 30, type: "terminal.resize" },
     ]);
+  });
+
+  test("changes, clamps, and resets terminal text size without browser zoom", async () => {
+    const { props, rerender, socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+
+    const increase = new KeyboardEvent("keydown", {
+      cancelable: true,
+      ctrlKey: true,
+      key: "=",
+    });
+    expect(xterm.instances[0]?.key?.(increase)).toBe(false);
+    expect(increase.defaultPrevented).toBe(true);
+    expect(props.onFontSizeChange).toHaveBeenLastCalledWith(14);
+    expect(xterm.instances[0]?.focus).toHaveBeenCalled();
+    xterm.instances[0]?.key?.(
+      new KeyboardEvent("keydown", {
+        cancelable: true,
+        ctrlKey: true,
+        key: "+",
+      }),
+    );
+    expect(props.onFontSizeChange).toHaveBeenLastCalledWith(15);
+
+    rerender(<InteractiveTerminal {...props} fontSize={14} />);
+    expect(xterm.instances[0]?.options?.fontSize).toBe(14);
+    const decrease = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "-",
+      metaKey: true,
+    });
+    xterm.instances[0]?.key?.(decrease);
+    expect(props.onFontSizeChange).toHaveBeenLastCalledWith(13);
+
+    rerender(<InteractiveTerminal {...props} fontSize={11} />);
+    props.onFontSizeChange.mockClear();
+    xterm.instances[0]?.key?.(
+      new KeyboardEvent("keydown", {
+        cancelable: true,
+        ctrlKey: true,
+        key: "-",
+      }),
+    );
+    expect(props.onFontSizeChange).not.toHaveBeenCalled();
+
+    rerender(<InteractiveTerminal {...props} fontSize={15} />);
+    xterm.instances[0]?.key?.(
+      new KeyboardEvent("keydown", {
+        cancelable: true,
+        ctrlKey: true,
+        key: "0",
+      }),
+    );
+    expect(props.onFontSizeChange).toHaveBeenLastCalledWith(13);
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 
   test("provides mobile Escape, Ctrl, and Tab input without replay", async () => {
@@ -388,7 +473,9 @@ describe("InteractiveTerminal", () => {
         type: "terminal_ticket",
       }),
       draft: { ...EMPTY_COMPOSER_DRAFT },
+      fontSize: 13,
       onDraftChange: vi.fn(),
+      onFontSizeChange: vi.fn(),
       onPrompt: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
       onUploadImage,
       structuredActionsEnabled: true,
