@@ -143,6 +143,7 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
     controlEnabled: true,
     createTicket,
     draft: { ...EMPTY_COMPOSER_DRAFT },
+    focused: true,
     onDraftChange: vi.fn(),
     onPrompt: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
     onUploadImage,
@@ -349,6 +350,64 @@ describe("InteractiveTerminal", () => {
     ).toBeVisible();
     expect(screen.getByText("clipboard-image.png")).toBeVisible();
     expect(read).toHaveBeenCalledOnce();
+  });
+
+  test("routes global image paste only to the focused split pane", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const file = new File(["png"], "focused-pane.png", {
+      type: "image/png",
+    });
+    const onUploadImage = vi.fn().mockResolvedValue({
+      mediaType: "image/png",
+      path: "/repo/focused-pane.png",
+      size: file.size,
+      type: "image_uploaded",
+    });
+    const shared = {
+      actionsEnabled: true,
+      agentId: "w5:p1",
+      agentLabel: "reviewer",
+      canPrompt: true,
+      controlEnabled: true,
+      createTicket: vi.fn().mockResolvedValue({
+        expiresAt: Date.now() + 30_000,
+        path: "/api/herdr/terminal",
+        ticket: "split-ticket",
+        type: "terminal_ticket",
+      }),
+      draft: { ...EMPTY_COMPOSER_DRAFT },
+      onDraftChange: vi.fn(),
+      onPrompt: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
+      onUploadImage,
+      structuredActionsEnabled: true,
+    };
+
+    render(
+      <>
+        <InteractiveTerminal {...shared} focused={false} paneId="w5:p1" />
+        <InteractiveTerminal {...shared} focused paneId="w5:p2" />
+      </>,
+    );
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    for (const socket of FakeWebSocket.instances) socket.message(frame());
+    await waitFor(() =>
+      expect(screen.getAllByText("Interactive")).toHaveLength(2),
+    );
+
+    fireEvent.paste(window, {
+      clipboardData: { files: [file], items: [], types: ["Files"] },
+    });
+
+    expect(
+      await screen.findAllByRole("dialog", { name: "Insert image path" }),
+    ).toHaveLength(1);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Upload and insert path" }));
+    await waitFor(() =>
+      expect(onUploadImage).toHaveBeenCalledWith("w5:p2", file),
+    );
+    expect(onUploadImage).toHaveBeenCalledOnce();
   });
 
   test("leaves image paste untouched with viewer access", async () => {

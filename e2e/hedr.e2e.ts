@@ -48,7 +48,7 @@ test("desktop workbench gives the terminal priority", async ({
   await page.goto("/");
 
   await expect(page).toHaveTitle("Hedr — agent workbench");
-  await expect(page.locator(".brand-type strong")).toHaveText("hedr");
+  await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "Needs input", exact: true }),
@@ -341,6 +341,92 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
+test("mouse resizing persists navigation width and updates pane proportions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const navigationSeparator = page.getByRole("separator", {
+    name: "Resize navigation",
+  });
+  const navigationBox = await navigationSeparator.boundingBox();
+  if (!navigationBox) throw new Error("Navigation separator is not visible");
+  await page.mouse.move(
+    navigationBox.x + navigationBox.width / 2,
+    navigationBox.y + 100,
+  );
+  await page.mouse.down();
+  await page.mouse.move(280, navigationBox.y + 100);
+  await page.mouse.up();
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("hedr-sidebar-width")))
+    .toBe("280");
+  await page.reload();
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
+
+  await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("menuitem", { name: "Split right" }).click();
+  const paneSeparator = page.getByRole("separator", {
+    name: "Resize terminal panes",
+  });
+  const paneGrid = page.locator(".pane-grid");
+  const paneBox = await paneGrid.boundingBox();
+  const separatorBox = await paneSeparator.boundingBox();
+  if (!paneBox || !separatorBox) throw new Error("Pane split is not visible");
+  await page.mouse.move(
+    separatorBox.x + separatorBox.width / 2,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    paneBox.x + paneBox.width * 0.65,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.up();
+
+  await expect(paneSeparator).toHaveAttribute("aria-valuenow", /6[45]/);
+  const paneWidths = await page
+    .locator(".terminal-pane")
+    .evaluateAll((panes) =>
+      panes.map((pane) => pane.getBoundingClientRect().width),
+    );
+  expect(paneWidths).toHaveLength(2);
+  expect(
+    (paneWidths[0] ?? 0) / ((paneWidths[1] ?? 1) + (paneWidths[0] ?? 0)),
+  ).toBeGreaterThan(0.63);
+  expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
+test("split down stacks panes using Herdr's direction", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Split pane" }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Split right" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Split down" }).click();
+
+  const paneGrid = page.locator(".pane-grid");
+  const separator = page.getByRole("separator", {
+    name: "Resize terminal panes",
+  });
+  await expect(paneGrid).toHaveAttribute("data-direction", "down");
+  await expect(separator).toHaveAttribute("aria-orientation", "horizontal");
+  const paneBoxes = await page.locator(".terminal-pane").evaluateAll((panes) =>
+    panes.map((pane) => {
+      const box = pane.getBoundingClientRect();
+      return { left: box.left, top: box.top };
+    }),
+  );
+  expect(paneBoxes).toHaveLength(2);
+  expect(paneBoxes[1]?.top ?? 0).toBeGreaterThan(paneBoxes[0]?.top ?? 0);
+  expect(paneBoxes[1]?.left).toBe(paneBoxes[0]?.left);
+  expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
 test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
   page,
 }) => {
@@ -557,6 +643,7 @@ test("mobile split panes stay readable through a pane selector", async ({
   await page.setViewportSize({ width: 390, height: 700 });
   await page.goto("/");
   await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("menuitem", { name: "Split down" }).click();
 
   const paneTabs = page.getByRole("tablist", { name: "Session panes" });
   await expect(paneTabs.getByRole("tab")).toHaveCount(2);

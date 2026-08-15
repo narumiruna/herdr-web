@@ -50,6 +50,11 @@ interface LivePane {
 interface LiveLayout {
   focused_pane_id: string;
   panes: Array<{ focused: boolean; pane_id: string }>;
+  splits?: Array<{
+    direction: "down" | "right";
+    id: string;
+    ratio: number;
+  }>;
   tab_id: string;
   workspace_id: string;
 }
@@ -115,11 +120,14 @@ function terminalPanes(
   layout: LiveLayout | undefined,
 ): TerminalPane[] {
   const paneIds = layout?.panes.map(({ pane_id: paneId }) => paneId);
-  const members = allPanes.filter(
-    (candidate) =>
-      candidate.tab_id === pane.tab_id &&
-      (!paneIds || paneIds.includes(candidate.pane_id)),
-  );
+  const members = paneIds
+    ? paneIds.flatMap((paneId) => {
+        const candidate = allPanes.find(
+          (entry) => entry.pane_id === paneId && entry.tab_id === pane.tab_id,
+        );
+        return candidate ? [candidate] : [];
+      })
+    : allPanes.filter((candidate) => candidate.tab_id === pane.tab_id);
   return members.map((candidate) => {
     const outputError = readErrors[candidate.pane_id];
     return {
@@ -151,6 +159,8 @@ function mapAgent(
   const layout = layouts.find(({ tab_id: tabId }) => tabId === pane.tab_id);
   const panes = terminalPanes(pane, allPanes, reads, readErrors, layout);
   const label = paneTitle(pane);
+  const rootSplit = panes.length === 2 ? layout?.splits?.[0] : undefined;
+  const splitRatio = rootSplit?.ratio ?? 0.5;
   return {
     activePaneId:
       layout?.focused_pane_id &&
@@ -169,6 +179,18 @@ function mapAgent(
     label,
     model: pane.tokens?.model ?? "",
     panes,
+    paneSplit:
+      panes.length === 2
+        ? {
+            direction: rootSplit?.direction === "down" ? "down" : "right",
+            ratio:
+              Number.isFinite(splitRatio) &&
+              splitRatio >= 0.1 &&
+              splitRatio <= 0.9
+                ? splitRatio
+                : 0.5,
+          }
+        : undefined,
     runtime: pane.display_agent ?? pane.agent ?? "Shell",
     started: "",
     status,

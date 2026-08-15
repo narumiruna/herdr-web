@@ -55,6 +55,8 @@ export interface CreateWorkspaceInput {
   label?: string;
 }
 
+export type PaneSplitDirection = "down" | "right";
+
 const STRUCTURAL_SUBSCRIPTIONS = [
   "workspace.created",
   "workspace.updated",
@@ -257,11 +259,23 @@ export class LiveHerdrService {
     return this.client.request("agent.prompt", { target, text });
   }
 
-  splitPane(paneId: string): Promise<unknown> {
+  splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown> {
     return this.client.request("pane.split", {
-      direction: "right",
+      direction,
       focus: true,
       target_pane_id: paneId,
+    });
+  }
+
+  setSplitRatio(
+    tabId: string,
+    path: boolean[],
+    ratio: number,
+  ): Promise<unknown> {
+    return this.client.request("layout.set_split_ratio", {
+      path,
+      ratio,
+      tab_id: tabId,
     });
   }
 

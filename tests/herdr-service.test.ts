@@ -126,6 +126,35 @@ describe("LiveHerdrService", () => {
     );
   });
 
+  test("splits a pane in Herdr's requested direction", async () => {
+    const request = vi.fn().mockResolvedValue({ type: "pane_info" });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await service.splitPane("w5:p1", "down");
+
+    expect(request).toHaveBeenCalledWith("pane.split", {
+      direction: "down",
+      focus: true,
+      target_pane_id: "w5:p1",
+    });
+  });
+
+  test("sets an exact split ratio through Herdr's layout API", async () => {
+    const request = vi.fn().mockResolvedValue({
+      layout: { root: { ratio: 0.68, type: "split" } },
+      type: "layout_split_ratio_set",
+    });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await service.setSplitRatio("w5:t1", [], 0.68);
+
+    expect(request).toHaveBeenCalledWith("layout.set_split_ratio", {
+      path: [],
+      ratio: 0.68,
+      tab_id: "w5:t1",
+    });
+  });
+
   test("stores a verified image under the target pane working directory", async () => {
     const directory = await mkdtemp(join(tmpdir(), "herdr-image-upload-"));
     const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);

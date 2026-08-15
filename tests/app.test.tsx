@@ -41,11 +41,11 @@ describe("Hedr terminal-first workbench", () => {
     expect(document.documentElement).toHaveClass("light");
   });
 
-  test("shows the Hedr product identity", () => {
+  test("shows the herdr-web product identity", () => {
     renderApp();
 
     expect(
-      screen.getByText("hedr", { selector: ".brand-type strong" }),
+      screen.getByText("herdr-web", { selector: ".brand-type strong" }),
     ).toBeVisible();
     expect(
       screen.getAllByRole("img", { name: "Hedr terminal mark" })[0],
@@ -395,6 +395,7 @@ describe("Hedr terminal-first workbench", () => {
     const user = renderApp();
 
     await user.click(screen.getByRole("button", { name: "Split pane" }));
+    await user.click(screen.getByRole("menuitem", { name: "Split right" }));
     expect(screen.getByRole("button", { name: "Split pane" })).toHaveAttribute(
       "title",
       "This session already has two panes.",

@@ -878,7 +878,8 @@
     height: 100dvh;
     overflow: hidden;
   }
-  .desktop-sidebar {
+  .desktop-sidebar,
+  .sidebar-resize-handle {
     display: none;
   }
   .topbar {

@@ -28,6 +28,11 @@ import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
 import { type AgentSortMode, Sidebar } from "./components/Sidebar";
 import {
+  clampSidebarWidth,
+  DEFAULT_SIDEBAR_WIDTH,
+  SidebarResizeHandle,
+} from "./components/SidebarResizeHandle";
+import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
   TerminalWorkspace,
@@ -72,6 +77,16 @@ export function App({
         ? window.localStorage.getItem("hedr-agent-sort")
         : null;
     return saved === "priority" ? "priority" : "grouped";
+  });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored =
+      typeof window.localStorage?.getItem === "function"
+        ? window.localStorage.getItem("hedr-sidebar-width")
+        : null;
+    const saved = stored === null ? Number.NaN : Number(stored);
+    return Number.isFinite(saved)
+      ? clampSidebarWidth(saved)
+      : DEFAULT_SIDEBAR_WIDTH;
   });
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -196,6 +211,12 @@ export function App({
       window.localStorage.setItem("hedr-agent-sort", agentSort);
     }
   }, [agentSort]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem("hedr-sidebar-width", String(sidebarWidth));
+    }
+  }, [sidebarWidth]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -364,7 +385,12 @@ export function App({
       className="hedr-theme"
     >
       <Tooltip.Provider>
-        <div className="app-shell">
+        <div
+          className="app-shell"
+          style={{
+            gridTemplateColumns: `${sidebarWidth}px 6px minmax(0, 1fr)`,
+          }}
+        >
           <div className="desktop-sidebar">
             <Sidebar
               state={state}
@@ -379,6 +405,10 @@ export function App({
               onRefresh={runtime.refresh}
             />
           </div>
+          <SidebarResizeHandle
+            width={sidebarWidth}
+            onResize={setSidebarWidth}
+          />
 
           <div className="app-surface">
             <header className="topbar">
@@ -638,8 +668,11 @@ export function App({
                       [agentId]: value,
                     }))
                   }
-                  onSplitPane={() =>
-                    runtime.splitPane(agent.id, agent.activePaneId)
+                  onSplitPane={(direction) =>
+                    runtime.splitPane(agent.id, agent.activePaneId, direction)
+                  }
+                  onResizePanes={(ratio) =>
+                    runtime.resizePanes(agent.id, agent.tabId ?? "", ratio)
                   }
                   onUploadImage={runtime.uploadImage}
                   onSelectPane={(paneId) =>
