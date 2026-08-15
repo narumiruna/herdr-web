@@ -53,6 +53,7 @@ interface InteractiveTerminalProps {
     input: TerminalTicketInput,
   ) => Promise<TerminalTicket>;
   draft: ComposerDraft;
+  focused: boolean;
   onDraftChange: (agentId: string, update: Partial<ComposerDraft>) => void;
   onPrompt: (message: string) => Promise<unknown> | undefined;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
@@ -162,6 +163,7 @@ export function InteractiveTerminal({
   canPrompt,
   createTicket,
   draft,
+  focused,
   onDraftChange,
   onPrompt,
   onUploadImage,
@@ -530,6 +532,7 @@ export function InteractiveTerminal({
   }, []);
 
   const imagePasteEnabled =
+    focused &&
     structuredActionsEnabled &&
     sessionMode === "control" &&
     ["connecting", "live", "reconnecting"].includes(status);

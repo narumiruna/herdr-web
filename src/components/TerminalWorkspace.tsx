@@ -752,6 +752,7 @@ export function TerminalWorkspace({
                     canPrompt={canPrompt}
                     createTicket={createTerminalTicket}
                     draft={draft}
+                    focused={pane.id === agent.activePaneId}
                     onDraftChange={onDraftChange}
                     onPrompt={(message) => onMessage(message)}
                     onUploadImage={onUploadImage}
