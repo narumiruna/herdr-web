@@ -61,18 +61,26 @@ To link the command from this checkout instead:
 just install-cli
 ```
 
-Open the current directory or an explicit project directory:
+Start the web workbench without opening the shell's current directory:
+
+```sh
+herdr-web
+```
+
+Open the current directory or an explicit project directory only when requested:
 
 ```sh
 herdr-web .
 herdr-web /path/to/project
 ```
 
-The command resolves the directory, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
+With a directory, the command resolves it, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
+
+Without a directory, the command starts that web workflow without focusing or creating a workspace.
 
 Run `herdr-web --help` for usage and press `Ctrl+C` to stop the development web processes.
 
-The command requires `herdr` and `just`; a linked development command additionally depends on this checkout and its installed npm dependencies.
+The command requires `just`, while directory-opening mode also invokes `herdr`; a linked development command additionally depends on this checkout and its installed npm dependencies.
 
 ## Run locally
 
