@@ -1,32 +1,16 @@
 name: Publish
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: Stable package version without the v prefix
-        required: true
-        type: string
-    secrets:
-      PAT_TOKEN:
-        description: Token with permission to publish herdr-web to npm
-        required: true
-    outputs:
-      digest:
-        description: Published container image digest
-        value: ${{ jobs.publish.outputs.digest }}
+  push:
+    tags:
+      - v*.*.*
   workflow_dispatch:
-    inputs:
-      version:
-        description: Stable package version without the v prefix
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-${{ inputs.version }}
+  group: publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -35,21 +19,11 @@ jobs:
     environment: release
     permissions:
       contents: read
+      id-token: write # Attach npm provenance from GitHub Actions.
       packages: write # Publish the GHCR image with GITHUB_TOKEN.
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
-      - name: Require publishing token
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          if [ -z "$PAT_TOKEN" ]; then
-            echo "Repository secret PAT_TOKEN is required for npm publication." >&2
-            exit 1
-          fi
-
       - name: Check out tagged source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -59,42 +33,45 @@ jobs:
       - name: Set up Node.js for npm
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version: 26
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Validate release version and ref
+      - name: Validate release tag and package versions
         id: metadata
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          VERSION: ${{ inputs.version }}
         run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Publish must run from a vX.Y.Z tag, not $GITHUB_REF." >&2
+            exit 1
+          fi
+          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Publish tags must use stable semver: v1.2.3." >&2
+            exit 1
+          fi
           if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
             echo "$GITHUB_REF_NAME is not contained in $DEFAULT_BRANCH." >&2
             exit 1
           fi
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Version must be stable semver without a v prefix: $VERSION" >&2
-            exit 1
-          fi
+
+          version=${GITHUB_REF_NAME#v}
           package_version=$(node --print "require('./package.json').version")
-          if [ "$VERSION" != "$package_version" ]; then
-            echo "Input version $VERSION does not match package.json $package_version." >&2
-            exit 1
-          fi
-          if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
-            echo "Publish must run from tag v$VERSION, not $GITHUB_REF." >&2
+          lock_version=$(node --print "require('./package-lock.json').version")
+          if [ "$version" != "$package_version" ] || [ "$version" != "$lock_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json and package-lock.json." >&2
             exit 1
           fi
 
           image=$(printf 'ghcr.io/%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
-          minor=${VERSION%.*}
-          major=${VERSION%%.*}
+          minor=${version%.*}
+          major=${version%%.*}
           short_sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-12)
           {
+            echo "version=$version"
             echo "image=$image"
             echo "tags<<EOF"
-            echo "$image:$VERSION"
+            echo "$image:$version"
             echo "$image:$minor"
             echo "$image:$major"
             echo "$image:latest"
@@ -102,13 +79,25 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run repository checks
+        run: npm run ci
+
+      - name: Run browser tests
+        run: npm run test:e2e
+
       - name: Inspect npm package contents
         run: npm pack --dry-run --ignore-scripts
 
       - name: Check existing npm package
         id: npm-package
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           if npm view "herdr-web@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -119,8 +108,8 @@ jobs:
       - name: Publish npm package
         if: steps.npm-package.outputs.exists != 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: npm publish --ignore-scripts # zizmor: ignore[use-trusted-publishing] PAT_TOKEN authenticates npm publication.
+          NPM_CONFIG_PROVENANCE: "true"
+        run: npm publish --ignore-scripts
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
@@ -146,7 +135,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
             org.opencontainers.image.title=Hedr
             org.opencontainers.image.description=Browser workbench for Herdr coding-agent sessions
           cache-from: type=gha
@@ -158,7 +147,7 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
           IMAGE: ${{ steps.metadata.outputs.image }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           {
             echo "## Published Hedr $VERSION"

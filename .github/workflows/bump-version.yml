@@ -66,12 +66,14 @@ jobs:
           npm version "$BUMP" --no-git-tag-version
           version=$(node --print "require('./package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
           test "$(node --print "require('./package-lock.json').version")" = "$version"
 
-      - name: Create signed GitHub commit
-        id: commit
+      - name: Create signed commit and release tag
+        id: release
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
+          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         with:
           github-token: ${{ secrets.PAT_TOKEN }}
@@ -79,12 +81,20 @@ jobs:
             const fs = require("node:fs");
             const { owner, repo } = context.repo;
             const version = process.env.VERSION;
+            const tag = process.env.TAG;
             const branch = context.payload.repository.default_branch;
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              throw new Error(`Tag ${tag} already exists.`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
             const additions = ["package.json", "package-lock.json"].map((path) => ({
               path,
               contents: fs.readFileSync(path).toString("base64"),
             }));
-
             const result = await github.graphql(
               `mutation CreateVersionCommit($input: CreateCommitOnBranchInput!) {
                 createCommitOnBranch(input: $input) {
@@ -107,10 +117,32 @@ jobs:
             );
             const commit = result.createCommitOnBranch.commit;
 
+            try {
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/tags/${tag}`,
+                sha: commit.oid,
+              });
+            } catch (error) {
+              await core.summary
+                .addHeading(`Tag ${tag} needs recovery`)
+                .addLink(`Version commit ${commit.oid.slice(0, 12)}`, commit.url)
+                .addCodeBlock(
+                  `git fetch origin main\ngit tag -a ${tag} ${commit.oid} -m "Release ${version}"\ngit push origin ${tag}`,
+                  "sh",
+                )
+                .write();
+              throw new Error(
+                `Created version commit ${commit.oid}, but could not create ${tag}: ${error.message}`,
+              );
+            }
+
             core.setOutput("oid", commit.oid);
+            core.setOutput("tag", tag);
             core.setOutput("url", commit.url);
             await core.summary
               .addHeading(`Version ${version}`)
               .addLink(`Commit ${commit.oid.slice(0, 12)}`, commit.url)
-              .addRaw("\nThe PAT-authenticated push starts CI on the default branch.")
+              .addRaw(`\nCreated ${tag}; CI, Release, and Publish start from PAT-authenticated pushes.`)
               .write();

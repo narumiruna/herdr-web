@@ -295,28 +295,23 @@ CI runs formatting and lint checks, all unit and integration tests, both product
 
 Add a repository Actions secret named `PAT_TOKEN` before running release automation.
 
-Set `PAT_TOKEN` to an access token permitted to update the repository and publish `herdr-web`.
+Set `PAT_TOKEN` to a GitHub personal access token with permission to update repository contents so its branch and tag pushes trigger downstream workflows.
+
+Configure npm Trusted Publishing for package `herdr-web` with this GitHub repository, workflow `publish.yml`, and environment `release`; no npm token is stored in GitHub.
 
 GHCR images and GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
 
 Version bumps, publication, and GitHub Releases use the `release` environment so optional deployment-branch or reviewer protection can be configured in repository settings.
 
-Run **Bump version** from `main` and choose `patch`, `minor`, or `major`.
+Run **Bump version** from `main` and choose `patch` (the default), `minor`, or `major`.
 
-The workflow updates `package.json` and `package-lock.json` in a GitHub-signed commit directly on `main`, and the PAT-authenticated push starts CI without opening a pull request.
+The workflow updates `package.json` and `package-lock.json` in a GitHub-signed commit directly on `main`, then creates the matching `vX.Y.Z` tag at that exact commit without opening a pull request.
 
-After that version commit passes CI, create and push a signed tag matching the package version:
+The PAT-authenticated commit starts CI, while its tag independently starts `.github/workflows/release.yml` and `.github/workflows/publish.yml`.
 
-```sh
-git switch main
-git pull --ff-only
-git tag -s v0.2.0 -m "Hedr 0.2.0"
-git push origin v0.2.0
-```
+Release verifies that the stable semver tag belongs to `main`, matches both package files, and creates a GitHub Release with generated release notes.
 
-The tag starts `.github/workflows/release.yml`, which verifies the tag and lockfile versions, reruns all checks, calls `.github/workflows/publish.yml`, and creates the GitHub Release only after every publication succeeds.
-
-Publish sends `herdr-web` to the public npm registry using `PAT_TOKEN`.
+Publish performs the same metadata checks, runs the repository and Chromium test gates, and sends `herdr-web` to the public npm registry through npm Trusted Publishing.
 
 It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, then pushes immutable version, minor, major, commit, and `latest` tags to `ghcr.io/narumiruna/hedr`.
 
@@ -324,7 +319,9 @@ It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, 
 docker pull ghcr.io/narumiruna/hedr:latest
 ```
 
-The **Publish** workflow can be rerun manually only from a matching `vX.Y.Z` tag and skips an npm version that already exists.
+The **Publish** and **Release** workflows can be rerun manually only from a matching `vX.Y.Z` tag, and Publish skips an npm version that already exists.
+
+If a bump reports that its version commit succeeded but tag creation failed, create the reported tag at the reported commit instead of running another version bump.
 
 ## Architecture
 
