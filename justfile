@@ -44,6 +44,7 @@ up:
     case "$data_home" in /*) ;; *) echo "HERDR_WEB_HOME must be absolute: $data_home" >&2; exit 1 ;; esac
     runtime_dir="$data_home/runtime"
     checkout_runtime_dir=.herdr-web-runtime
+    active_data_home_file="$checkout_runtime_dir/data-home"
     legacy_runtime_dir=.he"dr"-runtime
     mkdir -p "$runtime_dir"
     chmod 700 "$data_home" "$runtime_dir"
@@ -58,12 +59,20 @@ up:
             rm -f "$pid_file"
         fi
     }
-    stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    stop_proxy "$checkout_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$checkout_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    stop_runtime_dir() {
+        runtime_path="$1"
+        stop_proxy "$runtime_path/socket-proxy.pid" "scripts/socket-proxy.mjs"
+        stop_proxy "$runtime_path/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    }
+    stop_runtime_dir "$runtime_dir"
+    if [ -f "$active_data_home_file" ]; then
+        saved_data_home=$(sed -n '1p' "$active_data_home_file")
+        case "$saved_data_home" in /*) stop_runtime_dir "$saved_data_home/runtime" ;; esac
+    fi
+    stop_runtime_dir "$checkout_runtime_dir"
+    stop_runtime_dir "$legacy_runtime_dir"
+    mkdir -p "$checkout_runtime_dir"
+    printf '%s\n' "$data_home" >"$active_data_home_file"
     export HERDR_WEB_HOME="$data_home"
     export HERDR_WEB_TOKEN="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_TERMINAL_PROXY_TOKEN="${HERDR_TERMINAL_PROXY_TOKEN:-$(node scripts/access-token.mjs)}"
@@ -119,17 +128,33 @@ down:
     case "$data_home" in /*) ;; *) echo "HERDR_WEB_HOME must be absolute: $data_home" >&2; exit 1 ;; esac
     runtime_dir="$data_home/runtime"
     checkout_runtime_dir=.herdr-web-runtime
+    active_data_home_file="$checkout_runtime_dir/data-home"
     legacy_runtime_dir=.he"dr"-runtime
-    stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    stop_proxy "$checkout_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$checkout_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
-    stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    rm -f "$runtime_dir/socket-proxy.log" "$runtime_dir/terminal-proxy.log"
-    rm -f "$checkout_runtime_dir/socket-proxy.log" "$checkout_runtime_dir/terminal-proxy.log"
-    rm -f "$legacy_runtime_dir/socket-proxy.log" "$legacy_runtime_dir/terminal-proxy.log"
-    rmdir "$runtime_dir" "$checkout_runtime_dir" "$legacy_runtime_dir" 2>/dev/null || true
+    stop_runtime_dir() {
+        runtime_path="$1"
+        stop_proxy "$runtime_path/socket-proxy.pid" "scripts/socket-proxy.mjs"
+        stop_proxy "$runtime_path/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    }
+    clean_runtime_dir() {
+        runtime_path="$1"
+        rm -f "$runtime_path/socket-proxy.log" "$runtime_path/terminal-proxy.log"
+        rmdir "$runtime_path" 2>/dev/null || true
+    }
+    stop_runtime_dir "$runtime_dir"
+    if [ -f "$active_data_home_file" ]; then
+        saved_data_home=$(sed -n '1p' "$active_data_home_file")
+        case "$saved_data_home" in /*) stop_runtime_dir "$saved_data_home/runtime" ;; esac
+    fi
+    stop_runtime_dir "$checkout_runtime_dir"
+    stop_runtime_dir "$legacy_runtime_dir"
+    clean_runtime_dir "$runtime_dir"
+    if [ -f "$active_data_home_file" ]; then
+        saved_data_home=$(sed -n '1p' "$active_data_home_file")
+        case "$saved_data_home" in /*) clean_runtime_dir "$saved_data_home/runtime" ;; esac
+    fi
+    rm -f "$checkout_runtime_dir/socket-proxy.log" "$checkout_runtime_dir/terminal-proxy.log" "$active_data_home_file"
+    clean_runtime_dir "$checkout_runtime_dir"
+    clean_runtime_dir "$legacy_runtime_dir"
 
 # Run reducer and component tests once.
 test:

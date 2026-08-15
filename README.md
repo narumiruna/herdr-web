@@ -269,6 +269,8 @@ Stop both the container and host socket forwarder:
 just down
 ```
 
+`just down` remembers the last `HERDR_WEB_HOME` used by `just up`, so a plain shutdown also cleans helper state started with an inline custom home.
+
 The container serves the SPA and authenticated API from one Node.js process.
 
 Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/state` proves access to the live herdr server.

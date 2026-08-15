@@ -469,7 +469,7 @@ describe("live herdr-web app", () => {
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
     await user.upload(screen.getByLabelText("Choose image"), file);
     expect(
-      screen.getByText(/will be stored under ~\/\.herdr-web\/uploads/),
+      screen.getByText(/will be stored in the configured upload directory/),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
