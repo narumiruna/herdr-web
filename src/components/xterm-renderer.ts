@@ -23,6 +23,7 @@ interface RendererOptions {
 export interface TerminalRendererLifecycle {
   dispose: () => void;
   ready: Promise<TerminalRendererKind>;
+  unicodeReady: Promise<void>;
 }
 
 const defaultLoaders: RendererLoaders = {
@@ -80,7 +81,7 @@ export function initializeTerminalRenderer(
   };
 
   announce("canvas");
-  const ready = (async (): Promise<TerminalRendererKind> => {
+  const unicodeReady = (async (): Promise<void> => {
     try {
       const { Unicode11Addon } = await loaders.loadUnicode();
       if (!disposed) {
@@ -90,7 +91,9 @@ export function initializeTerminalRenderer(
     } catch {
       // The built-in Unicode table remains active when the optional addon fails.
     }
-
+  })();
+  const ready = (async (): Promise<TerminalRendererKind> => {
+    await unicodeReady;
     if (disposed) return renderer;
 
     try {
@@ -115,6 +118,7 @@ export function initializeTerminalRenderer(
 
   return {
     ready,
+    unicodeReady,
     dispose: () => {
       if (disposed) return;
       disposed = true;

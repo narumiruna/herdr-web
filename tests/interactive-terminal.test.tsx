@@ -14,6 +14,10 @@ const xterm = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
   }>,
 }));
+const renderer = vi.hoisted(() => ({
+  ready: Promise.resolve<"canvas" | "webgl">("canvas"),
+  unicodeReady: Promise.resolve(),
+}));
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -77,7 +81,11 @@ vi.mock("../src/components/xterm-renderer", () => ({
     options?: { onRendererChange?: (kind: string) => void },
   ) => {
     options?.onRendererChange?.("canvas");
-    return { dispose: vi.fn(), ready: Promise.resolve("canvas") };
+    return {
+      dispose: vi.fn(),
+      ready: renderer.ready,
+      unicodeReady: renderer.unicodeReady,
+    };
   },
   waitForTerminalFonts: () => Promise.resolve(),
 }));
@@ -124,6 +132,8 @@ class FakeWebSocket {
 afterEach(() => {
   FakeWebSocket.instances = [];
   xterm.instances = [];
+  renderer.ready = Promise.resolve("canvas");
+  renderer.unicodeReady = Promise.resolve();
   vi.unstubAllGlobals();
 });
 
@@ -179,6 +189,23 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
 }
 
 describe("InteractiveTerminal", () => {
+  test("waits for Unicode activation but not optional WebGL before connecting", async () => {
+    let resolveUnicode: (() => void) | undefined;
+    renderer.unicodeReady = new Promise<void>((resolve) => {
+      resolveUnicode = resolve;
+    });
+    renderer.ready = new Promise(() => undefined);
+
+    const pendingTerminal = renderTerminal();
+    await waitFor(() => expect(xterm.instances).toHaveLength(1));
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    resolveUnicode?.();
+    const { createTicket } = await pendingTerminal;
+    expect(createTicket).toHaveBeenCalledOnce();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
   test("keeps existing control and resize ownership while forwarding input", async () => {
     const { createTicket, props, rerender, socket } = await renderTerminal();
 

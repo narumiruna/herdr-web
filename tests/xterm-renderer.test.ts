@@ -45,6 +45,53 @@ describe("xterm renderer lifecycle", () => {
     addon.dispose();
   });
 
+  test("reports Unicode readiness without waiting for optional WebGL", async () => {
+    const terminal = new FakeTerminal();
+    let resolveWebgl:
+      | ((module: { WebglAddon: new () => WebglAddon }) => void)
+      | undefined;
+    class Unicode11Addon implements ITerminalAddon {
+      activate() {}
+      dispose() {}
+    }
+    class WebglAddon implements ITerminalAddon {
+      activate() {}
+      dispose() {}
+      onContextLoss(): IDisposable {
+        return { dispose() {} };
+      }
+    }
+    const loadWebgl = vi.fn(
+      () =>
+        new Promise<{ WebglAddon: new () => WebglAddon }>((resolve) => {
+          resolveWebgl = resolve;
+        }),
+    );
+    const lifecycle = initializeTerminalRenderer(
+      terminal as unknown as Terminal,
+      {
+        loaders: {
+          loadUnicode: async () => ({ Unicode11Addon }),
+          loadWebgl,
+        },
+      },
+    );
+
+    await expect(lifecycle.unicodeReady).resolves.toBeUndefined();
+    expect(terminal.unicode.activeVersion).toBe("11");
+    expect(loadWebgl).toHaveBeenCalledOnce();
+    let rendererReady = false;
+    void lifecycle.ready.then(() => {
+      rendererReady = true;
+    });
+    await Promise.resolve();
+    expect(rendererReady).toBe(false);
+
+    resolveWebgl?.({ WebglAddon });
+    await expect(lifecycle.ready).resolves.toBe("webgl");
+    lifecycle.dispose();
+  });
+
   test("activates Unicode 11 and falls back once after WebGL context loss", async () => {
     const terminal = new FakeTerminal();
     const changes: string[] = [];

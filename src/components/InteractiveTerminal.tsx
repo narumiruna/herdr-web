@@ -560,10 +560,13 @@ export function InteractiveTerminal({
         : undefined;
     observer?.observe(element);
     window.addEventListener("resize", scheduleFit);
-    void waitForTerminalFonts(
-      document.fonts,
-      clampTerminalFontSize(fontSizeRef.current),
-    ).then(() => {
+    void Promise.all([
+      waitForTerminalFonts(
+        document.fonts,
+        clampTerminalFontSize(fontSizeRef.current),
+      ),
+      renderer.unicodeReady,
+    ]).then(() => {
       if (disposed) return;
       element.dataset.fonts = "ready";
       startFrame = window.requestAnimationFrame(() => {
