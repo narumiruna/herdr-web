@@ -22,12 +22,10 @@ concurrency:
 
 jobs:
   bump:
-    name: Open version bump pull request
+    name: Bump version on default branch
     environment: release
     permissions:
-      actions: write # Dispatch CI for the bot-created pull request.
-      contents: write # Create the version branch and commit.
-      pull-requests: write # Open the version bump pull request.
+      contents: read # PAT_TOKEN performs the default-branch commit.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -37,6 +35,15 @@ jobs:
         run: |
           if [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
             echo "Run this workflow from $DEFAULT_BRANCH, not $GITHUB_REF_NAME." >&2
+            exit 1
+          fi
+
+      - name: Require repository token
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ -z "$PAT_TOKEN" ]; then
+            echo "Repository secret PAT_TOKEN is required for the version commit." >&2
             exit 1
           fi
 
@@ -59,111 +66,51 @@ jobs:
           npm version "$BUMP" --no-git-tag-version
           version=$(node --print "require('./package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "branch=github-actions/chore/bump-v$version" >> "$GITHUB_OUTPUT"
           test "$(node --print "require('./package-lock.json').version")" = "$version"
 
-      - name: Create signed GitHub commit and pull request
-        id: pull-request
+      - name: Create signed GitHub commit
+        id: commit
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          BRANCH: ${{ steps.version.outputs.branch }}
           VERSION: ${{ steps.version.outputs.version }}
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.PAT_TOKEN }}
           script: |
             const fs = require("node:fs");
             const { owner, repo } = context.repo;
-            const branch = process.env.BRANCH;
             const version = process.env.VERSION;
-            const base = context.payload.repository.default_branch;
+            const branch = context.payload.repository.default_branch;
+            const additions = ["package.json", "package-lock.json"].map((path) => ({
+              path,
+              contents: fs.readFileSync(path).toString("base64"),
+            }));
 
-            let branchCreated = false;
-            let result;
-            let pull;
-            try {
-              await github.rest.git.createRef({
-                owner,
-                repo,
-                ref: `refs/heads/${branch}`,
-                sha: context.sha,
-              });
-              branchCreated = true;
-
-              const additions = ["package.json", "package-lock.json"].map((path) => ({
-                path,
-                contents: fs.readFileSync(path).toString("base64"),
-              }));
-              result = await github.graphql(
-                `mutation CreateVersionCommit($input: CreateCommitOnBranchInput!) {
-                  createCommitOnBranch(input: $input) {
-                    commit { oid url }
-                  }
-                }`,
-                {
-                  input: {
-                    branch: {
-                      repositoryNameWithOwner: `${owner}/${repo}`,
-                      branchName: branch,
-                    },
-                    expectedHeadOid: context.sha,
-                    message: {
-                      headline: `chore(release): bump version to ${version}`,
-                    },
-                    fileChanges: { additions },
+            const result = await github.graphql(
+              `mutation CreateVersionCommit($input: CreateCommitOnBranchInput!) {
+                createCommitOnBranch(input: $input) {
+                  commit { oid url }
+                }
+              }`,
+              {
+                input: {
+                  branch: {
+                    repositoryNameWithOwner: `${owner}/${repo}`,
+                    branchName: branch,
                   },
+                  expectedHeadOid: context.sha,
+                  message: {
+                    headline: `chore(release): bump version to ${version}`,
+                  },
+                  fileChanges: { additions },
                 },
-              );
+              },
+            );
+            const commit = result.createCommitOnBranch.commit;
 
-              pull = await github.rest.pulls.create({
-                owner,
-                repo,
-                base,
-                head: branch,
-                title: `chore(release): bump version to ${version}`,
-                body: [
-                  `Bump Hedr from the current version to \`${version}\`.`,
-                  "",
-                  "After this pull request passes CI and is merged, create and push the signed tag " +
-                    `\`v${version}\` to start the release workflow.`,
-                ].join("\n"),
-              });
-
-              await github.rest.actions.createWorkflowDispatch({
-                owner,
-                repo,
-                workflow_id: "ci.yml",
-                ref: branch,
-              });
-            } catch (error) {
-              if (pull) {
-                try {
-                  await github.rest.pulls.update({
-                    owner,
-                    repo,
-                    pull_number: pull.data.number,
-                    state: "closed",
-                  });
-                } catch (cleanupError) {
-                  core.warning(`Could not close pull request: ${cleanupError.message}`);
-                }
-              }
-              if (branchCreated) {
-                try {
-                  await github.rest.git.deleteRef({
-                    owner,
-                    repo,
-                    ref: `heads/${branch}`,
-                  });
-                } catch (cleanupError) {
-                  core.warning(`Could not delete ${branch}: ${cleanupError.message}`);
-                }
-              }
-              throw error;
-            }
-
-            core.setOutput("url", pull.data.html_url);
+            core.setOutput("oid", commit.oid);
+            core.setOutput("url", commit.url);
             await core.summary
               .addHeading(`Version ${version}`)
-              .addLink(`Pull request #${pull.data.number}`, pull.data.html_url)
-              .addRaw(`\nCommit: ${result.createCommitOnBranch.commit.oid}`)
+              .addLink(`Commit ${commit.oid.slice(0, 12)}`, commit.url)
+              .addRaw("\nThe PAT-authenticated push starts CI on the default branch.")
               .write();

@@ -291,21 +291,21 @@ npx playwright install chromium
 
 GitHub Actions runs `.github/workflows/ci.yml` for pull requests, pushes to `main`, and manual dispatches.
 
-CI runs formatting and lint checks, all unit and integration tests, both production builds, Chromium browser tests, and a standalone Docker build.
+CI runs formatting and lint checks, all unit and integration tests, both production builds, and Chromium browser tests.
 
 Add a repository Actions secret named `PAT_TOKEN` before running release automation.
 
-Set `PAT_TOKEN` to an npm access token permitted to publish `herdr-web`.
+Set `PAT_TOKEN` to an access token permitted to update the repository and publish `herdr-web`.
 
-Version pull requests, GHCR images, and GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
+GHCR images and GitHub Releases use job-scoped `GITHUB_TOKEN` permissions.
 
 Version bumps, publication, and GitHub Releases use the `release` environment so optional deployment-branch or reviewer protection can be configured in repository settings.
 
 Run **Bump version** from `main` and choose `patch`, `minor`, or `major`.
 
-The workflow updates `package.json` and `package-lock.json` in a GitHub-signed commit and opens a focused version-bump pull request.
+The workflow updates `package.json` and `package-lock.json` in a GitHub-signed commit directly on `main`, and the PAT-authenticated push starts CI without opening a pull request.
 
-After the version pull request passes CI and is merged, create and push a signed tag matching the package version:
+After that version commit passes CI, create and push a signed tag matching the package version:
 
 ```sh
 git switch main
