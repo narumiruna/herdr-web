@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -75,6 +76,7 @@ export async function writePaneImage(
   cwd: string,
   input: ImageUploadInput,
   projectsRoot?: string,
+  uploadsRoot = join(homedir(), ".herdr-web", "uploads"),
 ): Promise<UploadedImage> {
   const extension = validateImage(input);
   if (!isAbsolute(cwd)) {
@@ -90,16 +92,11 @@ export async function writePaneImage(
     }
   }
 
-  const requestedUploadDirectory = join(
-    projectDirectory,
-    ".herdr-web",
-    "uploads",
-  );
-  await mkdir(requestedUploadDirectory, { mode: 0o700, recursive: true });
-  const uploadDirectory = await realpath(requestedUploadDirectory);
-  if (!contains(projectDirectory, uploadDirectory)) {
-    throw new TypeError("Pane upload directory resolves outside the project");
+  if (!isAbsolute(uploadsRoot)) {
+    throw new TypeError("herdr-web upload directory must be absolute");
   }
+  await mkdir(uploadsRoot, { mode: 0o700, recursive: true });
+  const uploadDirectory = await realpath(uploadsRoot);
 
   const filename = `image-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const path = join(uploadDirectory, filename);

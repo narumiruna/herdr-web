@@ -40,9 +40,13 @@ preview: build
 up:
     #!/bin/sh
     set -eu
-    runtime_dir=.herdr-web-runtime
+    data_home="${HERDR_WEB_HOME:-$HOME/.herdr-web}"
+    case "$data_home" in /*) ;; *) echo "HERDR_WEB_HOME must be absolute: $data_home" >&2; exit 1 ;; esac
+    runtime_dir="$data_home/runtime"
+    checkout_runtime_dir=.herdr-web-runtime
     legacy_runtime_dir=.he"dr"-runtime
     mkdir -p "$runtime_dir"
+    chmod 700 "$data_home" "$runtime_dir"
     stop_proxy() {
         pid_file="$1"
         pattern="$2"
@@ -56,8 +60,11 @@ up:
     }
     stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
     stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    stop_proxy "$checkout_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$checkout_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
     stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
     stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    export HERDR_WEB_HOME="$data_home"
     export HERDR_WEB_TOKEN="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_TERMINAL_PROXY_TOKEN="${HERDR_TERMINAL_PROXY_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
@@ -108,14 +115,21 @@ down:
             rm -f "$pid_file"
         fi
     }
+    data_home="${HERDR_WEB_HOME:-$HOME/.herdr-web}"
+    case "$data_home" in /*) ;; *) echo "HERDR_WEB_HOME must be absolute: $data_home" >&2; exit 1 ;; esac
+    runtime_dir="$data_home/runtime"
+    checkout_runtime_dir=.herdr-web-runtime
     legacy_runtime_dir=.he"dr"-runtime
-    stop_proxy .herdr-web-runtime/socket-proxy.pid "scripts/socket-proxy.mjs"
-    stop_proxy .herdr-web-runtime/terminal-proxy.pid "scripts/terminal-session-proxy.mjs"
+    stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    stop_proxy "$checkout_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$checkout_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
     stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
     stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    rm -f .herdr-web-runtime/socket-proxy.log .herdr-web-runtime/terminal-proxy.log
+    rm -f "$runtime_dir/socket-proxy.log" "$runtime_dir/terminal-proxy.log"
+    rm -f "$checkout_runtime_dir/socket-proxy.log" "$checkout_runtime_dir/terminal-proxy.log"
     rm -f "$legacy_runtime_dir/socket-proxy.log" "$legacy_runtime_dir/terminal-proxy.log"
-    rmdir .herdr-web-runtime "$legacy_runtime_dir" 2>/dev/null || true
+    rmdir "$runtime_dir" "$checkout_runtime_dir" "$legacy_runtime_dir" 2>/dev/null || true
 
 # Run reducer and component tests once.
 test:

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { HerdrClient } from "./herdr-client.js";
 import { LiveHerdrService } from "./herdr-service.js";
 import { createHerdrHttpHandler } from "./http-app.js";
@@ -37,6 +37,12 @@ const endpoint =
       }
     : socketPath;
 const staticRoot = resolve(process.env.HERDR_WEB_STATIC_ROOT ?? "dist");
+const configuredDataHome = process.env.HERDR_WEB_HOME?.trim();
+if (configuredDataHome && !isAbsolute(configuredDataHome)) {
+  console.error("HERDR_WEB_HOME must be an absolute path.");
+  process.exit(1);
+}
+const dataHome = resolve(configuredDataHome || join(homedir(), ".herdr-web"));
 const projectsRoot = process.env.HERDR_PROJECTS_ROOT?.trim() || undefined;
 const terminalProxyPort = Number.parseInt(
   process.env.HERDR_TERMINAL_PROXY_PORT ?? "",
@@ -56,6 +62,7 @@ const client = new HerdrClient(endpoint);
 const service = new LiveHerdrService(client, {
   projectsRoot,
   terminalStreamingConfigured: terminalBackend.configured,
+  uploadsRoot: join(dataHome, "uploads"),
 });
 const terminalTickets = new TerminalTicketStore();
 const api = createHerdrHttpHandler({

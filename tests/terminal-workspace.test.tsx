@@ -100,7 +100,7 @@ function Harness({
           onClosePane={() => undefined}
           onUploadImage={async () => ({
             mediaType: "image/png",
-            path: "/repo/.herdr-web/uploads/test.png",
+            path: "/home/user/.herdr-web/uploads/test.png",
             size: 1,
             type: "image_uploaded",
           })}

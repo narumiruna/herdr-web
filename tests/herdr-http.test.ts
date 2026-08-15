@@ -59,7 +59,7 @@ function fakeService(): HerdrService {
     splitPane: vi.fn().mockResolvedValue({ type: "pane_info" }),
     uploadImage: vi.fn().mockResolvedValue({
       mediaType: "image/png",
-      path: "/repo/.herdr-web/uploads/image.png",
+      path: "/home/user/.herdr-web/uploads/image.png",
       size: 11,
       type: "image_uploaded",
     }),
