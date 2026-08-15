@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { HerdrApiError, type HerdrClient } from "./herdr-client.js";
 import {
   type ImageUploadInput,
@@ -10,8 +12,21 @@ interface SessionSnapshotResult {
   type: "session_snapshot";
   snapshot: {
     panes?: Array<{ pane_id?: string }>;
+    workspaces?: SnapshotWorkspace[];
     [key: string]: unknown;
   };
+}
+
+interface SnapshotWorkspace {
+  worktree?: SnapshotWorktree | null;
+  [key: string]: unknown;
+}
+
+interface SnapshotWorktree {
+  branch?: string;
+  checkout_path?: string;
+  repo_root?: string;
+  [key: string]: unknown;
 }
 
 interface PaneReadResponse {
@@ -57,6 +72,8 @@ export interface CreateWorkspaceInput {
 
 export type PaneSplitDirection = "down" | "right";
 
+const execFileAsync = promisify(execFile);
+
 const STRUCTURAL_SUBSCRIPTIONS = [
   "workspace.created",
   "workspace.updated",
@@ -98,6 +115,72 @@ const RUNTIMES: Record<
   Pi: { args: [], command: "pi", kind: "pi" },
 };
 
+export function parseGitWorktreeBranches(output: string): Map<string, string> {
+  const branches = new Map<string, string>();
+  let path = "";
+  for (const line of output.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      path = line.slice("worktree ".length).trim();
+      continue;
+    }
+    if (!path || !line.startsWith("branch ")) continue;
+    const branch = line
+      .slice("branch ".length)
+      .trim()
+      .replace(/^refs\/heads\//, "");
+    if (branch) branches.set(path, branch);
+  }
+  return branches;
+}
+
+export function applyWorktreeBranches(
+  snapshot: SessionSnapshotResult["snapshot"],
+  branchesByPath: Map<string, string>,
+): void {
+  for (const workspace of snapshot.workspaces ?? []) {
+    const worktree = workspace.worktree;
+    if (!worktree || worktree.branch) continue;
+    const branch = worktree.checkout_path
+      ? branchesByPath.get(worktree.checkout_path)
+      : undefined;
+    if (branch) worktree.branch = branch;
+  }
+}
+
+async function loadRepoWorktreeBranches(
+  repoRoot: string,
+): Promise<Map<string, string>> {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["-C", repoRoot, "worktree", "list", "--porcelain"],
+    { timeout: 2_000 },
+  );
+  return parseGitWorktreeBranches(stdout);
+}
+
+async function enrichSnapshotWorktreeBranches(
+  snapshot: SessionSnapshotResult["snapshot"],
+): Promise<void> {
+  const repoRoots = [
+    ...new Set(
+      (snapshot.workspaces ?? [])
+        .map(({ worktree }) => worktree?.repo_root?.trim())
+        .filter((repoRoot): repoRoot is string => Boolean(repoRoot)),
+    ),
+  ];
+  if (repoRoots.length === 0) return;
+
+  const settled = await Promise.allSettled(
+    repoRoots.map((repoRoot) => loadRepoWorktreeBranches(repoRoot)),
+  );
+  const branchesByPath = new Map<string, string>();
+  for (const entry of settled) {
+    if (entry.status !== "fulfilled") continue;
+    for (const [path, branch] of entry.value) branchesByPath.set(path, branch);
+  }
+  applyWorktreeBranches(snapshot, branchesByPath);
+}
+
 export class LiveHerdrService {
   constructor(
     private readonly client: HerdrClient,
@@ -120,6 +203,7 @@ export class LiveHerdrService {
     if (result.type !== "session_snapshot" || !result.snapshot) {
       throw new Error("Herdr returned an invalid session snapshot");
     }
+    await enrichSnapshotWorktreeBranches(result.snapshot);
     const protocol = Number(result.snapshot.protocol ?? 0);
     const terminalStreaming =
       this.options.terminalStreamingConfigured === true && protocol >= 19;

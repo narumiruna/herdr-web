@@ -2,6 +2,15 @@ export type AgentStatus = "working" | "blocked" | "idle" | "done" | "unknown";
 
 export type RuntimeName = "Claude Code" | "Codex" | "Pi" | "OpenCode";
 
+export interface WorkspaceWorktree {
+  branch: string;
+  checkoutPath: string;
+  isLinked: boolean;
+  repoKey: string;
+  repoName: string;
+  repoRoot: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -10,6 +19,7 @@ export interface Workspace {
   ahead: number;
   behind: number;
   accent: "amber" | "blue" | "grass";
+  worktree?: WorkspaceWorktree;
 }
 
 export type TerminalOutputState = "ready" | "unavailable";

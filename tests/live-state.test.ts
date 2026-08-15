@@ -90,6 +90,14 @@ describe("mapLiveSnapshot", () => {
             pane_count: 2,
             tab_count: 1,
             workspace_id: "w5",
+            worktree: {
+              branch: "narumi/feat/tree",
+              checkout_path: "/Users/narumi/workspace/herdr-web",
+              is_linked_worktree: false,
+              repo_key: "/Users/narumi/workspace/herdr-web/.git",
+              repo_name: "herdr-web",
+              repo_root: "/Users/narumi/workspace/herdr-web",
+            },
           },
         ],
       },
@@ -99,9 +107,14 @@ describe("mapLiveSnapshot", () => {
     expect(state.selectedAgentId).toBe("w5:p1");
     expect(state.selectedSessionByWorkspace).toEqual({ w5: "w5:p1" });
     expect(state.workspaces[0]).toMatchObject({
+      branch: "narumi/feat/tree",
       id: "w5",
       name: "herdr-web",
       path: "/Users/narumi/workspace/herdr-web",
+      worktree: {
+        isLinked: false,
+        repoName: "herdr-web",
+      },
     });
     expect(state.agents).toHaveLength(1);
     expect(state.agents[0]).toMatchObject({

@@ -10,7 +10,7 @@ import {
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
 import { useId, useRef } from "react";
-import type { HerdrState } from "../state";
+import type { HerdrState, Workspace } from "../state";
 import { HerdrWebLogo } from "./HerdrWebLogo";
 import { agentStatusLabel, StatusPill } from "./StatusPill";
 
@@ -38,6 +38,52 @@ const AGENT_ATTENTION_PRIORITY = {
   unknown: 1,
 } as const;
 
+interface WorkspaceTreeItem {
+  children: Workspace[];
+  workspace: Workspace;
+}
+
+function workspaceRepoKey(workspace: Workspace): string {
+  return (
+    workspace.worktree?.repoKey ||
+    workspace.worktree?.repoRoot ||
+    workspace.worktree?.repoName ||
+    ""
+  );
+}
+
+function workspaceTrees(workspaces: Workspace[]): WorkspaceTreeItem[] {
+  const parentByRepoKey = new Map<string, Workspace>();
+  for (const workspace of workspaces) {
+    const key = workspaceRepoKey(workspace);
+    if (!key || workspace.worktree?.isLinked) continue;
+    if (!parentByRepoKey.has(key)) parentByRepoKey.set(key, workspace);
+  }
+
+  const childrenByParentId = new Map<string, Workspace[]>();
+  const childIds = new Set<string>();
+  for (const workspace of workspaces) {
+    if (!workspace.worktree?.isLinked) continue;
+    const parent = parentByRepoKey.get(workspaceRepoKey(workspace));
+    if (!parent || parent.id === workspace.id) continue;
+    childIds.add(workspace.id);
+    const children = childrenByParentId.get(parent.id) ?? [];
+    children.push(workspace);
+    childrenByParentId.set(parent.id, children);
+  }
+
+  return workspaces
+    .filter(({ id }) => !childIds.has(id))
+    .map((workspace) => ({
+      children: childrenByParentId.get(workspace.id) ?? [],
+      workspace,
+    }));
+}
+
+function worktreeLabel(workspace: Workspace): string {
+  return workspace.branch || workspace.worktree?.branch || workspace.name;
+}
+
 export function Sidebar({
   state,
   agentSort,
@@ -57,6 +103,13 @@ export function Sidebar({
   const attention = state.agents.filter(
     ({ kind, status }) => kind === "agent" && status === "blocked",
   );
+  const attentionByWorkspace = new Map<string, number>();
+  for (const agent of attention) {
+    attentionByWorkspace.set(
+      agent.workspaceId,
+      (attentionByWorkspace.get(agent.workspaceId) ?? 0) + 1,
+    );
+  }
   const workspaceOrder = new Map(
     state.workspaces.map(({ id }, index) => [id, index]),
   );
@@ -91,6 +144,58 @@ export function Sidebar({
   const startNewSpace = (returnFocus: HTMLElement) => {
     onDismiss?.();
     onNewSpace(returnFocus);
+  };
+  const workspaceRows = workspaceTrees(state.workspaces);
+  const workspaceDetail = (workspace: Workspace) => {
+    const count = attentionByWorkspace.get(workspace.id) ?? 0;
+    if (count > 0) return `${count} needs input`;
+    return workspace.branch;
+  };
+  const renderWorkspaceButton = (
+    workspace: Workspace,
+    variant: "space" | "worktree",
+  ) => {
+    const selected = workspace.id === state.selectedWorkspaceId;
+    const isWorktree = variant === "worktree";
+    const label = isWorktree ? worktreeLabel(workspace) : workspace.name;
+    const detail = isWorktree
+      ? label === workspace.name
+        ? workspaceDetail(workspace)
+        : workspace.name
+      : workspaceDetail(workspace);
+    return (
+      <button
+        className={
+          isWorktree ? "workspace-item worktree-item" : "workspace-item"
+        }
+        type="button"
+        key={workspace.id}
+        data-active={selected}
+        aria-current={selected ? "page" : undefined}
+        aria-label={
+          isWorktree
+            ? `Open ${label} worktree Space`
+            : `Open ${workspace.name} Space`
+        }
+        onClick={() => selectWorkspace(workspace.id)}
+      >
+        {isWorktree ? (
+          <span className="worktree-rail" aria-hidden="true">
+            <span className="worktree-elbow" />
+            <span className="worktree-dot" data-active={selected} />
+          </span>
+        ) : (
+          <span className={`workspace-glyph accent-${workspace.accent}`}>
+            <Component1Icon aria-hidden="true" />
+          </span>
+        )}
+        <span className="workspace-copy">
+          <strong>{label}</strong>
+          {detail && <small>{detail}</small>}
+        </span>
+        <ChevronRightIcon className="workspace-chevron" aria-hidden="true" />
+      </button>
+    );
   };
   const runMenuAction = (
     action: (returnFocus?: HTMLElement | null) => void,
@@ -154,46 +259,21 @@ export function Sidebar({
                   <span>{state.workspaces.length}</span>
                 </div>
                 <div className="workspace-list">
-                  {state.workspaces.map((workspace) => {
-                    const selected = workspace.id === state.selectedWorkspaceId;
-                    return (
-                      <button
-                        className="workspace-item"
-                        type="button"
-                        key={workspace.id}
-                        data-active={selected}
-                        aria-current={selected ? "page" : undefined}
-                        aria-label={`Open ${workspace.name} Space`}
-                        onClick={() => selectWorkspace(workspace.id)}
-                      >
-                        <span
-                          className={`workspace-glyph accent-${workspace.accent}`}
-                        >
-                          <Component1Icon aria-hidden="true" />
-                        </span>
-                        <span className="workspace-copy">
-                          <strong>{workspace.name}</strong>
-                          {attention.some(
-                            ({ workspaceId }) => workspaceId === workspace.id,
-                          ) && (
-                            <small>
-                              {
-                                attention.filter(
-                                  ({ workspaceId }) =>
-                                    workspaceId === workspace.id,
-                                ).length
-                              }{" "}
-                              needs input
-                            </small>
+                  {workspaceRows.map(({ children, workspace }) => (
+                    <div className="workspace-tree" key={workspace.id}>
+                      {renderWorkspaceButton(workspace, "space")}
+                      {children.length > 0 && (
+                        <fieldset className="worktree-list">
+                          <legend className="sr-only">
+                            {workspace.name} worktrees
+                          </legend>
+                          {children.map((child) =>
+                            renderWorkspaceButton(child, "worktree"),
                           )}
-                        </span>
-                        <ChevronRightIcon
-                          className="workspace-chevron"
-                          aria-hidden="true"
-                        />
-                      </button>
-                    );
-                  })}
+                        </fieldset>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </section>
             </nav>
