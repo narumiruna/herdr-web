@@ -110,6 +110,12 @@ describe("live Hedr app", () => {
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "New Agent in live-test" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    ).toBeDisabled();
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
@@ -161,10 +167,130 @@ describe("live Hedr app", () => {
       await screen.findByRole("heading", { name: "Start your first Agent" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Open live-test workspace" }),
+      screen.getByRole("button", { name: "Open live-test Space" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "New agent" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Start Agent" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Agents" })).toHaveTextContent(
+      "No detected Agents",
+    );
+  });
+
+  test("creates a Space through the authenticated bridge and selects it", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    let statePayload = payload;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/workspaces")) {
+          expect(init?.method).toBe("POST");
+          expect(JSON.parse(String(init?.body))).toEqual({
+            cwd: "/repo/new",
+            label: "new",
+          });
+          statePayload = {
+            ...payload,
+            snapshot: {
+              ...payload.snapshot,
+              focused_workspace_id: "w10",
+              workspaces: [
+                ...payload.snapshot.workspaces.map((space) => ({
+                  ...space,
+                  focused: false,
+                })),
+                {
+                  active_tab_id: "",
+                  agent_status: "unknown",
+                  focused: true,
+                  label: "new",
+                  number: 2,
+                  pane_count: 0,
+                  tab_count: 0,
+                  workspace_id: "w10",
+                },
+              ],
+            },
+          };
+          return new Response(
+            JSON.stringify({
+              type: "workspace_created",
+              workspace: { workspace_id: "w10" },
+            }),
+            { headers: { "content-type": "application/json" }, status: 201 },
+          );
+        }
+        return new Response(JSON.stringify(statePayload), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.click(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    );
+    await user.type(screen.getByLabelText("Directory"), "/repo/new");
+    await user.type(screen.getByLabelText(/Label/), "new");
+    await user.click(screen.getByRole("button", { name: "Create Space" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Open new Space" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("heading", { name: "Start your first Agent" }),
+    ).toBeVisible();
+  });
+
+  test("keeps the previous Space and form values when Space creation fails", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/workspaces")) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "workspace_create_failed",
+                message: "Directory does not exist",
+              },
+            }),
+            { headers: { "content-type": "application/json" }, status: 502 },
+          );
+        }
+        return new Response(JSON.stringify(payload), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.click(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    );
+    const directory = screen.getByRole("textbox", {
+      name: /^Directory$/,
+    });
+    await user.type(directory, "/missing");
+    await user.click(screen.getByRole("button", { name: "Create Space" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Directory does not exist",
+    );
+    expect(directory).toHaveValue("/missing");
+    expect(
+      screen.getByRole("dialog", { name: "Create a new Space" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create Space" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByRole("button", { name: "Open live-test Space" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 
   test("moves long-running Agent launch failures into a recoverable background status", async () => {

@@ -14,6 +14,10 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
   working: "Working",
 };
 
+export function agentStatusLabel(status: AgentStatus): string {
+  return status === "unknown" ? "Unknown" : STATUS_LABEL[status];
+}
+
 interface StatusPillProps {
   status: AgentStatus;
   compact?: boolean;

@@ -82,6 +82,12 @@ export interface HerdrState {
 
 export type HerdrAction =
   | { type: "runtime.synced"; state: HerdrState }
+  | {
+      type: "workspace.created";
+      id: string;
+      label: string;
+      path: string;
+    }
   | { type: "workspace.selected"; workspaceId: string }
   | { type: "agent.selected"; agentId: string }
   | {
@@ -209,6 +215,30 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
           selectedAgent?.workspaceId ??
           selectedWorkspace?.id ??
           action.state.selectedWorkspaceId,
+      };
+    }
+    case "workspace.created": {
+      const label = action.label.trim();
+      const path = action.path.trim();
+      if (!action.id || !label || !path) return state;
+      return {
+        ...state,
+        selectedAgentId: "",
+        selectedWorkspaceId: action.id,
+        workspaces: [
+          ...state.workspaces,
+          {
+            accent: ["amber", "blue", "grass"][
+              state.workspaces.length % 3
+            ] as Workspace["accent"],
+            ahead: 0,
+            behind: 0,
+            branch: "",
+            id: action.id,
+            name: label,
+            path,
+          },
+        ],
       };
     }
     case "workspace.selected": {

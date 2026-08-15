@@ -50,6 +50,11 @@ export interface CreateSessionInput {
   workspaceId: string;
 }
 
+export interface CreateWorkspaceInput {
+  cwd: string;
+  label?: string;
+}
+
 const STRUCTURAL_SUBSCRIPTIONS = [
   "workspace.created",
   "workspace.updated",
@@ -262,6 +267,15 @@ export class LiveHerdrService {
 
   closePane(paneId: string): Promise<unknown> {
     return this.client.request("pane.close", { pane_id: paneId });
+  }
+
+  createWorkspace(input: CreateWorkspaceInput): Promise<unknown> {
+    return this.client.request("workspace.create", {
+      cwd: input.cwd,
+      env: {},
+      focus: true,
+      ...(input.label ? { label: input.label } : {}),
+    });
   }
 
   private async startAgent(

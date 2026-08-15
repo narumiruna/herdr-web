@@ -58,6 +58,9 @@ test("desktop workbench gives the terminal priority", async ({
     page.getByRole("region", { name: "claude · API review terminal" }),
   ).toBeVisible();
   await expect(page.getByRole("tablist", { name: "herdr tabs" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New Agent in herdr" }),
+  ).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(3);
   await expect(page.getByRole("tab", { selected: true })).toContainText(
     "Needs input",
@@ -65,7 +68,7 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.locator(".workspace-cwd")).toContainText(
     "~/Projects/herdr",
   );
-  await expect(page.getByRole("heading", { name: "Agents" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Terminals" })).toHaveCount(0);
   expect(await hasNoPageOverflow(page)).toBe(true);
 
@@ -105,9 +108,34 @@ test("desktop workbench gives the terminal priority", async ({
       topbarBrightness: brightness(".topbar"),
       topbarHeight:
         document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0,
-      workspaceHeaderHeight:
-        document.querySelector(".workspace-header")?.getBoundingClientRect()
-          .height ?? 0,
+      terminalToolsHeight:
+        document
+          .querySelector(".interactive-terminal-tools")
+          ?.getBoundingClientRect().height ?? 0,
+      terminalToolsBorder: Number.parseFloat(
+        getComputedStyle(
+          document.querySelector(".interactive-terminal-tools") as Element,
+        ).borderBottomWidth,
+      ),
+      tabStripBorder: Number.parseFloat(
+        getComputedStyle(document.querySelector(".session-tabs") as Element)
+          .borderBottomWidth,
+      ),
+      redundantPaneTitles: document.querySelectorAll(".pane-titlebar").length,
+      terminalContextCenters: [
+        ".workspace-cwd",
+        ".terminal-toolbar-title",
+        ".interactive-terminal-state",
+      ].map((selector) => {
+        const rect = document.querySelector(selector)?.getBoundingClientRect();
+        return rect ? rect.top + rect.height / 2 : 0;
+      }),
+      tabsRight:
+        document.querySelector(".session-tabs-scroll")?.getBoundingClientRect()
+          .right ?? 0,
+      newTabLeft:
+        document.querySelector(".session-tabs-new")?.getBoundingClientRect()
+          .left ?? 0,
     };
   });
   expect(lightMetrics.brandMark).toBeLessThanOrEqual(30);
@@ -120,7 +148,17 @@ test("desktop workbench gives the terminal priority", async ({
   expect(lightMetrics.terminalTop).toBeLessThanOrEqual(225);
   expect(lightMetrics.topbarBrightness).toBeGreaterThan(180);
   expect(lightMetrics.topbarHeight).toBeLessThanOrEqual(56);
-  expect(lightMetrics.workspaceHeaderHeight).toBeLessThanOrEqual(60);
+  expect(lightMetrics.terminalToolsHeight).toBeLessThanOrEqual(44);
+  expect(lightMetrics.terminalToolsBorder).toBe(0);
+  expect(lightMetrics.tabStripBorder).toBe(0);
+  expect(lightMetrics.redundantPaneTitles).toBe(0);
+  expect(
+    Math.max(...lightMetrics.terminalContextCenters) -
+      Math.min(...lightMetrics.terminalContextCenters),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(lightMetrics.tabsRight - lightMetrics.newTabLeft),
+  ).toBeLessThanOrEqual(1);
   const contrastRatios = await page.evaluate(() => {
     const rgb = (value: string) =>
       (value
@@ -213,6 +251,96 @@ test("desktop workbench gives the terminal priority", async ({
   ).toBeVisible();
 });
 
+test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const agents = page.getByRole("region", { name: "Agents" });
+  const agentList = agents.getByRole("navigation", {
+    name: "Detected Agents",
+  });
+  await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible();
+  await expect(agentList.getByRole("button")).toHaveCount(5);
+  await expect(agents.getByRole("radio", { name: "Grouped" })).toHaveAttribute(
+    "data-state",
+    "on",
+  );
+  await agents.getByRole("radio", { name: "Priority" }).click();
+  await expect(agentList.getByRole("button").first()).toContainText(
+    "api-review",
+  );
+  await expect(agentList.getByRole("button").nth(1)).toContainText(
+    "integration-tests",
+  );
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("hedr-agent-sort")))
+    .toBe("priority");
+  await page.reload();
+  await expect(agents.getByRole("radio", { name: "Priority" })).toHaveAttribute(
+    "data-state",
+    "on",
+  );
+  await expect(
+    page.getByRole("button", { name: "Create a new Space" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible();
+
+  const sections = await page.evaluate(() => ({
+    actionsBottom:
+      document.querySelector(".spaces-actions")?.getBoundingClientRect()
+        .bottom ?? 0,
+    agentsTop:
+      document.querySelector(".agent-panel")?.getBoundingClientRect().top ?? 0,
+    agentTitleRight:
+      document.querySelector(".agent-panel-title")?.getBoundingClientRect()
+        .right ?? 0,
+    agentSortLeft:
+      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
+        .left ?? 0,
+    agentSortRight:
+      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
+        .right ?? 0,
+    agentPanelRight:
+      document.querySelector(".agent-panel")?.getBoundingClientRect().right ??
+      0,
+  }));
+  expect(sections.actionsBottom).toBeLessThanOrEqual(sections.agentsTop + 1);
+  expect(sections.agentTitleRight).toBeLessThanOrEqual(sections.agentSortLeft);
+  expect(sections.agentSortRight).toBeLessThanOrEqual(sections.agentPanelRight);
+
+  const newSpace = page.getByRole("button", { name: "Create a new Space" });
+  await newSpace.click();
+  await page
+    .getByRole("textbox", { name: "Directory", exact: true })
+    .fill("/repo/cancelled");
+  await expect(
+    page.getByRole("region", { name: "Space preview" }),
+  ).toContainText("cancelled");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(newSpace).toBeFocused();
+
+  const menu = page.getByRole("button", { name: "Open menu" });
+  await menu.click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await menu.click();
+  await page.getByRole("menuitem", { name: "Keybindings" }).click();
+  await expect(page.getByRole("dialog", { name: "Keybindings" })).toContainText(
+    "⌘ K / Ctrl K",
+  );
+  await page.getByRole("button", { name: "Close dialog" }).click();
+
+  await agents
+    .getByRole("button", { name: /agent-guide.*herdr\.dev/i })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: /agent-guide/i, selected: true }),
+  ).toBeVisible();
+  expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
 test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
   page,
 }) => {
@@ -244,7 +372,7 @@ test("command palette works with a keyboard only", async ({ page }) => {
 
   await page.keyboard.press("Control+KeyK");
   const search = page.getByRole("combobox", {
-    name: "Search workspaces, agents, and terminals",
+    name: "Search Spaces, Agents, and Terminals",
   });
   await expect(search).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -327,6 +455,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   for (const target of [
     page.getByRole("button", { name: "Open navigation" }),
     page.getByRole("button", { name: "Open command palette" }),
+    page.getByRole("button", { name: "New Agent in herdr" }),
     page.getByRole("button", { name: "Open more actions" }),
     page.getByRole("button", { name: "Attach image" }),
     page.getByRole("button", { name: "Send message" }),
@@ -361,8 +490,30 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await page.getByRole("button", { name: "Open navigation" }).click();
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
   await expect(navigation).toBeVisible();
+  await expect(
+    navigation.getByRole("heading", { name: "Agents" }),
+  ).toBeVisible();
+  for (const target of [
+    navigation.getByRole("button", { name: "Create a new Space" }),
+    navigation.getByRole("button", { name: "Open menu" }),
+  ]) {
+    expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
+      44,
+    );
+  }
+  await navigation.getByRole("button", { name: "Create a new Space" }).click();
+  await expect(navigation).toBeHidden();
+  await expect(
+    page.getByRole("dialog", { name: "Create a new Space" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open navigation" }),
+  ).toBeFocused();
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
   await navigation
-    .getByRole("button", { name: "Open herdr.dev workspace" })
+    .getByRole("button", { name: "Open herdr.dev Space" })
     .click();
   await expect(
     page.getByRole("tab", { name: /agent-guide/i, selected: true }),

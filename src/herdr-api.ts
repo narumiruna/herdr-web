@@ -24,6 +24,16 @@ export interface NewLiveSession {
   workspaceId: string;
 }
 
+export interface NewLiveWorkspace {
+  cwd: string;
+  label?: string;
+}
+
+export interface CreatedLiveWorkspace {
+  type: "workspace_created";
+  workspace: { workspace_id: string };
+}
+
 export interface TerminalTicket {
   expiresAt: number;
   path: string;
@@ -47,6 +57,17 @@ export interface UploadedImage {
 
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 export const MAX_PROMPT_CHARACTERS = 20_000;
+
+export function normalizeWorkspacePath(value: string): string {
+  return value.trim();
+}
+
+export function workspaceLabelFromPath(value: string): string {
+  const path = normalizeWorkspacePath(value);
+  const windowsPath = /^[a-z]:[\\/]/iu.test(path) || path.startsWith("\\\\");
+  const parts = path.split(windowsPath ? /[\\/]+/u : /\/+/u).filter(Boolean);
+  return parts.at(-1) ?? "";
+}
 export const SUPPORTED_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",
@@ -191,6 +212,13 @@ export class HerdrApiClient {
 
   createSession(input: NewLiveSession): Promise<unknown> {
     return this.request("/api/herdr/sessions", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  createWorkspace(input: NewLiveWorkspace): Promise<CreatedLiveWorkspace> {
+    return this.request("/api/herdr/workspaces", {
       body: JSON.stringify(input),
       method: "POST",
     });

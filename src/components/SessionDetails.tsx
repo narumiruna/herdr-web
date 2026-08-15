@@ -42,7 +42,7 @@ export function SessionDetails({
           </dd>
         </div>
         <div>
-          <dt>Workspace</dt>
+          <dt>Space</dt>
           <dd>
             <Component1Icon aria-hidden="true" /> {workspace.name}
           </dd>

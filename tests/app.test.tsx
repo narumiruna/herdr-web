@@ -71,11 +71,26 @@ describe("Hedr terminal-first workbench", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
+  test("opens Agent setup from the plus button beside the tab bar", async () => {
+    const user = renderApp();
+    const trigger = screen.getByRole("button", {
+      name: "New Agent in herdr",
+    });
+
+    await user.click(trigger);
+
+    expect(
+      screen.getByRole("dialog", { name: "Start a new Agent" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   test("opens the most urgent agent when a workspace is selected", async () => {
     const user = renderApp();
 
     await user.click(
-      screen.getByRole("button", { name: "Open herdr.dev workspace" }),
+      screen.getByRole("button", { name: "Open herdr.dev Space" }),
     );
 
     expect(
@@ -93,7 +108,118 @@ describe("Hedr terminal-first workbench", () => {
     expect(
       within(attention).getByRole("button", { name: /api-review/i }),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Workspaces" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Spaces" })).toBeVisible();
+  });
+
+  test("mirrors Herdr with Spaces actions above a global Agents panel", async () => {
+    const user = renderApp();
+    const agents = screen.getByRole("region", { name: "Agents" });
+
+    expect(screen.getByRole("heading", { name: "Spaces" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open menu" })).toBeVisible();
+    const agentList = within(agents).getByRole("navigation", {
+      name: "Detected Agents",
+    });
+    expect(within(agentList).getAllByRole("button")).toHaveLength(5);
+
+    await user.click(
+      within(agentList).getByRole("button", {
+        name: /agent-guide.*herdr\.dev/i,
+      }),
+    );
+    expect(
+      screen.getByRole("tab", { name: /agent-guide.*Idle/i }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("switches the Agents panel between grouped and priority order", async () => {
+    const user = renderApp();
+    const agents = screen.getByRole("region", { name: "Agents" });
+    const list = within(agents).getByRole("navigation", {
+      name: "Detected Agents",
+    });
+    const labels = () =>
+      within(list)
+        .getAllByRole("button")
+        .map((item) => item.textContent);
+
+    expect(
+      within(agents).getByRole("radio", { name: "Grouped" }),
+    ).toHaveAttribute("data-state", "on");
+    expect(labels()).toEqual([
+      expect.stringContaining("web-bridge"),
+      expect.stringContaining("api-review"),
+      expect.stringContaining("integration-tests"),
+      expect.stringContaining("agent-guide"),
+      expect.stringContaining("plugin-index"),
+    ]);
+
+    await user.click(within(agents).getByRole("radio", { name: "Priority" }));
+
+    expect(labels()).toEqual([
+      expect.stringContaining("api-review"),
+      expect.stringContaining("integration-tests"),
+      expect.stringContaining("web-bridge"),
+      expect.stringContaining("plugin-index"),
+      expect.stringContaining("agent-guide"),
+    ]);
+    expect(window.localStorage.getItem("hedr-agent-sort")).toBe("priority");
+  });
+
+  test("previews, cancels, and creates a new Space safely", async () => {
+    const user = renderApp();
+    const trigger = screen.getByRole("button", { name: "Create a new Space" });
+
+    await user.click(trigger);
+    await user.type(screen.getByLabelText("Directory"), "/repo/cancelled");
+    expect(
+      within(screen.getByRole("region", { name: "Space preview" })).getByText(
+        "cancelled",
+      ),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      screen.queryByRole("button", { name: "Open cancelled Space" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.type(screen.getByLabelText("Directory"), "/repo/web-tool/");
+    await user.type(screen.getByLabelText(/Label/), "Web tool");
+    await user.click(screen.getByRole("button", { name: "Create Space" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Open Web tool Space" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("heading", { name: "Start your first Agent" }),
+    ).toBeVisible();
+  });
+
+  test("opens Settings and Keybindings from the Space menu", async () => {
+    const user = renderApp();
+    const openMenu = screen.getByRole("button", { name: "Open menu" });
+
+    await user.click(openMenu);
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: /Light/ }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.documentElement).toHaveClass("dark");
+
+    await user.click(openMenu);
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+    await user.click(screen.getByRole("radio", { name: /Light/ }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(document.documentElement).toHaveClass("light");
+
+    await user.click(openMenu);
+    await user.click(screen.getByRole("menuitem", { name: "Keybindings" }));
+    expect(screen.getByRole("dialog", { name: "Keybindings" })).toBeVisible();
+    expect(screen.getByText("⌘ K / Ctrl K")).toBeVisible();
   });
 
   test("sends direction to a blocked agent and resumes the session", async () => {
@@ -160,14 +286,12 @@ describe("Hedr terminal-first workbench", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Open empty-workspace workspace" }),
+      screen.getByRole("button", { name: "Open empty-workspace Space" }),
     );
     expect(
       screen.getByRole("heading", { name: "Start your first Agent" }),
     ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Open herdr workspace" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Open herdr Space" }));
 
     expect(
       screen.getByRole("textbox", { name: "Message api-review" }),
@@ -200,7 +324,7 @@ describe("Hedr terminal-first workbench", () => {
 
     await user.keyboard("{Meta>}k{/Meta}");
     const search = await screen.findByRole("combobox", {
-      name: "Search workspaces, agents, and terminals",
+      name: "Search Spaces, Agents, and Terminals",
     });
     await user.type(search, "plugin");
     await user.keyboard("{ArrowDown}{ArrowUp}{Enter}");
@@ -220,7 +344,7 @@ describe("Hedr terminal-first workbench", () => {
     await user.click(trigger);
     expect(
       screen.getByRole("combobox", {
-        name: "Search workspaces, agents, and terminals",
+        name: "Search Spaces, Agents, and Terminals",
       }),
     ).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Close dialog" }));

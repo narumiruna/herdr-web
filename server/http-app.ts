@@ -1,7 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { HerdrApiError } from "./herdr-client.js";
-import type { CreateSessionInput } from "./herdr-service.js";
+import type {
+  CreateSessionInput,
+  CreateWorkspaceInput,
+} from "./herdr-service.js";
 import {
   type ImageUploadInput,
   MAX_IMAGE_BYTES,
@@ -13,6 +16,7 @@ import type { TerminalTicketStore } from "./terminal-tickets.js";
 export interface HerdrService {
   closePane(paneId: string): Promise<unknown>;
   createSession(input: CreateSessionInput): Promise<unknown>;
+  createWorkspace(input: CreateWorkspaceInput): Promise<unknown>;
   getState(): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
   splitPane(paneId: string): Promise<unknown>;
@@ -138,6 +142,19 @@ function cleanTerminalDimension(value: unknown, field: string): number {
     throw new RangeError(`${field} must be an integer between 1 and 1000`);
   }
   return Number(value);
+}
+
+function cleanPath(value: unknown): string {
+  const path = cleanText(value, "cwd", 4_096);
+  if (
+    [...path].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 32 || code === 127;
+    })
+  ) {
+    throw new TypeError("cwd must not contain control characters");
+  }
+  return path;
 }
 
 function errorResponse(response: ServerResponse, error: unknown): void {
@@ -364,6 +381,20 @@ export function createHerdrHttpHandler({
       const close = url.pathname.match(/^\/api\/herdr\/panes\/([^/]+)$/);
       if (request.method === "DELETE" && close?.[1]) {
         sendJson(response, 200, await service.closePane(cleanId(close[1])));
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/herdr/workspaces"
+      ) {
+        const body = objectBody(await readJson(request));
+        const input: CreateWorkspaceInput = {
+          cwd: cleanPath(body.cwd),
+          ...(body.label === undefined
+            ? {}
+            : { label: cleanText(body.label, "label", 80) }),
+        };
+        sendJson(response, 201, await service.createWorkspace(input));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/herdr/sessions") {

@@ -112,13 +112,21 @@ Vite prints the network URL, and the page asks for the token when it is not incl
 
 Needs input lists blocked Agents across every workspace and identifies each Agent's workspace.
 
-The sidebar switches workspaces, while the tab bar shows each Agent or standalone Terminal in Herdr tab order.
+The sidebar follows Herdr's layout with **Spaces** above a global **Agents** panel, while the tab bar shows each Agent or standalone Terminal in Herdr tab order.
 
-Returning to a workspace restores its last selected tab, while choosing a Needs input item opens that exact Agent.
+Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surface blocked and newly completed Agents first; the choice is saved in this browser.
+
+Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
+
+Use **Menu** for saved appearance settings, the workbench keybinding reference, and an explicit Herdr reload.
+
+Returning to a Space restores its last selected tab, while choosing a Needs input or Agents item opens that exact Agent.
+
+Use the **+** beside the tab strip to start another Agent in the current Space without leaving the terminal context.
 
 Split panes stay inside their parent tab, appear side by side on wide screens, and use a readable pane selector on narrow screens.
 
-Each Agent tab keeps its status visible, while a compact context row preserves the current working directory and branch.
+Each Agent tab keeps its status visible, while one compact terminal bar combines the current working directory, branch, pane title, connection state, and terminal actions without redundant title rows.
 
 The focused terminal owns the remaining screen and is the primary interaction surface.
 
@@ -152,7 +160,7 @@ If control-plane refresh temporarily fails after a successful connection, the wo
 
 If an individual pane read fails, other panes remain usable and the failed pane offers **Retry output**.
 
-On mobile, workspace creation, session details, and appearance live in **More actions** so navigation, search, and terminal work remain reachable at 320px.
+On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigation drawer, while session details stay in **More actions** so navigation, search, and terminal work remain reachable at 320px.
 
 ## Terminal controls
 

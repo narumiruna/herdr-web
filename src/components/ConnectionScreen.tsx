@@ -45,7 +45,7 @@ export function ConnectionScreen({
           <div>
             <span className="connection-eyebrow">Connecting to Herdr</span>
             <h1>Preparing your workbench…</h1>
-            <p>Reading workspaces, detected Agents, and terminal output.</p>
+            <p>Reading Spaces, detected Agents, and terminal output.</p>
             <span className="skeleton skeleton-terminal" />
           </div>
         </section>

@@ -47,6 +47,10 @@ function fakeService(): HerdrService {
   return {
     closePane: vi.fn().mockResolvedValue({ type: "ok" }),
     createSession: vi.fn().mockResolvedValue({ type: "agent_started" }),
+    createWorkspace: vi.fn().mockResolvedValue({
+      type: "workspace_created",
+      workspace: { workspace_id: "w6" },
+    }),
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
     promptAgent: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
     splitPane: vi.fn().mockResolvedValue({ type: "pane_info" }),
@@ -147,6 +151,35 @@ describe("herdr HTTP bridge", () => {
       snapshot: {},
     });
     expect(service.getState).toHaveBeenCalledOnce();
+  });
+
+  test("validates and creates a persistent Herdr Space", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+
+    const created = await fetch(`${baseUrl}/api/herdr/workspaces`, {
+      body: JSON.stringify({ cwd: "  /repo/new  ", label: "  new  " }),
+      headers,
+      method: "POST",
+    });
+
+    expect(created.status).toBe(201);
+    expect(service.createWorkspace).toHaveBeenCalledWith({
+      cwd: "/repo/new",
+      label: "new",
+    });
+
+    const invalid = await fetch(`${baseUrl}/api/herdr/workspaces`, {
+      body: JSON.stringify({ cwd: "/repo/new\nunsafe" }),
+      headers,
+      method: "POST",
+    });
+    expect(invalid.status).toBe(400);
+    expect(service.createWorkspace).toHaveBeenCalledOnce();
   });
 
   test("issues a short-lived one-use terminal ticket without exposing the bearer token", async () => {

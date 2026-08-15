@@ -99,6 +99,26 @@ describe("herdr state", () => {
     expect(next.selectedAgentId).toBe("agent-review");
   });
 
+  test("adds and selects a newly created empty Space", () => {
+    const state = createDemoState();
+
+    const next = appReducer(state, {
+      type: "workspace.created",
+      id: "new-space",
+      label: "New Space",
+      path: "/repo/new",
+    });
+
+    expect(next.workspaces.at(-1)).toMatchObject({
+      branch: "",
+      id: "new-space",
+      name: "New Space",
+      path: "/repo/new",
+    });
+    expect(next.selectedWorkspaceId).toBe("new-space");
+    expect(next.selectedAgentId).toBe("");
+  });
+
   test("selecting an empty workspace clears the previous session focus", () => {
     const state = createDemoState();
     state.workspaces.push({

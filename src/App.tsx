@@ -13,14 +13,20 @@ import {
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button, IconButton, Theme } from "@radix-ui/themes";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CommandPalette, NewSessionDialog } from "./components/AppDialogs";
+import {
+  CommandPalette,
+  KeybindingsDialog,
+  NewSessionDialog,
+  NewSpaceDialog,
+  SettingsDialog,
+} from "./components/AppDialogs";
 import { ConnectionScreen } from "./components/ConnectionScreen";
 import { HedrLogo } from "./components/HedrLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
 import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
-import { Sidebar } from "./components/Sidebar";
+import { type AgentSortMode, Sidebar } from "./components/Sidebar";
 import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
@@ -60,8 +66,18 @@ export function App({
     if (saved === "light" || saved === "dark") return saved;
     return "dark";
   });
+  const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
+    const saved =
+      typeof window.localStorage?.getItem === "function"
+        ? window.localStorage.getItem("hedr-agent-sort")
+        : null;
+    return saved === "priority" ? "priority" : "grouped";
+  });
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [keybindingsOpen, setKeybindingsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
@@ -73,11 +89,17 @@ export function App({
   const mobileNavTrigger = useRef<HTMLButtonElement>(null);
   const mobileMoreTrigger = useRef<HTMLButtonElement>(null);
   const sessionReturnFocus = useRef<HTMLElement>(null);
+  const newSpaceReturnFocus = useRef<HTMLElement>(null);
+  const settingsReturnFocus = useRef<HTMLElement>(null);
+  const keybindingsReturnFocus = useRef<HTMLElement>(null);
   const detailsReturnFocus = useRef<HTMLElement>(null);
   const commandWasOpen = useRef(false);
   const mobileNavWasOpen = useRef(false);
   const mobileActionsWereOpen = useRef(false);
   const sessionWasOpen = useRef(false);
+  const newSpaceWasOpen = useRef(false);
+  const settingsWasOpen = useRef(false);
+  const keybindingsWereOpen = useRef(false);
   const detailsWereOpen = useRef(false);
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
@@ -91,10 +113,9 @@ export function App({
       ({ workspaceId }) => workspace && workspaceId === workspace.id,
     );
   const workspaceTabs = workspace ? tabsForWorkspace(state, workspace.id) : [];
-  const canStartAgent =
-    runtime.connection === "connected" &&
-    runtime.accessRole === "controller" &&
-    pendingLaunch?.status !== "starting";
+  const canCreateSpace =
+    runtime.connection === "connected" && runtime.accessRole === "controller";
+  const canStartAgent = canCreateSpace && pendingLaunch?.status !== "starting";
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -135,10 +156,46 @@ export function App({
   }, [sessionOpen]);
 
   useEffect(() => {
+    if (newSpaceWasOpen.current && !newSpaceOpen) {
+      (newSpaceReturnFocus.current?.isConnected
+        ? newSpaceReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    newSpaceWasOpen.current = newSpaceOpen;
+  }, [newSpaceOpen]);
+
+  useEffect(() => {
+    if (settingsWasOpen.current && !settingsOpen) {
+      (settingsReturnFocus.current?.isConnected
+        ? settingsReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    settingsWasOpen.current = settingsOpen;
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (keybindingsWereOpen.current && !keybindingsOpen) {
+      (keybindingsReturnFocus.current?.isConnected
+        ? keybindingsReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    keybindingsWereOpen.current = keybindingsOpen;
+  }, [keybindingsOpen]);
+
+  useEffect(() => {
     if (detailsWereOpen.current && !detailsOpen)
       detailsReturnFocus.current?.focus();
     detailsWereOpen.current = detailsOpen;
   }, [detailsOpen]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem("hedr-agent-sort", agentSort);
+    }
+  }, [agentSort]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -224,11 +281,37 @@ export function App({
       returnFocus ?? (document.activeElement as HTMLElement | null);
     setDetailsOpen(true);
   };
+  const openNewSpaceDialog = (returnFocus?: HTMLElement | null) => {
+    newSpaceReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setNewSpaceOpen(true);
+  };
+  const openSettingsDialog = (returnFocus?: HTMLElement | null) => {
+    settingsReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setSettingsOpen(true);
+  };
+  const openKeybindingsDialog = (returnFocus?: HTMLElement | null) => {
+    keybindingsReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setKeybindingsOpen(true);
+  };
   const selectWorkspace = (workspaceId: string) => {
     runtime.dispatch({ type: "workspace.selected", workspaceId });
   };
   const selectAgent = (agentId: string) => {
     runtime.dispatch({ type: "agent.selected", agentId });
+  };
+  const createWorkspace = async (input: { cwd: string; label?: string }) => {
+    if (!canCreateSpace) {
+      throw new Error("A connected controller is required to create a Space.");
+    }
+    try {
+      await runtime.createWorkspace(input);
+    } catch (error) {
+      runtime.clearActionError();
+      throw error;
+    }
   };
   const createSession = (
     details: {
@@ -285,8 +368,15 @@ export function App({
           <div className="desktop-sidebar">
             <Sidebar
               state={state}
+              agentSort={agentSort}
+              canCreateSpace={canCreateSpace}
+              onAgentSortChange={setAgentSort}
               onSelectWorkspace={selectWorkspace}
               onSelectAgent={selectAgent}
+              onNewSpace={openNewSpaceDialog}
+              onOpenSettings={openSettingsDialog}
+              onOpenKeybindings={openKeybindingsDialog}
+              onRefresh={runtime.refresh}
             />
           </div>
 
@@ -510,6 +600,8 @@ export function App({
                 workspaceName={workspace.name}
                 sessions={workspaceTabs}
                 selectedId={agent.id}
+                canCreateSession={canStartAgent}
+                onNewSession={openSessionDialog}
                 onSelect={selectAgent}
               >
                 <TerminalWorkspace
@@ -576,16 +668,16 @@ export function App({
                 <div className="empty-workbench-mark">
                   <HedrLogo compact />
                 </div>
-                <span>{workspace ? "Empty workspace" : "No workspaces"}</span>
+                <span>{workspace ? "Empty Space" : "No Spaces"}</span>
                 <h1>
                   {workspace
                     ? "Start your first Agent"
-                    : "Open a workspace in Herdr"}
+                    : "Open a Space in Herdr"}
                 </h1>
                 <p>
                   {workspace
-                    ? "This workspace has no Agent or Terminal sessions yet."
-                    : "Create or focus a Herdr workspace, then refresh this workbench."}
+                    ? "This Space has no Agent or Terminal sessions yet."
+                    : "Create or focus a Herdr Space, then refresh this workbench."}
                 </p>
                 {workspace ? (
                   <Button
@@ -625,17 +717,39 @@ export function App({
             onCreate={createSession}
           />
         )}
+        <NewSpaceDialog
+          open={newSpaceOpen}
+          onOpenChange={setNewSpaceOpen}
+          onCreate={createWorkspace}
+        />
+        <SettingsDialog
+          appearance={appearance}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onApply={setAppearance}
+        />
+        <KeybindingsDialog
+          open={keybindingsOpen}
+          onOpenChange={setKeybindingsOpen}
+        />
         <RadixDialog
           open={mobileNavOpen}
           onOpenChange={setMobileNavOpen}
           title="Navigate workbench"
-          description="Choose work that needs input or a workspace. Use the tab bar for Agents and Terminals."
+          description="Choose work that needs input or a Space. Use the tab bar for Agents and Terminals."
           className="mobile-navigation-dialog"
         >
           <Sidebar
             state={state}
+            agentSort={agentSort}
+            canCreateSpace={canCreateSpace}
+            onAgentSortChange={setAgentSort}
             onSelectWorkspace={selectWorkspace}
             onSelectAgent={selectAgent}
+            onNewSpace={openNewSpaceDialog}
+            onOpenSettings={openSettingsDialog}
+            onOpenKeybindings={openKeybindingsDialog}
+            onRefresh={runtime.refresh}
             onDismiss={() => setMobileNavOpen(false)}
           />
         </RadixDialog>
@@ -643,7 +757,7 @@ export function App({
           open={mobileActionsOpen}
           onOpenChange={setMobileActionsOpen}
           title="More actions"
-          description="Actions for the current workspace and session."
+          description="Actions for the current Space and session."
           className="mobile-actions-dialog"
         >
           <div className="mobile-action-list">
@@ -701,7 +815,7 @@ export function App({
             open={detailsOpen}
             onOpenChange={setDetailsOpen}
             title="Session details"
-            description="Real runtime and workspace information for the focused session."
+            description="Real runtime and Space information for the focused session."
             className="details-dialog"
           >
             <SessionDetails
