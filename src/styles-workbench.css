@@ -371,11 +371,12 @@
   min-width: 0;
   min-height: 0;
   flex: 1;
-  padding: 8px 10px;
   overflow: hidden;
 }
+/* FitAddon reads padding from xterm itself when calculating rows. */
 .xterm-host .xterm {
   height: 100%;
+  padding: 8px 10px;
 }
 .xterm-host .xterm-viewport {
   scrollbar-color: var(--sand-8) transparent;
@@ -840,7 +841,7 @@
   .terminal-state-overlay {
     inset-block-start: 88px;
   }
-  .xterm-host {
+  .xterm-host .xterm {
     padding: 6px;
   }
   .terminal-search > span:last-child {
