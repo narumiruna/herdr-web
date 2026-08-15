@@ -26,7 +26,7 @@ import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
 import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
-import { Sidebar } from "./components/Sidebar";
+import { type AgentSortMode, Sidebar } from "./components/Sidebar";
 import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
@@ -65,6 +65,13 @@ export function App({
         : null;
     if (saved === "light" || saved === "dark") return saved;
     return "dark";
+  });
+  const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
+    const saved =
+      typeof window.localStorage?.getItem === "function"
+        ? window.localStorage.getItem("hedr-agent-sort")
+        : null;
+    return saved === "priority" ? "priority" : "grouped";
   });
   const [commandOpen, setCommandOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -183,6 +190,12 @@ export function App({
       detailsReturnFocus.current?.focus();
     detailsWereOpen.current = detailsOpen;
   }, [detailsOpen]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem("hedr-agent-sort", agentSort);
+    }
+  }, [agentSort]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -355,7 +368,9 @@ export function App({
           <div className="desktop-sidebar">
             <Sidebar
               state={state}
+              agentSort={agentSort}
               canCreateSpace={canCreateSpace}
+              onAgentSortChange={setAgentSort}
               onSelectWorkspace={selectWorkspace}
               onSelectAgent={selectAgent}
               onNewSpace={openNewSpaceDialog}
@@ -724,7 +739,9 @@ export function App({
         >
           <Sidebar
             state={state}
+            agentSort={agentSort}
             canCreateSpace={canCreateSpace}
+            onAgentSortChange={setAgentSort}
             onSelectWorkspace={selectWorkspace}
             onSelectAgent={selectAgent}
             onNewSpace={openNewSpaceDialog}

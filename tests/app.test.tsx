@@ -105,14 +105,53 @@ describe("Hedr terminal-first workbench", () => {
       screen.getByRole("button", { name: "Create a new Space" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Open menu" })).toBeVisible();
-    expect(within(agents).getAllByRole("button")).toHaveLength(5);
+    const agentList = within(agents).getByRole("navigation", {
+      name: "Detected Agents",
+    });
+    expect(within(agentList).getAllByRole("button")).toHaveLength(5);
 
     await user.click(
-      within(agents).getByRole("button", { name: /agent-guide.*herdr\.dev/i }),
+      within(agentList).getByRole("button", {
+        name: /agent-guide.*herdr\.dev/i,
+      }),
     );
     expect(
       screen.getByRole("tab", { name: /agent-guide.*Idle/i }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("switches the Agents panel between grouped and priority order", async () => {
+    const user = renderApp();
+    const agents = screen.getByRole("region", { name: "Agents" });
+    const list = within(agents).getByRole("navigation", {
+      name: "Detected Agents",
+    });
+    const labels = () =>
+      within(list)
+        .getAllByRole("button")
+        .map((item) => item.textContent);
+
+    expect(
+      within(agents).getByRole("radio", { name: "Grouped" }),
+    ).toHaveAttribute("data-state", "on");
+    expect(labels()).toEqual([
+      expect.stringContaining("web-bridge"),
+      expect.stringContaining("api-review"),
+      expect.stringContaining("integration-tests"),
+      expect.stringContaining("agent-guide"),
+      expect.stringContaining("plugin-index"),
+    ]);
+
+    await user.click(within(agents).getByRole("radio", { name: "Priority" }));
+
+    expect(labels()).toEqual([
+      expect.stringContaining("api-review"),
+      expect.stringContaining("integration-tests"),
+      expect.stringContaining("web-bridge"),
+      expect.stringContaining("plugin-index"),
+      expect.stringContaining("agent-guide"),
+    ]);
+    expect(window.localStorage.getItem("hedr-agent-sort")).toBe("priority");
   });
 
   test("previews, cancels, and creates a new Space safely", async () => {

@@ -8,15 +8,19 @@ import {
   ReloadIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { DropdownMenu } from "@radix-ui/themes";
+import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
 import { useId, useRef } from "react";
 import type { HerdrState } from "../state";
 import { HedrLogo } from "./HedrLogo";
 import { agentStatusLabel, StatusPill } from "./StatusPill";
 
+export type AgentSortMode = "grouped" | "priority";
+
 interface SidebarProps {
   state: HerdrState;
+  agentSort: AgentSortMode;
   canCreateSpace: boolean;
+  onAgentSortChange: (sort: AgentSortMode) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onNewSpace: (returnFocus?: HTMLElement | null) => void;
@@ -26,9 +30,19 @@ interface SidebarProps {
   onDismiss?: () => void;
 }
 
+const AGENT_ATTENTION_PRIORITY = {
+  blocked: 5,
+  done: 4,
+  working: 3,
+  idle: 2,
+  unknown: 1,
+} as const;
+
 export function Sidebar({
   state,
+  agentSort,
   canCreateSpace,
+  onAgentSortChange,
   onSelectWorkspace,
   onSelectAgent,
   onNewSpace,
@@ -49,16 +63,21 @@ export function Sidebar({
   const agents = state.agents
     .map((agent, index) => ({ agent, index }))
     .filter(({ agent }) => agent.kind === "agent")
-    .sort(
-      (left, right) =>
+    .sort((left, right) => {
+      const groupedOrder =
         (workspaceOrder.get(left.agent.workspaceId) ??
           Number.MAX_SAFE_INTEGER) -
           (workspaceOrder.get(right.agent.workspaceId) ??
             Number.MAX_SAFE_INTEGER) ||
         (left.agent.tabNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.agent.tabNumber ?? Number.MAX_SAFE_INTEGER) ||
-        left.index - right.index,
-    )
+        left.index - right.index;
+      if (agentSort === "grouped") return groupedOrder;
+      return (
+        AGENT_ATTENTION_PRIORITY[right.agent.status] -
+          AGENT_ATTENTION_PRIORITY[left.agent.status] || groupedOrder
+      );
+    })
     .map(({ agent }) => agent);
 
   const selectWorkspace = (workspaceId: string) => {
@@ -236,8 +255,28 @@ export function Sidebar({
 
       <section className="agent-panel" aria-labelledby={agentsHeadingId}>
         <div className="section-label-row agent-panel-heading">
-          <h2 id={agentsHeadingId}>Agents</h2>
-          <span>{agents.length}</span>
+          <div className="agent-panel-title">
+            <h2 id={agentsHeadingId}>Agents</h2>
+            <span>{agents.length}</span>
+          </div>
+          <SegmentedControl.Root
+            className="agent-sort-control"
+            aria-label="Agent ordering"
+            size="1"
+            value={agentSort}
+            onValueChange={(value) => {
+              if (value === "grouped" || value === "priority") {
+                onAgentSortChange(value);
+              }
+            }}
+          >
+            <SegmentedControl.Item value="grouped">
+              Grouped
+            </SegmentedControl.Item>
+            <SegmentedControl.Item value="priority">
+              Priority
+            </SegmentedControl.Item>
+          </SegmentedControl.Root>
         </div>
         <ScrollArea.Root className="agent-panel-scroll">
           <ScrollArea.Viewport className="agent-panel-viewport">

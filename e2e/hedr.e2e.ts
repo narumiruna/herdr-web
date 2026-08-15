@@ -218,8 +218,30 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   await page.goto("/");
 
   const agents = page.getByRole("region", { name: "Agents" });
+  const agentList = agents.getByRole("navigation", {
+    name: "Detected Agents",
+  });
   await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible();
-  await expect(agents.getByRole("button")).toHaveCount(5);
+  await expect(agentList.getByRole("button")).toHaveCount(5);
+  await expect(agents.getByRole("radio", { name: "Grouped" })).toHaveAttribute(
+    "data-state",
+    "on",
+  );
+  await agents.getByRole("radio", { name: "Priority" }).click();
+  await expect(agentList.getByRole("button").first()).toContainText(
+    "api-review",
+  );
+  await expect(agentList.getByRole("button").nth(1)).toContainText(
+    "integration-tests",
+  );
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("hedr-agent-sort")))
+    .toBe("priority");
+  await page.reload();
+  await expect(agents.getByRole("radio", { name: "Priority" })).toHaveAttribute(
+    "data-state",
+    "on",
+  );
   await expect(
     page.getByRole("button", { name: "Create a new Space" }),
   ).toBeVisible();
@@ -231,8 +253,22 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
         .bottom ?? 0,
     agentsTop:
       document.querySelector(".agent-panel")?.getBoundingClientRect().top ?? 0,
+    agentTitleRight:
+      document.querySelector(".agent-panel-title")?.getBoundingClientRect()
+        .right ?? 0,
+    agentSortLeft:
+      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
+        .left ?? 0,
+    agentSortRight:
+      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
+        .right ?? 0,
+    agentPanelRight:
+      document.querySelector(".agent-panel")?.getBoundingClientRect().right ??
+      0,
   }));
   expect(sections.actionsBottom).toBeLessThanOrEqual(sections.agentsTop + 1);
+  expect(sections.agentTitleRight).toBeLessThanOrEqual(sections.agentSortLeft);
+  expect(sections.agentSortRight).toBeLessThanOrEqual(sections.agentPanelRight);
 
   const newSpace = page.getByRole("button", { name: "Create a new Space" });
   await newSpace.click();

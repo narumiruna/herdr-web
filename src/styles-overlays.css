@@ -904,8 +904,15 @@
   .spaces-actions {
     min-height: 52px;
   }
-  .spaces-actions button {
+  .spaces-actions button,
+  .agent-sort-control .rt-SegmentedControlItem {
     min-height: 44px;
+  }
+  .agent-panel-heading {
+    min-height: 52px;
+  }
+  .agent-sort-control {
+    height: 44px;
   }
   .main-workspace {
     padding: 12px 13px 13px;

@@ -114,6 +114,8 @@ Needs input lists blocked Agents across every workspace and identifies each Agen
 
 The sidebar follows Herdr's layout with **Spaces** above a global **Agents** panel, while the tab bar shows each Agent or standalone Terminal in Herdr tab order.
 
+Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surface blocked and newly completed Agents first; the choice is saved in this browser.
+
 Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
 
 Use **Menu** for saved appearance settings, the workbench keybinding reference, and an explicit Herdr reload.
