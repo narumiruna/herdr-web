@@ -9,6 +9,7 @@ const xterm = vi.hoisted(() => ({
     focus: ReturnType<typeof vi.fn>;
     options?: unknown;
     reset: ReturnType<typeof vi.fn>;
+    resize?: (size: { cols: number; rows: number }) => void;
     write: ReturnType<typeof vi.fn>;
   }>,
 }));
@@ -42,7 +43,8 @@ vi.mock("@xterm/xterm", () => ({
       this.instance.data = callback;
       return { dispose() {} };
     }
-    onResize() {
+    onResize(callback: (size: { cols: number; rows: number }) => void) {
+      this.instance.resize = callback;
       return { dispose() {} };
     }
     paste(value: string) {
@@ -107,6 +109,7 @@ afterEach(() => {
   FakeWebSocket.instances = [];
   xterm.instances = [];
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function frame(bytes = "hello") {
@@ -121,7 +124,10 @@ function frame(bytes = "hello") {
   };
 }
 
-async function renderTerminal(overrides: Record<string, unknown> = {}) {
+async function renderTerminal(
+  overrides: Record<string, unknown> = {},
+  options: { takeControl?: boolean } = {},
+) {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   const createTicket = vi.fn().mockResolvedValue({
     expiresAt: Date.now() + 30_000,
@@ -153,23 +159,44 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
   };
   const view = render(<InteractiveTerminal {...props} />);
   await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
-  const socket = FakeWebSocket.instances[0];
+  let socket = FakeWebSocket.instances[0];
   if (!socket) throw new Error("Missing terminal socket");
+  if (
+    options.takeControl !== false &&
+    props.controlEnabled !== false &&
+    props.focused !== false
+  ) {
+    socket.message(frame("observing"));
+    await screen.findByText("Watching");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Take control" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    socket = FakeWebSocket.instances[1];
+    if (!socket) throw new Error("Missing controlling terminal socket");
+    xterm.instances[0]?.reset.mockClear();
+    xterm.instances[0]?.write.mockClear();
+  }
   return { ...view, createTicket, onUploadImage, props, socket };
 }
 
 describe("InteractiveTerminal", () => {
-  test("uses a one-use ticket, renders ANSI, and forwards terminal input exactly once", async () => {
-    const { createTicket, props, rerender, socket } = await renderTerminal();
+  test("observes by default and forwards input only after explicit control", async () => {
+    const {
+      createTicket,
+      props,
+      rerender,
+      socket: observeSocket,
+    } = await renderTerminal({}, { takeControl: false });
 
     expect(createTicket).toHaveBeenCalledWith("w5:p1", {
       cols: 80,
-      mode: "control",
+      mode: "observe",
       rows: 24,
       takeover: false,
     });
-    expect(socket.url).toContain("ticket=one-use-ticket");
-    expect(socket.url).not.toContain("Bearer");
+    expect(observeSocket.url).toContain("ticket=one-use-ticket");
+    expect(observeSocket.url).not.toContain("Bearer");
     expect(xterm.instances[0]?.options).toMatchObject({
       theme: {
         background: "#0c0c0c",
@@ -177,6 +204,33 @@ describe("InteractiveTerminal", () => {
         foreground: "#eeeeec",
       },
     });
+    observeSocket.message(frame("observing"));
+    expect(await screen.findByText("Watching")).toBeVisible();
+    xterm.instances[0]?.data?.("must-not-send");
+    expect(
+      observeSocket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toHaveLength(0);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Take control" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const controlSocket = FakeWebSocket.instances[1];
+    if (!controlSocket) throw new Error("Missing controlling socket");
+    expect(createTicket).toHaveBeenLastCalledWith("w5:p1", {
+      cols: 80,
+      mode: "control",
+      rows: 24,
+      takeover: false,
+    });
+    expect(JSON.parse(observeSocket.sent.at(-1) ?? "{}")).toEqual({
+      type: "terminal.release",
+    });
+    controlSocket.message(frame("\u001b[2J決定"));
+    expect(await screen.findByText("Interactive")).toBeVisible();
+
     rerender(
       <InteractiveTerminal
         {...props}
@@ -188,17 +242,48 @@ describe("InteractiveTerminal", () => {
         })}
       />,
     );
-    expect(FakeWebSocket.instances).toHaveLength(1);
-    socket.message(frame("\u001b[2J決定"));
-    expect(await screen.findByText("Interactive")).toBeVisible();
-    expect(xterm.instances[0]?.reset).toHaveBeenCalledOnce();
-    expect(xterm.instances[0]?.write).toHaveBeenCalledOnce();
-
+    expect(FakeWebSocket.instances).toHaveLength(2);
     xterm.instances[0]?.data?.("echo hi\r");
-    const inputs = socket.sent
-      .map((value) => JSON.parse(value))
-      .filter(({ type }) => type === "terminal.input");
-    expect(inputs).toEqual([{ data: "echo hi\r", type: "terminal.input" }]);
+    expect(
+      controlSocket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([{ data: "echo hi\r", type: "terminal.input" }]);
+  });
+
+  test("falls back to observation when a control ticket is rejected", async () => {
+    const createTicket = vi
+      .fn()
+      .mockResolvedValueOnce({
+        expiresAt: Date.now() + 30_000,
+        path: "/api/herdr/terminal",
+        ticket: "observe-first",
+        type: "terminal_ticket",
+      })
+      .mockRejectedValueOnce(new Error("Control request rejected"))
+      .mockResolvedValueOnce({
+        expiresAt: Date.now() + 30_000,
+        path: "/api/herdr/terminal",
+        ticket: "observe-recovery",
+        type: "terminal_ticket",
+      });
+    const { socket } = await renderTerminal(
+      { createTicket },
+      { takeControl: false },
+    );
+    socket.message(frame());
+    await screen.findByText("Watching");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Take control" }));
+    await waitFor(() => expect(createTicket).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    FakeWebSocket.instances[1]?.message(frame("still watching"));
+
+    expect(await screen.findByText("Watching")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Control unavailable");
+    expect(screen.getByRole("button", { name: "Take control" })).toBeEnabled();
   });
 
   test("provides mobile Escape, Ctrl, and Tab input without replay", async () => {
@@ -245,6 +330,60 @@ describe("InteractiveTerminal", () => {
     ).toEqual([{ data: "send-now", type: "terminal.input" }]);
   });
 
+  test("debounces controlling resize and releases back to observation", async () => {
+    const { socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    vi.useFakeTimers();
+
+    xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
+    xterm.instances[0]?.resize?.({ cols: 120, rows: 40 });
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.resize"),
+    ).toHaveLength(0);
+    vi.advanceTimersByTime(100);
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.resize"),
+    ).toEqual([{ cols: 120, rows: 40, type: "terminal.resize" }]);
+
+    xterm.instances[0]?.resize?.({ cols: 140, rows: 44 });
+    fireEvent.click(screen.getByRole("button", { name: "Release control" }));
+    vi.advanceTimersByTime(100);
+    vi.useRealTimers();
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.resize"),
+    ).toHaveLength(1);
+    expect(JSON.parse(socket.sent.at(-1) ?? "{}")).toEqual({
+      type: "terminal.release",
+    });
+    FakeWebSocket.instances[2]?.message(frame("watching again"));
+    expect(await screen.findByText("Watching")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Take control" })).toBeEnabled();
+  });
+
+  test("releases control when its split pane loses focus", async () => {
+    const { props, rerender, socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+
+    rerender(<InteractiveTerminal {...props} focused={false} />);
+
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    expect(JSON.parse(socket.sent.at(-1) ?? "{}")).toEqual({
+      type: "terminal.release",
+    });
+    FakeWebSocket.instances[2]?.message(frame("unfocused observation"));
+    expect(await screen.findByText("Watching")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Take control" })).toBeDisabled();
+  });
+
   test("resynchronizes from a fresh canonical frame after a sequence gap", async () => {
     const { createTicket, socket } = await renderTerminal();
     socket.message(frame());
@@ -257,10 +396,10 @@ describe("InteractiveTerminal", () => {
     });
 
     expect(await screen.findByText("Reconnecting terminal")).toBeVisible();
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), {
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3), {
       timeout: 1_500,
     });
-    expect(createTicket).toHaveBeenCalledTimes(2);
+    expect(createTicket).toHaveBeenCalledTimes(3);
   });
 
   test("captures image paste while connecting and enables upload after the terminal becomes interactive", async () => {
@@ -391,8 +530,16 @@ describe("InteractiveTerminal", () => {
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
     for (const socket of FakeWebSocket.instances) socket.message(frame());
     await waitFor(() =>
-      expect(screen.getAllByText("Interactive")).toHaveLength(2),
+      expect(screen.getAllByText("Watching")).toHaveLength(2),
     );
+    const takeControl = screen
+      .getAllByRole("button", { name: "Take control" })
+      .find((button) => !button.hasAttribute("disabled"));
+    if (!takeControl) throw new Error("Missing focused control action");
+    await userEvent.setup().click(takeControl);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    FakeWebSocket.instances[2]?.message(frame());
+    await screen.findByText("Interactive");
 
     fireEvent.paste(window, {
       clipboardData: { files: [file], items: [], types: ["Files"] },
@@ -408,6 +555,185 @@ describe("InteractiveTerminal", () => {
       expect(onUploadImage).toHaveBeenCalledWith("w5:p2", file),
     );
     expect(onUploadImage).toHaveBeenCalledOnce();
+  });
+
+  test("completes two image paste cycles without requiring outside focus", async () => {
+    const onUploadImage = vi
+      .fn()
+      .mockImplementation(async (_paneId: string, file: File) => ({
+        mediaType: file.type,
+        path: `/repo/${file.name}`,
+        size: file.size,
+        type: "image_uploaded",
+      }));
+    const { socket } = await renderTerminal({ onUploadImage });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const user = userEvent.setup();
+
+    for (const name of ["repeat.png", "repeat.png"]) {
+      const file = new File([name], name, { type: "image/png" });
+      fireEvent.paste(window, {
+        clipboardData: { files: [file], items: [], types: ["Files"] },
+      });
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Upload and insert path",
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Insert image path" }),
+        ).not.toBeInTheDocument(),
+      );
+    }
+
+    expect(onUploadImage).toHaveBeenCalledTimes(2);
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([
+      { data: " '/repo/repeat.png' ", type: "terminal.input" },
+      { data: " '/repo/repeat.png' ", type: "terminal.input" },
+    ]);
+  });
+
+  test("preserves a second pasted image while the first upload is pending", async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    const onUploadImage = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        mediaType: "image/png",
+        path: "/repo/second.png",
+        size: 6,
+        type: "image_uploaded",
+      });
+    const { socket } = await renderTerminal({ onUploadImage });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const user = userEvent.setup();
+    const first = new File(["first"], "first.png", { type: "image/png" });
+    const second = new File(["second"], "second.png", { type: "image/png" });
+
+    fireEvent.paste(window, {
+      clipboardData: { files: [first], items: [], types: ["Files"] },
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Upload and insert path" }),
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close dialog" })).toBeDisabled();
+    fireEvent.paste(window, {
+      clipboardData: { files: [second], items: [], types: ["Files"] },
+    });
+    expect(await screen.findByText("second.png")).toBeVisible();
+
+    resolveFirst?.({
+      mediaType: "image/png",
+      path: "/repo/first.png",
+      size: first.size,
+      type: "image_uploaded",
+    });
+
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /Insert image path/ }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  test("retries only failed images and inserts the complete ordered batch", async () => {
+    const onUploadImage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        mediaType: "image/png",
+        path: "/repo/first.png",
+        size: 5,
+        type: "image_uploaded",
+      })
+      .mockRejectedValueOnce(new Error("Second upload failed"))
+      .mockResolvedValueOnce({
+        mediaType: "image/png",
+        path: "/repo/second.png",
+        size: 6,
+        type: "image_uploaded",
+      });
+    const { socket } = await renderTerminal({ onUploadImage });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const files = [
+      new File(["first"], "first.png", { type: "image/png" }),
+      new File(["second"], "second.png", { type: "image/png" }),
+    ];
+    fireEvent.paste(window, {
+      clipboardData: { files, items: [], types: ["Files"] },
+    });
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Upload 2 images and insert paths",
+      }),
+    );
+    expect(await screen.findByText("Second upload failed")).toBeVisible();
+    expect(screen.getByText("/repo/first.png")).toBeVisible();
+    expect(onUploadImage).toHaveBeenCalledTimes(2);
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", { name: "Retry failed uploads" }),
+    );
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledTimes(3));
+    expect(onUploadImage.mock.calls.map(([, file]) => file.name)).toEqual([
+      "first.png",
+      "second.png",
+      "second.png",
+    ]);
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([
+      {
+        data: " '/repo/first.png' '/repo/second.png' ",
+        type: "terminal.input",
+      },
+    ]);
+  });
+
+  test("stages every supported image from one clipboard event in order", async () => {
+    const { socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const files = [
+      new File(["one"], "one.png", { type: "image/png" }),
+      new File(["two"], "two.jpg", { type: "image/jpeg" }),
+      new File(["three"], "three.webp", { type: "image/webp" }),
+    ];
+
+    fireEvent.paste(window, {
+      clipboardData: { files, items: [], types: ["Files"] },
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Insert image paths" }),
+    ).toBeVisible();
+    const names = screen
+      .getAllByTestId("terminal-image-name")
+      .map((element) => element.textContent);
+    expect(names).toEqual(["one.png", "two.jpg", "three.webp"]);
   });
 
   test("leaves image paste untouched with viewer access", async () => {
@@ -480,9 +806,72 @@ describe("InteractiveTerminal", () => {
         .map((value) => JSON.parse(value))
         .find(({ type }) => type === "terminal.input"),
     ).toEqual({
-      data: `'/repo/it'"'"'works.png'`.replaceAll("\\/", "/"),
+      data: ` '/repo/it'"'"'works.png' `.replaceAll("\\/", "/"),
       type: "terminal.input",
     });
+  });
+
+  test("restores control and retries insertion without uploading again", async () => {
+    const { createTicket, onUploadImage, socket } = await renderTerminal();
+    socket.message(frame());
+    socket.message({ type: "terminal.flow", writable: false });
+    await screen.findByText("Interactive");
+    const file = new File(["image"], "insert-retry.png", {
+      type: "image/png",
+    });
+    fireEvent.paste(window, {
+      clipboardData: { files: [file], items: [], types: ["Files"] },
+    });
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Upload and insert path" }),
+    );
+    expect(
+      await screen.findByText(
+        /paths could not be inserted because this terminal is not writable/i,
+      ),
+    ).toBeVisible();
+    expect(onUploadImage).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Copy uploaded path" }),
+    ).toBeEnabled();
+
+    socket.message({
+      reason: "terminal is already controlled by another client",
+      type: "terminal.closed",
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Restore control" }),
+    );
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    expect(createTicket).toHaveBeenLastCalledWith(
+      "w5:p1",
+      expect.objectContaining({ mode: "control", takeover: true }),
+    );
+    const recoveredSocket = FakeWebSocket.instances[2];
+    if (!recoveredSocket) throw new Error("Missing recovered control socket");
+    recoveredSocket.message(frame("control restored"));
+    await screen.findByText("Interactive");
+    await user.click(
+      screen.getByRole("button", { name: "Insert uploaded path" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Insert image path" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(onUploadImage).toHaveBeenCalledOnce();
+    expect(
+      recoveredSocket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([
+      {
+        data: ` '/repo/it'"'"'works.png' `,
+        type: "terminal.input",
+      },
+    ]);
   });
 
   test("opens viewer sessions in enforced read-only mode", async () => {
@@ -524,8 +913,8 @@ describe("InteractiveTerminal", () => {
     expect(screen.getByRole("button", { name: "Take control" })).toBeVisible();
 
     await userEvent.setup().click(watch);
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
-    const observeSocket = FakeWebSocket.instances[1];
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    const observeSocket = FakeWebSocket.instances[2];
     if (!observeSocket) throw new Error("Missing observe socket");
     observeSocket.message(frame());
     expect(await screen.findByText("Watching")).toBeVisible();

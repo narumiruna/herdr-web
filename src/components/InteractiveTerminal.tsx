@@ -4,7 +4,6 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   ReloadIcon,
-  UploadIcon,
 } from "@radix-ui/react-icons";
 import { Button } from "@radix-ui/themes";
 import { FitAddon } from "@xterm/addon-fit";
@@ -28,9 +27,13 @@ import type {
   UploadedImage,
 } from "../herdr-api";
 import { RadixDialog } from "./RadixDialog";
+import { TerminalImageDialog } from "./TerminalImageDialog";
 import type { ComposerDraft } from "./TerminalWorkspace";
+import { terminalImageInput } from "./terminal-images";
+import { useTerminalImages } from "./use-terminal-images";
 
 const RECONNECT_DELAYS = [500, 1_000, 2_000, 5_000];
+const RESIZE_DEBOUNCE_MS = 100;
 
 type TerminalStatus =
   | "connecting"
@@ -94,43 +97,6 @@ function decodeBase64(value: string): Uint8Array {
   return bytes;
 }
 
-function imageFromClipboard(data: DataTransfer): File | undefined {
-  const direct = Array.from(data.files).find(({ type }) =>
-    type.startsWith("image/"),
-  );
-  if (direct) return direct;
-  for (const item of Array.from(data.items)) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const file = item.getAsFile();
-    if (file) return file;
-  }
-  return undefined;
-}
-
-async function imageFromClipboardApi(): Promise<File | undefined> {
-  if (typeof navigator.clipboard?.read !== "function") return undefined;
-  try {
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      const mediaType = item.types.find((type) => type.startsWith("image/"));
-      if (!mediaType) continue;
-      const blob = await item.getType(mediaType);
-      const extension =
-        mediaType.split("/")[1]?.replace("jpeg", "jpg") || "png";
-      return new File([blob], `clipboard-image.${extension}`, {
-        type: mediaType,
-      });
-    }
-  } catch {
-    // Native paste data remains the primary path when Clipboard API access is unavailable.
-  }
-  return undefined;
-}
-
-function shellEscapePath(path: string): string {
-  return `'${path.replaceAll("'", `'"'"'`)}'`;
-}
-
 function controlConflict(reason: string): boolean {
   return /already|controller|control|owned|owner|takeover/i.test(reason);
 }
@@ -179,6 +145,8 @@ export function InteractiveTerminal({
   const terminalRef = useRef<Terminal | undefined>(undefined);
   const fitRef = useRef<FitAddon | undefined>(undefined);
   const createTicketRef = useRef(createTicket);
+  const focusedRef = useRef(focused);
+  const controlEnabledRef = useRef(controlEnabled);
   const searchRef = useRef<SearchAddon | undefined>(undefined);
   const socketRef = useRef<WebSocket | undefined>(undefined);
   const connectGeneration = useRef(0);
@@ -197,24 +165,29 @@ export function InteractiveTerminal({
   const flowWritable = useRef(true);
   const writable = useRef(false);
   const ctrlArmedRef = useRef(false);
-  const modeRef = useRef<"control" | "observe">("control");
+  const modeRef = useRef<"control" | "observe">("observe");
+  const resizeTimer = useRef<number | undefined>(undefined);
+  const pendingResize = useRef<{ cols: number; rows: number } | undefined>(
+    undefined,
+  );
+  const lastSentResize = useRef<{ cols: number; rows: number } | undefined>(
+    undefined,
+  );
   const [status, setStatus] = useState<TerminalStatus>("connecting");
   const [sessionMode, setSessionMode] = useState<"control" | "observe">(
-    "control",
+    "observe",
   );
   const [error, setError] = useState("");
+  const [controlError, setControlError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [image, setImage] = useState<File>();
-  const [imageError, setImageError] = useState("");
-  const [imagePath, setImagePath] = useState("");
-  const [imageUploading, setImageUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState("");
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptSending, setPromptSending] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [ctrlArmed, setCtrlArmed] = useState(false);
   createTicketRef.current = createTicket;
+  focusedRef.current = focused;
+  controlEnabledRef.current = controlEnabled;
 
   const send = useCallback((message: object): boolean => {
     const socket = socketRef.current;
@@ -223,9 +196,63 @@ export function InteractiveTerminal({
     return true;
   }, []);
 
+  const imagePasteEnabled =
+    focused &&
+    structuredActionsEnabled &&
+    sessionMode === "control" &&
+    ["connecting", "live", "reconnecting"].includes(status);
+  const insertImagePaths = useCallback(
+    (paths: string[]) => {
+      if (
+        !writable.current ||
+        !send({ data: terminalImageInput(paths), type: "terminal.input" })
+      ) {
+        return false;
+      }
+      terminalRef.current?.focus();
+      return true;
+    },
+    [send],
+  );
+  const imageQueue = useTerminalImages({
+    onInsert: insertImagePaths,
+    onUpload: onUploadImage,
+    paneId,
+    pasteEnabled: imagePasteEnabled,
+  });
+
+  const cancelPendingResize = useCallback(() => {
+    window.clearTimeout(resizeTimer.current);
+    resizeTimer.current = undefined;
+    pendingResize.current = undefined;
+  }, []);
+
+  const queueTerminalResize = useCallback(
+    (cols: number, rows: number) => {
+      if (modeRef.current !== "control" || !writable.current) return;
+      const previous = lastSentResize.current;
+      if (previous?.cols === cols && previous.rows === rows) return;
+      pendingResize.current = { cols, rows };
+      window.clearTimeout(resizeTimer.current);
+      resizeTimer.current = window.setTimeout(() => {
+        resizeTimer.current = undefined;
+        const next = pendingResize.current;
+        pendingResize.current = undefined;
+        if (!next || modeRef.current !== "control" || !writable.current) {
+          return;
+        }
+        if (send({ ...next, type: "terminal.resize" })) {
+          lastSentResize.current = next;
+        }
+      }, RESIZE_DEBOUNCE_MS);
+    },
+    [send],
+  );
+
   const closeSocket = useCallback(() => {
     stopReason.current = "manual";
     window.clearTimeout(reconnectTimer.current);
+    cancelPendingResize();
     const socket = socketRef.current;
     socketRef.current = undefined;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -237,24 +264,37 @@ export function InteractiveTerminal({
     writable.current = false;
     ctrlArmedRef.current = false;
     connectingRef.current = false;
-  }, []);
+    lastSentResize.current = undefined;
+  }, [cancelPendingResize]);
 
   const connectTerminal = useCallback(
     async (
-      mode: "control" | "observe" = "control",
+      mode: "control" | "observe" = "observe",
       takeover = false,
       reconnecting = false,
     ) => {
       const terminal = terminalRef.current;
-      if (!terminal || !actionsEnabled || connectingRef.current) return;
+      if (
+        !terminal ||
+        !actionsEnabled ||
+        connectingRef.current ||
+        (mode === "control" &&
+          (!focusedRef.current || !controlEnabledRef.current))
+      ) {
+        return;
+      }
       connectingRef.current = true;
+      const generation = ++connectGeneration.current;
       const previousSocket = socketRef.current;
       if (previousSocket) {
         stopReason.current = "manual";
-        previousSocket.close(1000, "terminal replaced");
+        cancelPendingResize();
         socketRef.current = undefined;
+        if (previousSocket.readyState === WebSocket.OPEN) {
+          previousSocket.send(JSON.stringify({ type: "terminal.release" }));
+        }
+        previousSocket.close(1000, "terminal replaced");
       }
-      const generation = ++connectGeneration.current;
       stopReason.current = undefined;
       modeRef.current = mode;
       setSessionMode(mode);
@@ -263,32 +303,35 @@ export function InteractiveTerminal({
       ctrlArmedRef.current = false;
       setCtrlArmed(false);
       setError("");
+      if (mode === "control") setControlError("");
       setStatus(reconnecting ? "reconnecting" : "connecting");
       try {
         fitRef.current?.fit();
-        const ticket = await createTicketRef.current(paneId, {
+        const dimensions = {
           cols: Math.max(1, terminal.cols),
-          mode,
           rows: Math.max(1, terminal.rows),
+        };
+        lastSentResize.current = mode === "control" ? dimensions : undefined;
+        const ticket = await createTicketRef.current(paneId, {
+          ...dimensions,
+          mode,
           takeover,
         });
         if (generation !== connectGeneration.current) return;
+        if (
+          mode === "control" &&
+          (!focusedRef.current || !controlEnabledRef.current)
+        ) {
+          connectingRef.current = false;
+          void connectRef.current?.("observe");
+          return;
+        }
         const url = new URL(ticket.path, window.location.href);
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
         url.search = new URLSearchParams({ ticket: ticket.ticket }).toString();
         const socket = new WebSocket(url);
         socketRef.current = socket;
         connectingRef.current = false;
-        socket.onopen = () => {
-          if (generation !== connectGeneration.current || mode !== "control") {
-            return;
-          }
-          send({
-            cols: Math.max(1, terminal.cols),
-            rows: Math.max(1, terminal.rows),
-            type: "terminal.resize",
-          });
-        };
         socket.onmessage = (event) => {
           if (generation !== connectGeneration.current) return;
           let message: TerminalMessage;
@@ -307,11 +350,25 @@ export function InteractiveTerminal({
             terminal.write(decodeBase64(message.bytes));
             writable.current = mode === "control" && flowWritable.current;
             setStatus(mode === "control" ? "live" : "read-only");
+            if (mode === "control") {
+              queueTerminalResize(
+                Math.max(1, terminal.cols),
+                Math.max(1, terminal.rows),
+              );
+            }
             return;
           }
           if (message.type === "terminal.flow") {
             flowWritable.current = message.writable;
             writable.current = message.writable && mode === "control";
+            if (writable.current) {
+              queueTerminalResize(
+                Math.max(1, terminal.cols),
+                Math.max(1, terminal.rows),
+              );
+            } else {
+              cancelPendingResize();
+            }
             return;
           }
           if (message.type === "terminal.closed") {
@@ -319,6 +376,7 @@ export function InteractiveTerminal({
               message.reason?.trim() || "The terminal session ended.";
             stopReason.current = "terminal";
             writable.current = false;
+            cancelPendingResize();
             setError(reason);
             setStatus(controlConflict(reason) ? "control-conflict" : "exited");
             return;
@@ -355,6 +413,7 @@ export function InteractiveTerminal({
           if (generation !== connectGeneration.current) return;
           socketRef.current = undefined;
           writable.current = false;
+          cancelPendingResize();
           if (stopReason.current) return;
           if (!actionsEnabled || event.code === 1000) return;
           const delay =
@@ -374,16 +433,25 @@ export function InteractiveTerminal({
         };
       } catch (requestError) {
         connectingRef.current = false;
+        lastSentResize.current = undefined;
         if (generation !== connectGeneration.current) return;
-        setError(
+        const message =
           requestError instanceof Error
             ? requestError.message
-            : "The terminal stream could not connect.",
-        );
+            : "The terminal stream could not connect.";
+        setError(message);
+        if (mode === "control") {
+          setControlError(message);
+          modeRef.current = "observe";
+          setSessionMode("observe");
+          setStatus("reconnecting");
+          queueMicrotask(() => void connectRef.current?.("observe"));
+          return;
+        }
         setStatus("error");
       }
     },
-    [actionsEnabled, paneId, send],
+    [actionsEnabled, cancelPendingResize, paneId, queueTerminalResize],
   );
   connectRef.current = connectTerminal;
 
@@ -431,8 +499,8 @@ export function InteractiveTerminal({
       send({ data: terminalInput, type: "terminal.input" });
     });
     const resize = terminal.onResize(({ cols, rows }) => {
-      if (!actionsEnabled || !writable.current) return;
-      send({ cols, rows, type: "terminal.resize" });
+      if (!actionsEnabled) return;
+      queueTerminalResize(cols, rows);
     });
     terminal.attachCustomWheelEventHandler((event) => {
       if (!actionsEnabled || !writable.current || event.deltaY === 0)
@@ -483,7 +551,7 @@ export function InteractiveTerminal({
     window.addEventListener("resize", fitTerminal);
     const frame = window.requestAnimationFrame(() => {
       fitTerminal();
-      void connectTerminal(controlEnabled ? "control" : "observe");
+      void connectTerminal("observe");
     });
     return () => {
       connectGeneration.current += 1;
@@ -498,7 +566,7 @@ export function InteractiveTerminal({
       fitRef.current = undefined;
       searchRef.current = undefined;
     };
-  }, [actionsEnabled, closeSocket, connectTerminal, controlEnabled, send]);
+  }, [actionsEnabled, closeSocket, connectTerminal, queueTerminalResize, send]);
 
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus();
@@ -512,56 +580,10 @@ export function InteractiveTerminal({
   }, [actionsEnabled, closeSocket]);
 
   useEffect(() => {
-    if (!image || typeof URL.createObjectURL !== "function") {
-      setPreviewUrl("");
-      return;
+    if (sessionMode === "control" && (!focused || !controlEnabled)) {
+      void connectTerminal("observe");
     }
-    const url = URL.createObjectURL(image);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [image]);
-
-  const stageImage = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setImageError("Choose an image file.");
-      return;
-    }
-    setImage(file);
-    setImageError("");
-    setImagePath("");
-  }, []);
-
-  const imagePasteEnabled =
-    focused &&
-    structuredActionsEnabled &&
-    sessionMode === "control" &&
-    ["connecting", "live", "reconnecting"].includes(status);
-
-  useEffect(() => {
-    let active = true;
-    const pasteImage = (event: globalThis.ClipboardEvent) => {
-      if (!imagePasteEnabled) return;
-      const file = event.clipboardData
-        ? imageFromClipboard(event.clipboardData)
-        : undefined;
-      if (file) {
-        event.preventDefault();
-        event.stopPropagation();
-        stageImage(file);
-        return;
-      }
-      if (!event.clipboardData?.types?.length) {
-        void imageFromClipboardApi().then((fallback) => {
-          if (active && fallback) stageImage(fallback);
-        });
-      }
-    };
-    window.addEventListener("paste", pasteImage, true);
-    return () => {
-      active = false;
-      window.removeEventListener("paste", pasteImage, true);
-    };
-  }, [imagePasteEnabled, stageImage]);
+  }, [controlEnabled, connectTerminal, focused, sessionMode]);
 
   useEffect(() => {
     const redirectTerminalPaste = (event: globalThis.KeyboardEvent) => {
@@ -595,44 +617,8 @@ export function InteractiveTerminal({
 
   const drop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!structuredActionsEnabled || status !== "live") return;
-    const file = imageFromClipboard(event.dataTransfer);
-    if (file) stageImage(file);
-  };
-
-  const insertUploadedPath = (path: string): boolean => {
-    if (
-      !writable.current ||
-      !send({ data: shellEscapePath(path), type: "terminal.input" })
-    ) {
-      setImageError(
-        `Uploaded to ${path}, but the path could not be inserted because this terminal is not writable.`,
-      );
-      return false;
-    }
-    setImage(undefined);
-    setImagePath("");
-    terminalRef.current?.focus();
-    return true;
-  };
-
-  const insertImage = async () => {
-    if (!image || imageUploading) return;
-    setImageUploading(true);
-    setImageError("");
-    try {
-      const uploaded = await onUploadImage(paneId, image);
-      setImagePath(uploaded.path);
-      insertUploadedPath(uploaded.path);
-    } catch (uploadError) {
-      setImageError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Image upload failed.",
-      );
-    } finally {
-      setImageUploading(false);
-    }
+    if (!imagePasteEnabled || status !== "live") return;
+    imageQueue.stageTransfer(event.dataTransfer);
   };
 
   const submitPrompt = async (event: FormEvent) => {
@@ -655,6 +641,9 @@ export function InteractiveTerminal({
       setPromptSending(false);
     }
   };
+
+  const canUploadImages =
+    structuredActionsEnabled && sessionMode === "control" && status === "live";
 
   const searchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
@@ -685,6 +674,43 @@ export function InteractiveTerminal({
           </span>
         </span>
         <span className="interactive-terminal-actions">
+          {controlError &&
+            sessionMode === "observe" &&
+            status === "read-only" && (
+              <span
+                className="terminal-control-error"
+                role="alert"
+                title={controlError}
+              >
+                Control unavailable
+              </span>
+            )}
+          {controlEnabled &&
+            (sessionMode === "control" ? (
+              <Button
+                type="button"
+                size="1"
+                variant="soft"
+                color="gray"
+                className="terminal-control-button"
+                disabled={status === "connecting" || status === "reconnecting"}
+                onClick={() => void connectTerminal("observe")}
+              >
+                <EyeOpenIcon aria-hidden="true" /> Release control
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="1"
+                variant="solid"
+                color="amber"
+                className="terminal-control-button"
+                disabled={!focused || status !== "read-only"}
+                onClick={() => void connectTerminal("control")}
+              >
+                Take control
+              </Button>
+            ))}
           {toolbarActions}
           <button
             type="button"
@@ -698,17 +724,17 @@ export function InteractiveTerminal({
             className="composer-file-input"
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
-            aria-label="Choose image for terminal"
+            aria-label="Choose images for terminal"
+            multiple
             onChange={(event) => {
-              const file = event.currentTarget.files?.item(0);
-              if (file) stageImage(file);
+              imageQueue.stage(Array.from(event.currentTarget.files ?? []));
               event.currentTarget.value = "";
             }}
           />
           <button
             type="button"
             aria-label="Insert image path"
-            disabled={!structuredActionsEnabled || status !== "live"}
+            disabled={!canUploadImages}
             onClick={() => fileInput.current?.click()}
           >
             <ImageIcon />
@@ -844,92 +870,26 @@ export function InteractiveTerminal({
         </div>
       )}
 
-      <RadixDialog
-        open={Boolean(image)}
-        onOpenChange={(open) => {
-          if (!open && !imageUploading) {
-            setImage(undefined);
-            setImageError("");
-            setImagePath("");
-          }
-        }}
-        title="Insert image path"
-        description="Review the image before uploading it to the active pane directory. Hedr inserts the path without pressing Enter."
-        className="terminal-image-dialog"
+      <TerminalImageDialog
+        batch={imageQueue.batch}
+        busy={imageQueue.busy}
+        canRequestControl={
+          controlEnabled &&
+          focused &&
+          status !== "connecting" &&
+          status !== "reconnecting"
+        }
+        canUpload={canUploadImages}
+        controlActive={sessionMode === "control"}
+        terminalReady={status === "live"}
+        onCancel={imageQueue.reset}
         onCloseAutoFocus={() => terminalRef.current?.focus()}
-      >
-        <div className="terminal-image-preview">
-          {previewUrl && (
-            <img
-              src={previewUrl}
-              alt={`Preview of ${image?.name ?? "upload"}`}
-            />
-          )}
-          <strong>{image?.name}</strong>
-          {imagePath && <code>{imagePath}</code>}
-          {imageError && <span role="alert">{imageError}</span>}
-          {!imageError && !structuredActionsEnabled && (
-            <span role="status">
-              Image ready. Controller access is required before uploading.
-            </span>
-          )}
-          {!imageError && structuredActionsEnabled && status !== "live" && (
-            <span role="status">
-              Image ready. Wait for an Interactive terminal before uploading.
-            </span>
-          )}
-          {imagePath && (
-            <Button
-              type="button"
-              variant="soft"
-              onClick={() => void navigator.clipboard?.writeText(imagePath)}
-            >
-              Copy uploaded path
-            </Button>
-          )}
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="soft"
-              color="gray"
-              disabled={imageUploading}
-              onClick={() => setImage(undefined)}
-            >
-              Cancel
-            </Button>
-            {imagePath ? (
-              <Button
-                type="button"
-                size="2"
-                variant="solid"
-                color="amber"
-                highContrast
-                disabled={status !== "live"}
-                onClick={() => insertUploadedPath(imagePath)}
-              >
-                Insert uploaded path
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="2"
-                variant="solid"
-                color="amber"
-                highContrast
-                disabled={
-                  imageUploading ||
-                  !structuredActionsEnabled ||
-                  status !== "live"
-                }
-                onClick={() => void insertImage()}
-              >
-                <UploadIcon aria-hidden="true" />
-                {imageUploading ? "Uploading…" : "Upload and insert path"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </RadixDialog>
+        onRemove={imageQueue.remove}
+        onRequestControl={() =>
+          void connectTerminal("control", status === "control-conflict")
+        }
+        onSubmit={() => void imageQueue.submit()}
+      />
 
       <RadixDialog
         open={promptOpen}
