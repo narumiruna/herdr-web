@@ -33,7 +33,6 @@ import { terminalImageInput } from "./terminal-images";
 import { useTerminalImages } from "./use-terminal-images";
 
 const RECONNECT_DELAYS = [500, 1_000, 2_000, 5_000];
-const RESIZE_DEBOUNCE_MS = 100;
 
 type TerminalStatus =
   | "connecting"
@@ -145,8 +144,6 @@ export function InteractiveTerminal({
   const terminalRef = useRef<Terminal | undefined>(undefined);
   const fitRef = useRef<FitAddon | undefined>(undefined);
   const createTicketRef = useRef(createTicket);
-  const focusedRef = useRef(focused);
-  const controlEnabledRef = useRef(controlEnabled);
   const searchRef = useRef<SearchAddon | undefined>(undefined);
   const socketRef = useRef<WebSocket | undefined>(undefined);
   const connectGeneration = useRef(0);
@@ -165,20 +162,12 @@ export function InteractiveTerminal({
   const flowWritable = useRef(true);
   const writable = useRef(false);
   const ctrlArmedRef = useRef(false);
-  const modeRef = useRef<"control" | "observe">("observe");
-  const resizeTimer = useRef<number | undefined>(undefined);
-  const pendingResize = useRef<{ cols: number; rows: number } | undefined>(
-    undefined,
-  );
-  const lastSentResize = useRef<{ cols: number; rows: number } | undefined>(
-    undefined,
-  );
+  const modeRef = useRef<"control" | "observe">("control");
   const [status, setStatus] = useState<TerminalStatus>("connecting");
   const [sessionMode, setSessionMode] = useState<"control" | "observe">(
-    "observe",
+    "control",
   );
   const [error, setError] = useState("");
-  const [controlError, setControlError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [promptOpen, setPromptOpen] = useState(false);
@@ -186,8 +175,6 @@ export function InteractiveTerminal({
   const [promptError, setPromptError] = useState("");
   const [ctrlArmed, setCtrlArmed] = useState(false);
   createTicketRef.current = createTicket;
-  focusedRef.current = focused;
-  controlEnabledRef.current = controlEnabled;
 
   const send = useCallback((message: object): boolean => {
     const socket = socketRef.current;
@@ -221,43 +208,9 @@ export function InteractiveTerminal({
     pasteEnabled: imagePasteEnabled,
   });
 
-  const cancelPendingReconnect = useCallback(() => {
-    window.clearTimeout(reconnectTimer.current);
-    reconnectTimer.current = undefined;
-  }, []);
-
-  const cancelPendingResize = useCallback(() => {
-    window.clearTimeout(resizeTimer.current);
-    resizeTimer.current = undefined;
-    pendingResize.current = undefined;
-  }, []);
-
-  const queueTerminalResize = useCallback(
-    (cols: number, rows: number) => {
-      if (modeRef.current !== "control" || !writable.current) return;
-      const previous = lastSentResize.current;
-      if (previous?.cols === cols && previous.rows === rows) return;
-      pendingResize.current = { cols, rows };
-      window.clearTimeout(resizeTimer.current);
-      resizeTimer.current = window.setTimeout(() => {
-        resizeTimer.current = undefined;
-        const next = pendingResize.current;
-        pendingResize.current = undefined;
-        if (!next || modeRef.current !== "control" || !writable.current) {
-          return;
-        }
-        if (send({ ...next, type: "terminal.resize" })) {
-          lastSentResize.current = next;
-        }
-      }, RESIZE_DEBOUNCE_MS);
-    },
-    [send],
-  );
-
   const closeSocket = useCallback(() => {
     stopReason.current = "manual";
-    cancelPendingReconnect();
-    cancelPendingResize();
+    window.clearTimeout(reconnectTimer.current);
     const socket = socketRef.current;
     socketRef.current = undefined;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -269,38 +222,24 @@ export function InteractiveTerminal({
     writable.current = false;
     ctrlArmedRef.current = false;
     connectingRef.current = false;
-    lastSentResize.current = undefined;
-  }, [cancelPendingReconnect, cancelPendingResize]);
+  }, []);
 
   const connectTerminal = useCallback(
     async (
-      mode: "control" | "observe" = "observe",
+      mode: "control" | "observe" = "control",
       takeover = false,
       reconnecting = false,
     ) => {
-      cancelPendingReconnect();
       const terminal = terminalRef.current;
-      if (
-        !terminal ||
-        !actionsEnabled ||
-        connectingRef.current ||
-        (mode === "control" &&
-          (!focusedRef.current || !controlEnabledRef.current))
-      ) {
-        return;
-      }
+      if (!terminal || !actionsEnabled || connectingRef.current) return;
       connectingRef.current = true;
-      const generation = ++connectGeneration.current;
       const previousSocket = socketRef.current;
       if (previousSocket) {
         stopReason.current = "manual";
-        cancelPendingResize();
-        socketRef.current = undefined;
-        if (previousSocket.readyState === WebSocket.OPEN) {
-          previousSocket.send(JSON.stringify({ type: "terminal.release" }));
-        }
         previousSocket.close(1000, "terminal replaced");
+        socketRef.current = undefined;
       }
+      const generation = ++connectGeneration.current;
       stopReason.current = undefined;
       modeRef.current = mode;
       setSessionMode(mode);
@@ -309,35 +248,32 @@ export function InteractiveTerminal({
       ctrlArmedRef.current = false;
       setCtrlArmed(false);
       setError("");
-      if (mode === "control") setControlError("");
       setStatus(reconnecting ? "reconnecting" : "connecting");
       try {
         fitRef.current?.fit();
-        const dimensions = {
-          cols: Math.max(1, terminal.cols),
-          rows: Math.max(1, terminal.rows),
-        };
-        lastSentResize.current = mode === "control" ? dimensions : undefined;
         const ticket = await createTicketRef.current(paneId, {
-          ...dimensions,
+          cols: Math.max(1, terminal.cols),
           mode,
+          rows: Math.max(1, terminal.rows),
           takeover,
         });
         if (generation !== connectGeneration.current) return;
-        if (
-          mode === "control" &&
-          (!focusedRef.current || !controlEnabledRef.current)
-        ) {
-          connectingRef.current = false;
-          void connectRef.current?.("observe");
-          return;
-        }
         const url = new URL(ticket.path, window.location.href);
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
         url.search = new URLSearchParams({ ticket: ticket.ticket }).toString();
         const socket = new WebSocket(url);
         socketRef.current = socket;
         connectingRef.current = false;
+        socket.onopen = () => {
+          if (generation !== connectGeneration.current || mode !== "control") {
+            return;
+          }
+          send({
+            cols: Math.max(1, terminal.cols),
+            rows: Math.max(1, terminal.rows),
+            type: "terminal.resize",
+          });
+        };
         socket.onmessage = (event) => {
           if (generation !== connectGeneration.current) return;
           let message: TerminalMessage;
@@ -356,25 +292,11 @@ export function InteractiveTerminal({
             terminal.write(decodeBase64(message.bytes));
             writable.current = mode === "control" && flowWritable.current;
             setStatus(mode === "control" ? "live" : "read-only");
-            if (mode === "control") {
-              queueTerminalResize(
-                Math.max(1, terminal.cols),
-                Math.max(1, terminal.rows),
-              );
-            }
             return;
           }
           if (message.type === "terminal.flow") {
             flowWritable.current = message.writable;
             writable.current = message.writable && mode === "control";
-            if (writable.current) {
-              queueTerminalResize(
-                Math.max(1, terminal.cols),
-                Math.max(1, terminal.rows),
-              );
-            } else {
-              cancelPendingResize();
-            }
             return;
           }
           if (message.type === "terminal.closed") {
@@ -382,7 +304,6 @@ export function InteractiveTerminal({
               message.reason?.trim() || "The terminal session ended.";
             stopReason.current = "terminal";
             writable.current = false;
-            cancelPendingResize();
             setError(reason);
             setStatus(controlConflict(reason) ? "control-conflict" : "exited");
             return;
@@ -419,7 +340,6 @@ export function InteractiveTerminal({
           if (generation !== connectGeneration.current) return;
           socketRef.current = undefined;
           writable.current = false;
-          cancelPendingResize();
           if (stopReason.current) return;
           if (!actionsEnabled || event.code === 1000) return;
           const delay =
@@ -439,31 +359,16 @@ export function InteractiveTerminal({
         };
       } catch (requestError) {
         connectingRef.current = false;
-        lastSentResize.current = undefined;
         if (generation !== connectGeneration.current) return;
-        const message =
+        setError(
           requestError instanceof Error
             ? requestError.message
-            : "The terminal stream could not connect.";
-        setError(message);
-        if (mode === "control") {
-          setControlError(message);
-          modeRef.current = "observe";
-          setSessionMode("observe");
-          setStatus("reconnecting");
-          queueMicrotask(() => void connectRef.current?.("observe"));
-          return;
-        }
+            : "The terminal stream could not connect.",
+        );
         setStatus("error");
       }
     },
-    [
-      actionsEnabled,
-      cancelPendingReconnect,
-      cancelPendingResize,
-      paneId,
-      queueTerminalResize,
-    ],
+    [actionsEnabled, paneId, send],
   );
   connectRef.current = connectTerminal;
 
@@ -511,8 +416,8 @@ export function InteractiveTerminal({
       send({ data: terminalInput, type: "terminal.input" });
     });
     const resize = terminal.onResize(({ cols, rows }) => {
-      if (!actionsEnabled) return;
-      queueTerminalResize(cols, rows);
+      if (!actionsEnabled || !writable.current) return;
+      send({ cols, rows, type: "terminal.resize" });
     });
     terminal.attachCustomWheelEventHandler((event) => {
       if (!actionsEnabled || !writable.current || event.deltaY === 0)
@@ -563,7 +468,7 @@ export function InteractiveTerminal({
     window.addEventListener("resize", fitTerminal);
     const frame = window.requestAnimationFrame(() => {
       fitTerminal();
-      void connectTerminal("observe");
+      void connectTerminal(controlEnabled ? "control" : "observe");
     });
     return () => {
       connectGeneration.current += 1;
@@ -578,7 +483,7 @@ export function InteractiveTerminal({
       fitRef.current = undefined;
       searchRef.current = undefined;
     };
-  }, [actionsEnabled, closeSocket, connectTerminal, queueTerminalResize, send]);
+  }, [actionsEnabled, closeSocket, connectTerminal, controlEnabled, send]);
 
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus();
@@ -590,12 +495,6 @@ export function InteractiveTerminal({
       setStatus("reconnecting");
     }
   }, [actionsEnabled, closeSocket]);
-
-  useEffect(() => {
-    if (sessionMode === "control" && (!focused || !controlEnabled)) {
-      void connectTerminal("observe");
-    }
-  }, [controlEnabled, connectTerminal, focused, sessionMode]);
 
   useEffect(() => {
     const redirectTerminalPaste = (event: globalThis.KeyboardEvent) => {
@@ -686,43 +585,6 @@ export function InteractiveTerminal({
           </span>
         </span>
         <span className="interactive-terminal-actions">
-          {controlError &&
-            sessionMode === "observe" &&
-            status === "read-only" && (
-              <span
-                className="terminal-control-error"
-                role="alert"
-                title={controlError}
-              >
-                Control unavailable
-              </span>
-            )}
-          {controlEnabled &&
-            (sessionMode === "control" ? (
-              <Button
-                type="button"
-                size="1"
-                variant="soft"
-                color="gray"
-                className="terminal-control-button"
-                disabled={status === "connecting" || status === "reconnecting"}
-                onClick={() => void connectTerminal("observe")}
-              >
-                <EyeOpenIcon aria-hidden="true" /> Release control
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="1"
-                variant="solid"
-                color="amber"
-                className="terminal-control-button"
-                disabled={!focused || status !== "read-only"}
-                onClick={() => void connectTerminal("control")}
-              >
-                Take control
-              </Button>
-            ))}
           {toolbarActions}
           <button
             type="button"

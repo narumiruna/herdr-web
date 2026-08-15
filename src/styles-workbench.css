@@ -357,23 +357,6 @@
   cursor: not-allowed;
   opacity: 0.42;
 }
-.terminal-control-error {
-  max-width: 18ch;
-  overflow: hidden;
-  color: var(--red-9);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.interactive-terminal-actions .terminal-control-button {
-  display: inline-flex;
-  width: auto;
-  min-width: max-content;
-  height: 24px;
-  gap: 5px;
-  padding: 0 8px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-}
 .terminal-paste-sink {
   position: absolute;
   width: 1px;
@@ -812,11 +795,6 @@
   }
   .interactive-terminal-actions button {
     width: 44px;
-    height: 44px;
-  }
-  .interactive-terminal-actions .terminal-control-button {
-    width: auto;
-    min-width: 64px;
     height: 44px;
   }
   .terminal-image-list li {

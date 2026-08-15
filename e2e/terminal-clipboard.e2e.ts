@@ -28,8 +28,7 @@ test("xterm supports repeated native image paste and an ordered image batch", as
   await expect
     .poll(() => page.evaluate(() => window.__terminalSockets.length))
     .toBe(1);
-  await page.evaluate(() => window.__terminalSockets[0]?.frame("observing"));
-  await expect(page.getByText("Watching")).toBeVisible();
+  await page.evaluate(() => window.__terminalSockets[0]?.frame("interactive"));
   await expect
     .poll(() =>
       page.evaluate(
@@ -37,17 +36,6 @@ test("xterm supports repeated native image paste and an ordered image batch", as
       ),
     )
     .toBe(true);
-  const takeControl = page.getByRole("button", { name: "Take control" });
-  await expect
-    .poll(() =>
-      takeControl.evaluate((element) => element.getBoundingClientRect().height),
-    )
-    .toBeGreaterThanOrEqual(44);
-  await takeControl.click();
-  await expect
-    .poll(() => page.evaluate(() => window.__terminalSockets.length))
-    .toBe(2);
-  await page.evaluate(() => window.__terminalSockets[1]?.frame("interactive"));
   await expect(
     page
       .locator(".interactive-terminal-state")
@@ -126,7 +114,7 @@ test("xterm supports repeated native image paste and an ordered image batch", as
   ).toBeHidden();
 
   const result = await page.evaluate(() => ({
-    inputs: window.__terminalSockets[1]?.sent
+    inputs: window.__terminalSockets[0]?.sent
       .map((value) => JSON.parse(value))
       .filter(({ type }) => type === "terminal.input"),
     uploads: window.__terminalUploads.map(({ image }) => image.name),
@@ -151,19 +139,13 @@ test("split xterms route image paste only to the focused pane", async ({
     .poll(() => page.evaluate(() => window.__terminalSockets.length))
     .toBe(2);
   await page.evaluate(() => {
-    for (const socket of window.__terminalSockets) socket.frame("observing");
+    for (const socket of window.__terminalSockets) socket.frame("interactive");
   });
-  await expect(page.getByText("Watching")).toHaveCount(2);
-  await page.locator('button:has-text("Take control"):not(:disabled)').click();
-  await expect
-    .poll(() => page.evaluate(() => window.__terminalSockets.length))
-    .toBe(3);
-  await page.evaluate(() => window.__terminalSockets[2]?.frame("interactive"));
   await expect(
     page
       .locator(".interactive-terminal-state")
       .filter({ hasText: "Interactive" }),
-  ).toBeVisible();
+  ).toHaveCount(2);
 
   await page.evaluate(() => {
     const clipboard = new DataTransfer();

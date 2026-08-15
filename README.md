@@ -139,11 +139,7 @@ Each Agent tab keeps its status visible, while one compact terminal bar combines
 
 The focused terminal owns the remaining screen and is the primary interaction surface.
 
-Each supported terminal starts in **Watching** mode so opening herdr-web does not resize a terminal that is still visible in native Herdr.
-
-Use **Take control** on the focused pane before sending terminal input, and use **Release control** to return resize authority to native Herdr.
-
-While control is active, typing, paste, mouse input, terminal applications, and debounced resize updates are forwarded through a dedicated WebSocket to one Herdr terminal session.
+Typing, paste, mouse input, terminal applications, and resize are forwarded through a dedicated WebSocket to one Herdr terminal session.
 
 Use the terminal toolbar to search output, stage image paths, or open the optional Agent prompt dialog.
 
@@ -177,8 +173,7 @@ On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigat
 
 ## Terminal controls
 
-- Select **Take control** before typing, then type normally to send exact terminal input.
-- Select **Release control** before returning to native Herdr so its pane geometry becomes authoritative again.
+- Type normally to send exact terminal input.
 - Use `Cmd+C` on macOS or `Ctrl+Shift+C` elsewhere to copy a terminal selection.
 - Use `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux for normal text paste or to stage a clipboard image.
 - Use `Cmd+Shift+F` or `Ctrl+Shift+F` to search terminal output.
@@ -188,11 +183,11 @@ On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigat
 
 ## Send remote images
 
-Take control of the focused interactive terminal, then paste images with `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux; the image button is the fallback.
+Focus the interactive terminal, then paste images with `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux; the image button is the fallback.
 
 Each batch accepts up to eight PNG, JPEG, GIF, or WebP images, preserves clipboard order, and allows the same image to be pasted again in a later batch.
 
-Pasting during a control connection still opens the review dialog, but uploading waits until the terminal reports **Interactive**.
+Pasting during connection still opens the review dialog, but uploading waits until the terminal reports **Interactive**.
 
 The staged-image dialog performs no upload until **Upload and insert path** or its multi-image equivalent is confirmed.
 
@@ -207,8 +202,6 @@ Cancelling after a partial failure does not remove files that already reached th
 If path insertion cannot be confirmed, the dialog retains every uploaded path for insertion retry without uploading a duplicate.
 
 The compatibility composer retains its existing single-image paste, drag/drop, and file-selection behavior when interactive terminal streaming is unavailable.
-
-Herdr 0.8 exposes one canonical PTY size, so native Herdr and a controlling browser cannot use independent terminal dimensions at the same time; keep the browser in **Watching** mode when native geometry must remain unchanged.
 
 Remove old attachments manually when they are no longer needed:
 
