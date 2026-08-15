@@ -17,6 +17,7 @@ import {
   type TerminalTicket,
   type TerminalTicketInput,
   type UploadedImage,
+  workspaceLabelFromPath,
 } from "./herdr-api";
 import { mapLiveSnapshot } from "./live-state";
 import {
@@ -271,7 +272,7 @@ export function useHerdrRuntime(
     createWorkspace: async (input) => {
       if (!live) {
         const path = normalizeWorkspacePath(input.cwd);
-        const fallbackLabel = path.split(/[\\/]/).pop() || "space";
+        const fallbackLabel = workspaceLabelFromPath(path) || "space";
         dispatch({
           type: "workspace.created",
           id: `space-web-${Date.now()}`,

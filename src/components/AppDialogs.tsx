@@ -11,7 +11,7 @@ import {
 } from "@radix-ui/react-icons";
 import { Button, TextField } from "@radix-ui/themes";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { normalizeWorkspacePath } from "../herdr-api";
+import { normalizeWorkspacePath, workspaceLabelFromPath } from "../herdr-api";
 import type { Agent, HerdrState, RuntimeName, Workspace } from "../state";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
@@ -452,7 +452,7 @@ export function NewSpaceDialog({
   const [submitting, setSubmitting] = useState(false);
   const cwdInput = useRef<HTMLInputElement>(null);
   const cleanPath = normalizeWorkspacePath(cwd);
-  const derivedLabel = cleanPath.split(/[\\/]/).pop() ?? "";
+  const derivedLabel = workspaceLabelFromPath(cleanPath);
 
   useEffect(() => {
     if (!open) {

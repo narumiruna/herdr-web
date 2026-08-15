@@ -59,11 +59,14 @@ export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 export const MAX_PROMPT_CHARACTERS = 20_000;
 
 export function normalizeWorkspacePath(value: string): string {
-  const path = value.trim();
-  if (/^\/+$/u.test(path)) return "/";
-  if (/^\\+$/u.test(path)) return path.startsWith("\\\\") ? "\\\\" : "\\";
-  if (/^[a-z]:[\\/]$/iu.test(path)) return path;
-  return path.replace(/[\\/]+$/u, "");
+  return value.trim();
+}
+
+export function workspaceLabelFromPath(value: string): string {
+  const path = normalizeWorkspacePath(value);
+  const windowsPath = /^[a-z]:[\\/]/iu.test(path) || path.startsWith("\\\\");
+  const parts = path.split(windowsPath ? /[\\/]+/u : /\/+/u).filter(Boolean);
+  return parts.at(-1) ?? "";
 }
 export const SUPPORTED_IMAGE_TYPES = [
   "image/png",
