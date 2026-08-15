@@ -143,6 +143,10 @@ export function App({
   const [sending, setSending] = useState<Record<string, boolean>>({});
   const [clock, setClock] = useState(() => Date.now());
   const [pendingLaunch, setPendingLaunch] = useState<PendingLaunch>();
+  const [detachedPane, setDetachedPane] = useState<{
+    paneId: string;
+    sessionId: string;
+  } | null>(null);
   const commandTrigger = useRef<HTMLButtonElement>(null);
   const mobileNavTrigger = useRef<HTMLButtonElement>(null);
   const mobileMoreTrigger = useRef<HTMLButtonElement>(null);
@@ -382,15 +386,28 @@ export function App({
     const sessionId = url.searchParams.get("session")?.trim();
     const workspaceId = url.searchParams.get("workspace")?.trim();
     const paneId = url.searchParams.get("pane")?.trim();
+    const detached = url.searchParams.get("detached") === "1";
     const linkedSession = state.agents.find(({ id }) => id === sessionId);
+    const linkedPane = linkedSession?.panes.find(({ id }) => id === paneId);
     if (sessionId && linkedSession) {
       runtime.dispatch({ type: "agent.selected", agentId: sessionId });
-      if (paneId && linkedSession.panes.some(({ id }) => id === paneId)) {
-        runtime.dispatch({ type: "pane.selected", agentId: sessionId, paneId });
+      if (linkedPane) {
+        runtime.dispatch({
+          type: "pane.selected",
+          agentId: sessionId,
+          paneId: linkedPane.id,
+        });
+      }
+      if (detached) {
+        setDetachedPane({
+          paneId: linkedPane?.id ?? linkedSession.activePaneId,
+          sessionId,
+        });
       }
       url.searchParams.delete("session");
       url.searchParams.delete("workspace");
       url.searchParams.delete("pane");
+      url.searchParams.delete("detached");
       window.history.replaceState(
         {},
         "",
@@ -531,7 +548,7 @@ export function App({
     try {
       await runtime.createTerminal({ label, workspaceId: workspace.id });
     } catch {
-      runtime.clearActionError();
+      // `mutate` already records rejected or unknown outcomes in actionError.
     }
   };
 
@@ -542,7 +559,7 @@ export function App({
     try {
       await runtime.renameTab(session.id, session.tabId, label);
     } catch {
-      runtime.clearActionError();
+      // `mutate` already records rejected or unknown outcomes in actionError.
     }
   };
 
@@ -553,7 +570,7 @@ export function App({
     try {
       await runtime.closeTab(session.id, session.tabId);
     } catch {
-      runtime.clearActionError();
+      // `mutate` already records rejected or unknown outcomes in actionError.
     }
   };
 
@@ -565,7 +582,7 @@ export function App({
     try {
       await runtime.moveTab(session.id, session.tabId, direction);
     } catch {
-      runtime.clearActionError();
+      // `mutate` already records rejected or unknown outcomes in actionError.
     }
   };
 
@@ -583,7 +600,7 @@ export function App({
     try {
       await runtime.agentLifecycle(session.id, action);
     } catch {
-      runtime.clearActionError();
+      // `mutate` already records rejected or unknown outcomes in actionError.
     }
   };
 
@@ -627,6 +644,152 @@ export function App({
         );
       });
   };
+
+  const detachedSession = detachedPane
+    ? state.agents.find(({ id }) => id === detachedPane.sessionId)
+    : undefined;
+  const detachedSelectedPane = detachedSession?.panes.find(
+    ({ id }) => id === detachedPane?.paneId,
+  );
+  const detachedAgent =
+    detachedSession && detachedSelectedPane
+      ? {
+          ...detachedSession,
+          activePaneId: detachedSelectedPane.id,
+          paneSplit: undefined,
+          panes: [detachedSelectedPane],
+        }
+      : undefined;
+
+  const terminalWorkspace = (session: NonNullable<typeof agent>) => (
+    <TerminalWorkspace
+      actionsEnabled={
+        runtime.connection === "connected" &&
+        runtime.accessRole === "controller"
+      }
+      agent={session}
+      createTerminalTicket={runtime.terminalTicket}
+      draft={drafts[session.id] ?? EMPTY_COMPOSER_DRAFT}
+      isSending={sending[session.id] === true}
+      workspace={
+        state.workspaces.find(({ id }) => id === session.workspaceId) ??
+        workspace ??
+        state.workspaces[0]
+      }
+      onClearDraft={(agentId) =>
+        setDrafts((current) => ({
+          ...current,
+          [agentId]: EMPTY_COMPOSER_DRAFT,
+        }))
+      }
+      onDraftChange={updateDraft}
+      onMessage={(message, image, uploadedPath) =>
+        runtime.promptAgent(
+          session.id,
+          message,
+          image,
+          uploadedPath,
+          session.activePaneId,
+        )
+      }
+      onMessageFailure={runtime.clearActionError}
+      onRetryOutput={runtime.refresh}
+      onSendingChange={(agentId, value) =>
+        setSending((current) => ({
+          ...current,
+          [agentId]: value,
+        }))
+      }
+      onSplitPane={(direction) =>
+        runtime.splitPane(session.id, session.activePaneId, direction)
+      }
+      onResizePanes={(ratio) =>
+        runtime.resizePanes(session.id, session.tabId ?? "", ratio)
+      }
+      onUploadFile={runtime.uploadFile}
+      onUploadImage={runtime.uploadImage}
+      onSelectPane={(paneId) =>
+        runtime.dispatch({
+          type: "pane.selected",
+          agentId: session.id,
+          paneId,
+        })
+      }
+      onClosePane={async (paneId) => {
+        try {
+          await runtime.closePane(session.id, paneId);
+        } catch (error) {
+          runtime.clearActionError();
+          throw error;
+        }
+      }}
+      terminalControlEnabled={runtime.accessRole === "controller"}
+      terminalEnabled={runtime.status === "ready"}
+      terminalFontSize={terminalFontSize}
+      terminalReason={state.capabilities.terminalReason}
+      onTerminalFontSizeChange={setTerminalFontSize}
+      terminalStreaming={state.capabilities.terminalStreaming}
+    />
+  );
+
+  if (detachedAgent) {
+    return (
+      <Theme
+        appearance={appearance}
+        accentColor="amber"
+        grayColor="sand"
+        radius="medium"
+        scaling="100%"
+        className="herdr-web-theme"
+      >
+        <Tooltip.Provider>
+          <main
+            className="detached-pane-shell"
+            aria-label={`Detached pane ${detachedSelectedPane?.title ?? detachedSelectedPane?.id}`}
+          >
+            <header className="detached-pane-header">
+              <span className="mobile-brand-mark">
+                <HerdrWebLogo compact />
+              </span>
+              <div>
+                <strong>{detachedSession?.label}</strong>
+                <span>{detachedSelectedPane?.title}</span>
+              </div>
+              <span
+                className="connection-state"
+                data-state={runtime.connection}
+                title={
+                  runtime.connection === "connected"
+                    ? "Connected"
+                    : "Reconnecting"
+                }
+              >
+                <i aria-hidden="true" />
+                <span className="sr-only">
+                  {runtime.connection === "connected"
+                    ? "Connected"
+                    : "Reconnecting"}
+                </span>
+              </span>
+            </header>
+            {runtime.actionError && (
+              <div className="runtime-error" role="alert">
+                <span>{runtime.actionError}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss action error"
+                  onClick={runtime.clearActionError}
+                >
+                  <Cross2Icon />
+                </button>
+              </div>
+            )}
+            {terminalWorkspace(detachedAgent)}
+          </main>
+        </Tooltip.Provider>
+      </Theme>
+    );
+  }
 
   return (
     <Theme
@@ -929,70 +1092,7 @@ export function App({
                 onRenameSession={renameSession}
                 onSelect={selectAgent}
               >
-                <TerminalWorkspace
-                  actionsEnabled={
-                    runtime.connection === "connected" &&
-                    runtime.accessRole === "controller"
-                  }
-                  agent={agent}
-                  createTerminalTicket={runtime.terminalTicket}
-                  draft={drafts[agent.id] ?? EMPTY_COMPOSER_DRAFT}
-                  isSending={sending[agent.id] === true}
-                  workspace={workspace}
-                  onClearDraft={(agentId) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [agentId]: EMPTY_COMPOSER_DRAFT,
-                    }))
-                  }
-                  onDraftChange={updateDraft}
-                  onMessage={(message, image, uploadedPath) =>
-                    runtime.promptAgent(
-                      agent.id,
-                      message,
-                      image,
-                      uploadedPath,
-                      agent.activePaneId,
-                    )
-                  }
-                  onMessageFailure={runtime.clearActionError}
-                  onRetryOutput={runtime.refresh}
-                  onSendingChange={(agentId, value) =>
-                    setSending((current) => ({
-                      ...current,
-                      [agentId]: value,
-                    }))
-                  }
-                  onSplitPane={(direction) =>
-                    runtime.splitPane(agent.id, agent.activePaneId, direction)
-                  }
-                  onResizePanes={(ratio) =>
-                    runtime.resizePanes(agent.id, agent.tabId ?? "", ratio)
-                  }
-                  onUploadFile={runtime.uploadFile}
-                  onUploadImage={runtime.uploadImage}
-                  onSelectPane={(paneId) =>
-                    runtime.dispatch({
-                      type: "pane.selected",
-                      agentId: agent.id,
-                      paneId,
-                    })
-                  }
-                  onClosePane={async (paneId) => {
-                    try {
-                      await runtime.closePane(agent.id, paneId);
-                    } catch (error) {
-                      runtime.clearActionError();
-                      throw error;
-                    }
-                  }}
-                  terminalControlEnabled={runtime.accessRole === "controller"}
-                  terminalEnabled={runtime.status === "ready"}
-                  terminalFontSize={terminalFontSize}
-                  terminalReason={state.capabilities.terminalReason}
-                  onTerminalFontSizeChange={setTerminalFontSize}
-                  terminalStreaming={state.capabilities.terminalStreaming}
-                />
+                {terminalWorkspace(agent)}
               </SessionTabs>
             ) : (
               <main className="empty-workbench">
