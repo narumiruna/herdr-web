@@ -148,6 +148,7 @@ interface TerminalPaneViewProps {
   pane: TerminalPane;
   focused: boolean;
   canClose: boolean;
+  showTitle: boolean;
   agentLabel: string;
   onFocus: () => void;
   onClose: () => void;
@@ -158,6 +159,7 @@ function TerminalPaneView({
   pane,
   focused,
   canClose,
+  showTitle,
   agentLabel,
   onFocus,
   onClose,
@@ -200,34 +202,36 @@ function TerminalPaneView({
       aria-label={`${pane.title} terminal`}
       onPointerDown={onFocus}
     >
-      <div className="pane-titlebar">
-        <button
-          type="button"
-          className="pane-title pane-focus-target"
-          aria-label={`Focus ${pane.title} pane`}
-          onFocus={onFocus}
-          onKeyDown={navigatePane}
-        >
-          <CodeIcon aria-hidden="true" />
-          {pane.title}
-        </button>
-        {focused && canClose && (
-          <span className="pane-active-label">Active</span>
-        )}
-        {canClose && (
+      {showTitle && (
+        <div className="pane-titlebar">
           <button
             type="button"
-            className="pane-close"
-            aria-label={`Close ${pane.title} pane`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onClose();
-            }}
+            className="pane-title pane-focus-target"
+            aria-label={`Focus ${pane.title} pane`}
+            onFocus={onFocus}
+            onKeyDown={navigatePane}
           >
-            <Cross2Icon />
+            <CodeIcon aria-hidden="true" />
+            {pane.title}
           </button>
-        )}
-      </div>
+          {focused && canClose && (
+            <span className="pane-active-label">Active</span>
+          )}
+          {canClose && (
+            <button
+              type="button"
+              className="pane-close"
+              aria-label={`Close ${pane.title} pane`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              <Cross2Icon />
+            </button>
+          )}
+        </div>
+      )}
       <ScrollArea.Root className="terminal-scroll">
         <ScrollArea.Viewport
           ref={viewport}
@@ -319,9 +323,9 @@ export function TerminalWorkspace({
   const canPrompt = agent.kind === "agent" && agent.canPrompt !== false;
   const canSend =
     actionsEnabled && Boolean(draft.message.trim() || draft.attachment);
-  const currentWorkingDirectory =
-    agent.panes.find(({ id }) => id === agent.activePaneId)?.cwd ||
-    workspace.path;
+  const activePane =
+    agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
+  const currentWorkingDirectory = activePane?.cwd || workspace.path;
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -494,69 +498,92 @@ export function TerminalWorkspace({
     }
   };
 
+  const terminalContext = (pane: TerminalPane) => (
+    <>
+      {currentWorkingDirectory && (
+        <span className="terminal-toolbar-location">
+          <code className="workspace-cwd" title={currentWorkingDirectory}>
+            <span className="sr-only">
+              Current working directory: {currentWorkingDirectory}
+            </span>
+            <span className="workspace-cwd-full" aria-hidden="true">
+              {currentWorkingDirectory}
+            </span>
+            <span className="workspace-cwd-compact" aria-hidden="true">
+              {compactPath(currentWorkingDirectory)}
+            </span>
+          </code>
+          <button
+            type="button"
+            className="workspace-copy-cwd"
+            aria-label={
+              cwdCopied
+                ? "Current working directory copied"
+                : "Copy current working directory"
+            }
+            onClick={() => void copyWorkingDirectory()}
+          >
+            {cwdCopied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        </span>
+      )}
+      {workspace.branch && (
+        <code className="terminal-toolbar-branch" title={workspace.branch}>
+          {workspace.branch}
+        </code>
+      )}
+      <span className="terminal-toolbar-title" title={pane.title}>
+        <CodeIcon aria-hidden="true" />
+        {pane.title}
+      </span>
+    </>
+  );
+
+  const terminalStructureActions = (
+    pane: TerminalPane,
+    includeClose: boolean,
+  ) => (
+    <>
+      <IconTooltip label="Split pane">
+        <IconButton
+          type="button"
+          variant="ghost"
+          color="gray"
+          aria-label="Split pane"
+          title={
+            agent.panes.length >= 2
+              ? "This session already has two panes."
+              : undefined
+          }
+          disabled={!actionsEnabled || agent.panes.length >= 2}
+          onClick={() =>
+            void Promise.resolve(onSplitPane()).catch(() => undefined)
+          }
+        >
+          <ColumnsIcon />
+        </IconButton>
+      </IconTooltip>
+      {includeClose && actionsEnabled && (
+        <IconTooltip label={`Close ${pane.title} pane`}>
+          <IconButton
+            type="button"
+            variant="ghost"
+            color="gray"
+            aria-label={`Close ${pane.title} pane`}
+            onClick={() => {
+              setCloseError("");
+              setClosingPane(pane);
+            }}
+          >
+            <Cross2Icon />
+          </IconButton>
+        </IconTooltip>
+      )}
+    </>
+  );
+
   return (
     <main className="main-workspace">
-      <header className="workspace-header">
-        <div className="workspace-metadata">
-          {currentWorkingDirectory && (
-            <span className="workspace-cwd-group">
-              <code className="workspace-cwd" title={currentWorkingDirectory}>
-                <span className="sr-only">
-                  Current working directory: {currentWorkingDirectory}
-                </span>
-                <span className="workspace-cwd-full" aria-hidden="true">
-                  {currentWorkingDirectory}
-                </span>
-                <span className="workspace-cwd-compact" aria-hidden="true">
-                  {compactPath(currentWorkingDirectory)}
-                </span>
-              </code>
-              <button
-                type="button"
-                className="workspace-copy-cwd"
-                aria-label={
-                  cwdCopied
-                    ? "Current working directory copied"
-                    : "Copy current working directory"
-                }
-                onClick={() => void copyWorkingDirectory()}
-              >
-                {cwdCopied ? <CheckIcon /> : <CopyIcon />}
-              </button>
-            </span>
-          )}
-          {workspace.branch && (
-            <code className="workspace-branch" title={workspace.branch}>
-              {workspace.branch}
-            </code>
-          )}
-        </div>
-        <div className="workspace-actions">
-          {agent.panes.length >= 2 && (
-            <span className="workspace-action-note">2-pane web limit</span>
-          )}
-          <IconTooltip label="Split pane">
-            <IconButton
-              type="button"
-              variant="soft"
-              color="gray"
-              aria-label="Split pane"
-              title={
-                agent.panes.length >= 2
-                  ? "This session already has two panes."
-                  : undefined
-              }
-              disabled={!actionsEnabled || agent.panes.length >= 2}
-              onClick={() =>
-                void Promise.resolve(onSplitPane()).catch(() => undefined)
-              }
-            >
-              <ColumnsIcon />
-            </IconButton>
-          </IconTooltip>
-        </div>
-      </header>
-
       {agent.status === "blocked" && (
         <section className="attention-banner" aria-label="Agent needs input">
           <ExclamationTriangleIcon aria-hidden="true" />
@@ -568,10 +595,24 @@ export function TerminalWorkspace({
       )}
 
       <section className="terminal-shell" aria-label={`${agent.label} session`}>
-        {!terminalStreaming && (
-          <div className="snapshot-mode" role="note" title={terminalReason}>
-            Snapshot output
-            <span>Interactive terminal unavailable</span>
+        {!terminalStreaming && activePane && (
+          <div className="interactive-terminal-tools terminal-fallback-tools">
+            <span className="terminal-toolbar-context">
+              {terminalContext(activePane)}
+              <span
+                className="interactive-terminal-state"
+                role="status"
+                title={terminalReason}
+              >
+                <i aria-hidden="true" /> Snapshot
+                <span className="terminal-status-detail">
+                  Interactive unavailable
+                </span>
+              </span>
+            </span>
+            <span className="interactive-terminal-actions">
+              {terminalStructureActions(activePane, false)}
+            </span>
           </div>
         )}
         {agent.panes.length > 1 && (
@@ -615,25 +656,6 @@ export function TerminalWorkspace({
                   aria-label={`${pane.title} terminal`}
                   key={pane.id}
                 >
-                  <div className="pane-titlebar">
-                    <span className="pane-title">
-                      <CodeIcon aria-hidden="true" />
-                      {pane.title}
-                    </span>
-                    {actionsEnabled && agent.panes.length > 1 && (
-                      <button
-                        type="button"
-                        className="pane-close"
-                        aria-label={`Close ${pane.title} pane`}
-                        onClick={() => {
-                          setCloseError("");
-                          setClosingPane(pane);
-                        }}
-                      >
-                        <Cross2Icon />
-                      </button>
-                    )}
-                  </div>
                   <InteractiveTerminal
                     actionsEnabled={terminalEnabled}
                     controlEnabled={terminalControlEnabled}
@@ -647,6 +669,11 @@ export function TerminalWorkspace({
                     onPrompt={(message) => onMessage(message)}
                     onUploadImage={onUploadImage}
                     paneId={pane.id}
+                    toolbarContext={terminalContext(pane)}
+                    toolbarActions={terminalStructureActions(
+                      pane,
+                      agent.panes.length > 1,
+                    )}
                   />
                 </section>
               ) : (
@@ -656,6 +683,7 @@ export function TerminalWorkspace({
                   agentLabel={agent.label}
                   focused={pane.id === agent.activePaneId}
                   canClose={actionsEnabled && agent.panes.length > 1}
+                  showTitle={agent.panes.length > 1}
                   onFocus={() => onSelectPane(pane.id)}
                   onClose={() => {
                     setCloseError("");

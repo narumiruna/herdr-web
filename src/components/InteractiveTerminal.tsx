@@ -15,6 +15,7 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -56,6 +57,8 @@ interface InteractiveTerminalProps {
   onPrompt: (message: string) => Promise<unknown> | undefined;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   paneId: string;
+  toolbarActions?: ReactNode;
+  toolbarContext?: ReactNode;
 }
 
 interface TerminalFrame {
@@ -163,6 +166,8 @@ export function InteractiveTerminal({
   onPrompt,
   onUploadImage,
   paneId,
+  toolbarActions,
+  toolbarContext,
 }: InteractiveTerminalProps) {
   const host = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -670,10 +675,14 @@ export function InteractiveTerminal({
       onDrop={drop}
     >
       <div className="interactive-terminal-tools">
-        <span className="interactive-terminal-state" role="status">
-          <i aria-hidden="true" /> {statusLabel(status)}
+        <span className="terminal-toolbar-context">
+          {toolbarContext}
+          <span className="interactive-terminal-state" role="status">
+            <i aria-hidden="true" /> {statusLabel(status)}
+          </span>
         </span>
         <span className="interactive-terminal-actions">
+          {toolbarActions}
           <button
             type="button"
             aria-label="Search terminal"

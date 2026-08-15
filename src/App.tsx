@@ -600,6 +600,8 @@ export function App({
                 workspaceName={workspace.name}
                 sessions={workspaceTabs}
                 selectedId={agent.id}
+                canCreateSession={canStartAgent}
+                onNewSession={openSessionDialog}
                 onSelect={selectAgent}
               >
                 <TerminalWorkspace

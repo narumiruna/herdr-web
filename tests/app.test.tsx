@@ -71,6 +71,21 @@ describe("Hedr terminal-first workbench", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
+  test("opens Agent setup from the plus button beside the tab bar", async () => {
+    const user = renderApp();
+    const trigger = screen.getByRole("button", {
+      name: "New Agent in herdr",
+    });
+
+    await user.click(trigger);
+
+    expect(
+      screen.getByRole("dialog", { name: "Start a new Agent" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   test("opens the most urgent agent when a workspace is selected", async () => {
     const user = renderApp();
 

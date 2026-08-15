@@ -122,9 +122,11 @@ Use **Menu** for saved appearance settings, the workbench keybinding reference, 
 
 Returning to a Space restores its last selected tab, while choosing a Needs input or Agents item opens that exact Agent.
 
+Use the **+** beside the tab strip to start another Agent in the current Space without leaving the terminal context.
+
 Split panes stay inside their parent tab, appear side by side on wide screens, and use a readable pane selector on narrow screens.
 
-Each Agent tab keeps its status visible, while a compact context row preserves the current working directory and branch.
+Each Agent tab keeps its status visible, while one compact terminal bar combines the current working directory, branch, pane title, connection state, and terminal actions without redundant title rows.
 
 The focused terminal owns the remaining screen and is the primary interaction surface.
 

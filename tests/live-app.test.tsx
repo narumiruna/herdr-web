@@ -111,6 +111,9 @@ describe("live Hedr app", () => {
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
     expect(
+      screen.getByRole("button", { name: "New Agent in live-test" }),
+    ).toBeDisabled();
+    expect(
       screen.getByRole("button", { name: "Create a new Space" }),
     ).toBeDisabled();
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();

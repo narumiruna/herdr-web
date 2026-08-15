@@ -721,44 +721,43 @@ kbd {
   padding: 8px 16px 14px;
   overflow: hidden;
 }
-.workspace-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  flex: 0 0 auto;
-  align-items: center;
-}
-.workspace-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.workspace-metadata {
+.terminal-toolbar-context {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   overflow: hidden;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
   white-space: nowrap;
 }
-.workspace-metadata > * {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.workspace-cwd-group {
-  display: flex;
+.terminal-toolbar-context > * {
   min-width: 0;
-  align-items: center;
-  gap: 5px;
 }
-.workspace-metadata .workspace-cwd {
+.terminal-toolbar-context > * + *::before {
+  margin-right: 8px;
+  color: var(--terminal-border);
+  content: "·";
+}
+.terminal-toolbar-location {
+  display: flex;
+  min-width: 40px;
+  max-width: min(48%, 72ch);
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+}
+.terminal-toolbar-location .workspace-cwd,
+.terminal-toolbar-branch,
+.terminal-toolbar-title {
   overflow: hidden;
-  max-width: 72ch;
-  color: var(--ink-secondary);
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-size: 10px;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-toolbar-location .workspace-cwd {
+  min-width: 0;
+  color: var(--terminal-text);
 }
 .workspace-cwd-compact {
   display: none;
@@ -772,31 +771,38 @@ kbd {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--terminal-muted);
   cursor: pointer;
   place-items: center;
 }
 .workspace-copy-cwd:hover {
-  background: var(--panel-muted);
-  color: var(--ink);
+  background: var(--terminal-elevated);
+  color: var(--terminal-text);
 }
 .workspace-copy-cwd svg {
   width: 12px;
   height: 12px;
 }
-.workspace-metadata .workspace-branch {
+.terminal-toolbar-branch {
+  max-width: 22ch;
+  flex: 0 1 auto;
+  color: var(--amber-11);
+}
+.terminal-toolbar-title {
+  display: inline-flex;
   max-width: 28ch;
-  color: var(--amber-12);
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--terminal-muted);
 }
-.workspace-action-note {
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+.terminal-toolbar-title svg {
+  flex: 0 0 auto;
+  color: var(--amber-9);
 }
-.workspace-metadata > * + *::before {
-  margin-right: 8px;
-  color: var(--border-strong);
-  content: "·";
+.terminal-status-detail {
+  margin-left: 4px;
+  opacity: 0.72;
 }
 .attention-banner {
   display: flex;

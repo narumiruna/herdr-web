@@ -50,7 +50,6 @@
   align-items: center;
   gap: 10px;
   padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-panel);
   color: var(--terminal-muted);
   font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
@@ -181,22 +180,6 @@
   color: var(--terminal-text);
   cursor: pointer;
 }
-.snapshot-mode {
-  display: flex;
-  min-height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--terminal-border);
-  background: var(--terminal-panel);
-  color: var(--terminal-muted);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
-}
-.snapshot-mode span {
-  opacity: 0.72;
-}
 .pane-switcher {
   display: flex;
   min-height: 38px;
@@ -265,7 +248,6 @@
   justify-content: space-between;
   gap: 8px;
   padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-panel);
   color: var(--terminal-muted);
   font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;

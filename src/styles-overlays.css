@@ -982,31 +982,24 @@
     gap: 8px;
     padding: 9px 8px max(8px, env(safe-area-inset-bottom));
   }
-  .workspace-header {
-    gap: 6px 8px;
-  }
-  .workspace-actions .rt-IconButton,
   .workspace-copy-cwd {
     width: 44px;
     height: 44px;
     padding: 0;
   }
-  .workspace-actions .rt-IconButton svg {
-    width: 16px;
-    height: 16px;
+  .terminal-toolbar-location {
+    max-width: none;
   }
-  .workspace-metadata {
-    overflow-x: auto;
-    scrollbar-width: none;
+  .terminal-toolbar-branch,
+  .terminal-toolbar-title,
+  .terminal-status-detail {
+    display: none;
   }
   .workspace-cwd-full {
     display: none;
   }
   .workspace-cwd-compact {
     display: inline;
-  }
-  .workspace-metadata::-webkit-scrollbar {
-    display: none;
   }
   .attention-banner {
     min-height: 42px;
@@ -1060,6 +1053,20 @@
   }
   .connection-form {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 350px) {
+  .interactive-terminal-tools {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+  .interactive-terminal-actions {
+    gap: 0;
+  }
+  .interactive-terminal-state {
+    gap: 0;
+    font-size: 0;
   }
 }
 

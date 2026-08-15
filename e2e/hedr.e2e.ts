@@ -58,6 +58,9 @@ test("desktop workbench gives the terminal priority", async ({
     page.getByRole("region", { name: "claude · API review terminal" }),
   ).toBeVisible();
   await expect(page.getByRole("tablist", { name: "herdr tabs" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New Agent in herdr" }),
+  ).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(3);
   await expect(page.getByRole("tab", { selected: true })).toContainText(
     "Needs input",
@@ -105,9 +108,34 @@ test("desktop workbench gives the terminal priority", async ({
       topbarBrightness: brightness(".topbar"),
       topbarHeight:
         document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0,
-      workspaceHeaderHeight:
-        document.querySelector(".workspace-header")?.getBoundingClientRect()
-          .height ?? 0,
+      terminalToolsHeight:
+        document
+          .querySelector(".interactive-terminal-tools")
+          ?.getBoundingClientRect().height ?? 0,
+      terminalToolsBorder: Number.parseFloat(
+        getComputedStyle(
+          document.querySelector(".interactive-terminal-tools") as Element,
+        ).borderBottomWidth,
+      ),
+      tabStripBorder: Number.parseFloat(
+        getComputedStyle(document.querySelector(".session-tabs") as Element)
+          .borderBottomWidth,
+      ),
+      redundantPaneTitles: document.querySelectorAll(".pane-titlebar").length,
+      terminalContextCenters: [
+        ".workspace-cwd",
+        ".terminal-toolbar-title",
+        ".interactive-terminal-state",
+      ].map((selector) => {
+        const rect = document.querySelector(selector)?.getBoundingClientRect();
+        return rect ? rect.top + rect.height / 2 : 0;
+      }),
+      tabsRight:
+        document.querySelector(".session-tabs-scroll")?.getBoundingClientRect()
+          .right ?? 0,
+      newTabLeft:
+        document.querySelector(".session-tabs-new")?.getBoundingClientRect()
+          .left ?? 0,
     };
   });
   expect(lightMetrics.brandMark).toBeLessThanOrEqual(30);
@@ -120,7 +148,17 @@ test("desktop workbench gives the terminal priority", async ({
   expect(lightMetrics.terminalTop).toBeLessThanOrEqual(225);
   expect(lightMetrics.topbarBrightness).toBeGreaterThan(180);
   expect(lightMetrics.topbarHeight).toBeLessThanOrEqual(56);
-  expect(lightMetrics.workspaceHeaderHeight).toBeLessThanOrEqual(60);
+  expect(lightMetrics.terminalToolsHeight).toBeLessThanOrEqual(44);
+  expect(lightMetrics.terminalToolsBorder).toBe(0);
+  expect(lightMetrics.tabStripBorder).toBe(0);
+  expect(lightMetrics.redundantPaneTitles).toBe(0);
+  expect(
+    Math.max(...lightMetrics.terminalContextCenters) -
+      Math.min(...lightMetrics.terminalContextCenters),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(lightMetrics.tabsRight - lightMetrics.newTabLeft),
+  ).toBeLessThanOrEqual(1);
   const contrastRatios = await page.evaluate(() => {
     const rgb = (value: string) =>
       (value
@@ -417,6 +455,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   for (const target of [
     page.getByRole("button", { name: "Open navigation" }),
     page.getByRole("button", { name: "Open command palette" }),
+    page.getByRole("button", { name: "New Agent in herdr" }),
     page.getByRole("button", { name: "Open more actions" }),
     page.getByRole("button", { name: "Attach image" }),
     page.getByRole("button", { name: "Send message" }),

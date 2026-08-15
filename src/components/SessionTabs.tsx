@@ -1,12 +1,15 @@
-import { DesktopIcon } from "@radix-ui/react-icons";
+import { DesktopIcon, PlusIcon } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import * as Tabs from "@radix-ui/react-tabs";
+import { IconButton } from "@radix-ui/themes";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { Agent } from "../state";
 import { StatusPill } from "./StatusPill";
 
 interface SessionTabsProps {
+  canCreateSession: boolean;
   children: ReactNode;
+  onNewSession: (returnFocus: HTMLElement) => void;
   onSelect: (sessionId: string) => void;
   selectedId: string;
   sessions: Agent[];
@@ -14,7 +17,9 @@ interface SessionTabsProps {
 }
 
 export function SessionTabs({
+  canCreateSession,
   children,
+  onNewSession,
   onSelect,
   selectedId,
   sessions,
@@ -81,6 +86,18 @@ export function SessionTabs({
             <ScrollArea.Thumb className="session-tabs-scrollbar-thumb" />
           </ScrollArea.Scrollbar>
         </ScrollArea.Root>
+        <IconButton
+          type="button"
+          className="session-tabs-new"
+          variant="ghost"
+          color="gray"
+          disabled={!canCreateSession}
+          aria-label={`New Agent in ${workspaceName}`}
+          title={`New Agent in ${workspaceName}`}
+          onClick={(event) => onNewSession(event.currentTarget)}
+        >
+          <PlusIcon aria-hidden="true" />
+        </IconButton>
       </div>
       <Tabs.Content
         className="session-tab-content"
