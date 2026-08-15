@@ -11,6 +11,8 @@ import {
   HerdrApiClient,
   HerdrBridgeError,
   type NewLiveSession,
+  type NewLiveWorkspace,
+  normalizeWorkspacePath,
   rememberAccessToken,
   type TerminalTicket,
   type TerminalTicketInput,
@@ -60,6 +62,7 @@ interface HerdrRuntime {
   closePane: (agentId: string, paneId: string) => Promise<void>;
   connection: RuntimeConnection;
   createSession: (input: NewLiveSession) => Promise<void>;
+  createWorkspace: (input: NewLiveWorkspace) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
   lastUpdatedAt: number;
@@ -264,6 +267,30 @@ export function useHerdrRuntime(
         return;
       }
       await mutate((api) => api.createSession(input));
+    },
+    createWorkspace: async (input) => {
+      if (!live) {
+        const path = normalizeWorkspacePath(input.cwd);
+        const fallbackLabel = path.split(/[\\/]/).pop() || "space";
+        dispatch({
+          type: "workspace.created",
+          id: `space-web-${Date.now()}`,
+          label: input.label?.trim() || fallbackLabel,
+          path,
+        });
+        return;
+      }
+      const created = await mutate((api) => api.createWorkspace(input));
+      const workspaceId = created?.workspace?.workspace_id;
+      if (!workspaceId) {
+        const error = new HerdrMutationError(
+          "Herdr did not return the new Space.",
+          "unknown",
+        );
+        setActionError(error.message);
+        throw error;
+      }
+      dispatch({ type: "workspace.selected", workspaceId });
     },
     dispatch,
     error,

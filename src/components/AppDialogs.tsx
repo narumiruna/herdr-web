@@ -2,11 +2,16 @@ import {
   CodeIcon,
   Component1Icon,
   DesktopIcon,
+  FilePlusIcon,
+  KeyboardIcon,
   MagnifyingGlassIcon,
+  MoonIcon,
   RocketIcon,
+  SunIcon,
 } from "@radix-ui/react-icons";
 import { Button, TextField } from "@radix-ui/themes";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeWorkspacePath } from "../herdr-api";
 import type { Agent, HerdrState, RuntimeName, Workspace } from "../state";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
@@ -146,7 +151,7 @@ export function CommandPalette({
             <strong>{result.workspace.name}</strong>
             <small>{result.workspace.branch || result.workspace.path}</small>
           </span>
-          <kbd>workspace</kbd>
+          <kbd>space</kbd>
         </button>
       );
     }
@@ -191,7 +196,7 @@ export function CommandPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Jump anywhere"
-      description="Find a workspace, detected Agent, or standalone Terminal."
+      description="Find a Space, detected Agent, or standalone Terminal."
       className="command-dialog"
       initialFocusRef={searchInput}
     >
@@ -201,14 +206,14 @@ export function CommandPalette({
           ref={searchInput}
           value={query}
           role="combobox"
-          aria-label="Search workspaces, agents, and terminals"
+          aria-label="Search Spaces, Agents, and Terminals"
           aria-expanded="true"
           aria-controls="command-results"
           aria-autocomplete="list"
           aria-activedescendant={
             results[activeIndex] ? resultDomId(results[activeIndex]) : undefined
           }
-          placeholder="Search workspaces, agents, and terminals…"
+          placeholder="Search Spaces, Agents, and Terminals…"
           onChange={(event) => {
             setQuery(event.target.value);
             setActiveIndex(0);
@@ -248,13 +253,13 @@ export function CommandPalette({
         )}
         {currentSessionResults.length > 0 && (
           <fieldset>
-            <legend>Current workspace</legend>
+            <legend>Current Space</legend>
             {currentSessionResults.map(resultButton)}
           </fieldset>
         )}
         {workspaceResults.length > 0 && (
           <fieldset>
-            <legend>Workspaces</legend>
+            <legend>Spaces</legend>
             {workspaceResults.map(resultButton)}
           </fieldset>
         )}
@@ -267,8 +272,8 @@ export function CommandPalette({
         {results.length === 0 && (
           <div className="command-empty">
             <MagnifyingGlassIcon aria-hidden="true" />
-            <strong>No matching workspace or session</strong>
-            <span>Try a runtime, branch, path, workspace, or Agent name.</span>
+            <strong>No matching Space or session</strong>
+            <span>Try a runtime, branch, path, Space, or Agent name.</span>
           </div>
         )}
       </div>
@@ -390,7 +395,7 @@ export function NewSessionDialog({
           </span>
           <dl>
             <div className="launch-review-row">
-              <dt>Workspace</dt>
+              <dt>Space</dt>
               <dd>{workspace.name}</dd>
             </div>
             <div className="launch-review-row">
@@ -426,6 +431,260 @@ export function NewSessionDialog({
           </Button>
         </div>
       </form>
+    </RadixDialog>
+  );
+}
+
+interface NewSpaceDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (input: { cwd: string; label?: string }) => Promise<void>;
+}
+
+export function NewSpaceDialog({
+  open,
+  onOpenChange,
+  onCreate,
+}: NewSpaceDialogProps) {
+  const [cwd, setCwd] = useState("");
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const cwdInput = useRef<HTMLInputElement>(null);
+  const cleanPath = normalizeWorkspacePath(cwd);
+  const derivedLabel = cleanPath.split(/[\\/]/).pop() ?? "";
+
+  useEffect(() => {
+    if (!open) {
+      setCwd("");
+      setLabel("");
+      setError("");
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!cleanPath || submitting) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      await onCreate({
+        cwd: cleanPath,
+        ...(label.trim() ? { label: label.trim() } : {}),
+      });
+      onOpenChange(false);
+    } catch (createError) {
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "The Space could not be created.",
+      );
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <RadixDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen);
+      }}
+      title="Create a new Space"
+      description="Open a persistent Herdr Space for a directory on this machine."
+      className="space-dialog"
+      initialFocusRef={cwdInput}
+    >
+      <form className="space-form" onSubmit={submit}>
+        <label className="form-field" htmlFor="space-directory">
+          <span>Directory</span>
+          <TextField.Root
+            ref={cwdInput}
+            id="space-directory"
+            value={cwd}
+            maxLength={4096}
+            placeholder="/path/to/project"
+            disabled={submitting}
+            onChange={(event) => setCwd(event.target.value)}
+          >
+            <TextField.Slot>
+              <FilePlusIcon />
+            </TextField.Slot>
+          </TextField.Root>
+        </label>
+        <label className="form-field" htmlFor="space-label">
+          <span>
+            Label <small>optional</small>
+          </span>
+          <TextField.Root
+            id="space-label"
+            value={label}
+            maxLength={80}
+            placeholder={derivedLabel || "project name"}
+            disabled={submitting}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+        </label>
+        <section className="space-review" aria-label="Space preview">
+          <span>New Space</span>
+          <strong>{label.trim() || derivedLabel || "Project"}</strong>
+          <code>{cleanPath || "/path/to/project"}</code>
+        </section>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="form-actions">
+          <Button
+            type="button"
+            variant="soft"
+            color="gray"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            color="amber"
+            disabled={!cleanPath || submitting}
+          >
+            <FilePlusIcon /> {submitting ? "Creating…" : "Create Space"}
+          </Button>
+        </div>
+      </form>
+    </RadixDialog>
+  );
+}
+
+interface SettingsDialogProps {
+  appearance: "light" | "dark";
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onApply: (appearance: "light" | "dark") => void;
+}
+
+export function SettingsDialog({
+  appearance,
+  open,
+  onOpenChange,
+  onApply,
+}: SettingsDialogProps) {
+  const [draft, setDraft] = useState(appearance);
+
+  useEffect(() => {
+    if (open) setDraft(appearance);
+  }, [appearance, open]);
+
+  return (
+    <RadixDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Settings"
+      description="Workbench preferences saved in this browser."
+      className="settings-dialog"
+    >
+      <form
+        className="settings-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onApply(draft);
+          onOpenChange(false);
+        }}
+      >
+        <fieldset className="appearance-options">
+          <legend>Appearance</legend>
+          <label data-selected={draft === "dark"}>
+            <input
+              type="radio"
+              name="appearance"
+              value="dark"
+              checked={draft === "dark"}
+              onChange={() => setDraft("dark")}
+            />
+            <MoonIcon aria-hidden="true" />
+            <span>
+              <strong>Dark</strong>
+              <small>Optimized for terminal contrast.</small>
+            </span>
+          </label>
+          <label data-selected={draft === "light"}>
+            <input
+              type="radio"
+              name="appearance"
+              value="light"
+              checked={draft === "light"}
+              onChange={() => setDraft("light")}
+            />
+            <SunIcon aria-hidden="true" />
+            <span>
+              <strong>Light</strong>
+              <small>Light navigation with a dark interactive terminal.</small>
+            </span>
+          </label>
+        </fieldset>
+        <div className="form-actions">
+          <Button
+            type="button"
+            variant="soft"
+            color="gray"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" color="amber">
+            Apply
+          </Button>
+        </div>
+      </form>
+    </RadixDialog>
+  );
+}
+
+interface KeybindingsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const KEYBINDINGS = [
+  ["Jump to a Space, Agent, or Terminal", "⌘ K / Ctrl K"],
+  ["Move between focused tabs", "← / →"],
+  ["Send an Agent message", "Enter"],
+  ["Insert a message line break", "Shift Enter"],
+  ["Paste an image", "⌘ V / Ctrl V"],
+  ["Close a dialog or Terminal search", "Esc"],
+] as const;
+
+export function KeybindingsDialog({
+  open,
+  onOpenChange,
+}: KeybindingsDialogProps) {
+  return (
+    <RadixDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Keybindings"
+      description="Keyboard shortcuts available in the web workbench."
+      className="keybindings-dialog"
+    >
+      <div className="keybindings-content">
+        <div className="keybindings-heading">
+          <KeyboardIcon aria-hidden="true" />
+          <span>Workbench</span>
+        </div>
+        <dl className="keybindings-list">
+          {KEYBINDINGS.map(([action, keys]) => (
+            <div key={action}>
+              <dt>{action}</dt>
+              <dd>
+                <kbd>{keys}</kbd>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p>Terminal programs continue to receive their own native shortcuts.</p>
+      </div>
     </RadixDialog>
   );
 }

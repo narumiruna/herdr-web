@@ -255,6 +255,24 @@ describe("LiveHerdrService", () => {
     expect(request).toHaveBeenCalledTimes(5);
   });
 
+  test("creates and focuses a Space through the Herdr workspace API", async () => {
+    const request = vi.fn().mockResolvedValue({
+      type: "workspace_created",
+      workspace: { workspace_id: "w10" },
+    });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await expect(
+      service.createWorkspace({ cwd: "/repo/new", label: "new" }),
+    ).resolves.toMatchObject({ workspace: { workspace_id: "w10" } });
+    expect(request).toHaveBeenCalledWith("workspace.create", {
+      cwd: "/repo/new",
+      env: {},
+      focus: true,
+      label: "new",
+    });
+  });
+
   test("rejects arbitrary commands before creating a tab", async () => {
     const request = vi.fn();
     const service = new LiveHerdrService({ request } as unknown as HerdrClient);
