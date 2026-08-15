@@ -73,5 +73,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "Hedr $VERSION" \
+            --title "herdr-web $VERSION" \
             --generate-notes

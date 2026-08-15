@@ -239,9 +239,9 @@ export function createHerdrHttpHandler({
   token,
   viewToken,
 }: HandlerOptions) {
-  if (!token) throw new Error("HEDR_TOKEN must not be empty");
+  if (!token) throw new Error("HERDR_WEB_TOKEN must not be empty");
   if (viewToken === token) {
-    throw new Error("HEDR_VIEW_TOKEN must differ from HEDR_TOKEN");
+    throw new Error("HERDR_WEB_VIEW_TOKEN must differ from HERDR_WEB_TOKEN");
   }
   return async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? "/", "http://herdr.local");
@@ -329,7 +329,7 @@ export function createHerdrHttpHandler({
             error: {
               code: "terminal_streaming_unavailable",
               message:
-                "This Hedr bridge is not configured for Herdr terminal sessions",
+                "This herdr-web bridge is not configured for Herdr terminal sessions",
             },
           });
           return;

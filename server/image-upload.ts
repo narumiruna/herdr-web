@@ -90,7 +90,11 @@ export async function writePaneImage(
     }
   }
 
-  const requestedUploadDirectory = join(projectDirectory, ".hedr", "uploads");
+  const requestedUploadDirectory = join(
+    projectDirectory,
+    ".herdr-web",
+    "uploads",
+  );
   await mkdir(requestedUploadDirectory, { mode: 0o700, recursive: true });
   const uploadDirectory = await realpath(requestedUploadDirectory);
   if (!contains(projectDirectory, uploadDirectory)) {

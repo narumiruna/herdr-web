@@ -12,7 +12,7 @@ test("defaults to dark and preserves an explicit light appearance", async ({
   await page.goto("/");
 
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await expect(page.locator(".hedr-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
   await expect(
     page.getByRole("button", { name: "Use light appearance" }),
   ).toBeVisible();
@@ -23,13 +23,15 @@ test("defaults to dark and preserves an explicit light appearance", async ({
 
   await page.getByRole("button", { name: "Use light appearance" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);
-  await expect(page.locator(".hedr-theme")).toHaveClass(/light/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/light/);
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("hedr-appearance")))
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("herdr-web-appearance")),
+    )
     .toBe("light");
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/light/);
-  await expect(page.locator(".hedr-theme")).toHaveClass(/light/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/light/);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
     "#f6f3ed",
@@ -40,14 +42,14 @@ test("desktop workbench gives the terminal priority", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem("hedr-appearance")) {
-      localStorage.setItem("hedr-appearance", "light");
+    if (!localStorage.getItem("herdr-web-appearance")) {
+      localStorage.setItem("herdr-web-appearance", "light");
     }
   });
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.goto("/");
 
-  await expect(page).toHaveTitle("Hedr — agent workbench");
+  await expect(page).toHaveTitle("herdr-web — agent workbench");
   await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
@@ -210,12 +212,12 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.locator(".topbar-context > strong")).toBeHidden();
 
   await page.screenshot({
-    path: testInfo.outputPath("hedr-terminal-first-desktop.png"),
+    path: testInfo.outputPath("herdr-web-terminal-first-desktop.png"),
     fullPage: true,
   });
 
   await page.getByRole("button", { name: "Use dark appearance" }).click();
-  await expect(page.locator(".hedr-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
   const darkBrightness = await page.evaluate(() => {
     const brightness = (selector: string) => {
       const color = getComputedStyle(
@@ -240,11 +242,11 @@ test("desktop workbench gives the terminal priority", async ({
   expect(darkBrightness.terminal).toBeLessThan(80);
   expect(darkBrightness.topbar).toBeLessThan(80);
   await page.screenshot({
-    path: testInfo.outputPath("hedr-terminal-first-dark.png"),
+    path: testInfo.outputPath("herdr-web-terminal-first-dark.png"),
     fullPage: true,
   });
   await page.reload();
-  await expect(page.locator(".hedr-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
   await page.getByRole("button", { name: "Open details" }).click();
   await expect(
     page.getByRole("dialog", { name: "Session details" }),
@@ -273,7 +275,9 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
     "integration-tests",
   );
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("hedr-agent-sort")))
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("herdr-web-agent-sort")),
+    )
     .toBe("priority");
   await page.reload();
   await expect(agents.getByRole("radio", { name: "Priority" })).toHaveAttribute(
@@ -361,7 +365,9 @@ test("mouse resizing persists navigation width and updates pane proportions", as
   await page.mouse.up();
   await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("hedr-sidebar-width")))
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("herdr-web-sidebar-width")),
+    )
     .toBe("280");
   await page.reload();
   await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
@@ -552,7 +558,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   }
 
   await page.screenshot({
-    path: testInfo.outputPath("hedr-terminal-first-mobile.png"),
+    path: testInfo.outputPath("herdr-web-terminal-first-mobile.png"),
     fullPage: true,
   });
 

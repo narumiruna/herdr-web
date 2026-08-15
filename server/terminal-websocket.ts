@@ -120,7 +120,7 @@ export function attachTerminalWebSocket({
     socket: import("node:stream").Duplex,
     head: Buffer,
   ) => {
-    const url = new URL(request.url ?? "/", "http://hedr.local");
+    const url = new URL(request.url ?? "/", "http://herdr-web.local");
     if (url.pathname !== "/api/herdr/terminal") {
       rejectUpgrade(socket, 404, "Not Found");
       return;

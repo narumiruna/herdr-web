@@ -12,7 +12,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "HEDR_TOKEN=e2e-token VITE_DEMO_MODE=true VITE_PORT=4173 BRIDGE_PORT=8788 npm run dev",
+      "HERDR_WEB_TOKEN=e2e-token VITE_DEMO_MODE=true VITE_PORT=4173 BRIDGE_PORT=8788 npm run dev",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: true,
   },

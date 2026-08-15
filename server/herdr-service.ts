@@ -127,7 +127,7 @@ export class LiveHerdrService {
       ? ""
       : protocol < 19
         ? `Herdr protocol ${protocol || "unknown"} does not provide terminal sessions; Herdr 0.8 or newer is required.`
-        : "This Hedr bridge is not configured for Herdr terminal sessions.";
+        : "This herdr-web bridge is not configured for Herdr terminal sessions.";
     const allPaneIds = (result.snapshot.panes ?? [])
       .map(({ pane_id: paneId }) => paneId)
       .filter((paneId): paneId is string => Boolean(paneId));

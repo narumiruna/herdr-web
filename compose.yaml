@@ -1,5 +1,5 @@
 services:
-  hedr:
+  herdr-web:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,12 +9,12 @@ services:
       HERDR_TERMINAL_PROXY_HOST: host.docker.internal
       HERDR_TERMINAL_PROXY_PORT: "${HERDR_TERMINAL_PROXY_PORT:-0}"
       HERDR_TERMINAL_PROXY_TOKEN: "${HERDR_TERMINAL_PROXY_TOKEN:-}"
-      HEDR_TOKEN: "${HEDR_TOKEN:-}"
-      HEDR_VIEW_TOKEN: "${HEDR_VIEW_TOKEN:-}"
+      HERDR_WEB_TOKEN: "${HERDR_WEB_TOKEN:-}"
+      HERDR_WEB_VIEW_TOKEN: "${HERDR_WEB_VIEW_TOKEN:-}"
       HERDR_PROJECTS_ROOT: "${HERDR_PROJECTS_ROOT:-/tmp}"
     ports:
-      - "${HEDR_PORT:-0}:8080"
+      - "${HERDR_WEB_PORT:-0}:8080"
     restart: unless-stopped
-    user: "${HEDR_HOST_UID:-1000}:${HEDR_HOST_GID:-1000}"
+    user: "${HERDR_WEB_HOST_UID:-1000}:${HERDR_WEB_HOST_GID:-1000}"
     volumes:
       - "${HERDR_PROJECTS_ROOT:-/tmp}:${HERDR_PROJECTS_ROOT:-/tmp}"

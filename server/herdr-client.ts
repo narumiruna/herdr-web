@@ -46,7 +46,7 @@ export class HerdrClient {
   }
 
   request<T = unknown>(method: string, params: unknown): Promise<T> {
-    const id = `hedr:${randomUUID()}`;
+    const id = `herdr-web:${randomUUID()}`;
     return new Promise<T>((resolve, reject) => {
       const socket =
         typeof this.endpoint === "string"
@@ -119,7 +119,7 @@ export class HerdrClient {
     params: unknown,
     { onEvent, onReady, signal }: HerdrSubscriptionOptions<T>,
   ): Promise<void> {
-    const id = `hedr:${randomUUID()}`;
+    const id = `herdr-web:${randomUUID()}`;
     return new Promise<void>((resolve, reject) => {
       const socket =
         typeof this.endpoint === "string"

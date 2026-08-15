@@ -2,9 +2,9 @@
 
 ## Vision
 
-Make Hedr the Herdr-native browser workbench where users can operate a real terminal from any supported device while retaining structured workspace, Agent, attention, and configuration workflows.
+Make herdr-web the Herdr-native browser workbench where users can operate a real terminal from any supported device while retaining structured workspace, Agent, attention, and configuration workflows.
 
-Hedr uses the Herdr API as its control plane and a terminal emulator as its terminal data plane rather than exposing an unrelated host shell or reproducing the Herdr TUI inside another terminal.
+herdr-web uses the Herdr API as its control plane and a terminal emulator as its terminal data plane rather than exposing an unrelated host shell or reproducing the Herdr TUI inside another terminal.
 
 ## Objectives
 
@@ -15,7 +15,7 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 
 ## Current State
 
-- Hedr targets Herdr 0.8.0 protocol 19 through an authenticated Node bridge.
+- herdr-web targets Herdr 0.8.0 protocol 19 through an authenticated Node bridge.
 - Herdr 0.8 provides `terminal session control` and `observe` streams with canonical full frames, ordered deltas, input, resize, scroll, release, takeover, and controller-conflict behavior.
 - The browser now renders supported panes through xterm.js and bridges each visible terminal to one Herdr terminal-session process over a same-origin WebSocket.
 - Unsupported or unconfigured terminal sessions retain the bounded `pane.read` DOM renderer and Agent composer as an explicit compatibility fallback.
@@ -39,8 +39,8 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 ## Target Architecture
 
 - The browser runs xterm.js or a technically equivalent emulator for rendering, selection, input, IME, scrollback, and accessibility support.
-- A same-origin browser WebSocket authenticated by a short-lived one-use ticket connects each visible terminal to the Hedr bridge.
-- The Hedr bridge validates pane scope, access role, origin, frame sizes, ordering, connection ownership, and backpressure before translating the stream to Herdr's terminal-session CLI protocol.
+- A same-origin browser WebSocket authenticated by a short-lived one-use ticket connects each visible terminal to the herdr-web bridge.
+- The herdr-web bridge validates pane scope, access role, origin, frame sizes, ordering, connection ownership, and backpressure before translating the stream to Herdr's terminal-session CLI protocol.
 - Herdr owns the canonical pane lifecycle, terminal state, ordered output, input delivery, dimensions, and viewer or controller policy.
 - Snapshot and event APIs continue to provide the structured control plane for navigation, attention, Agent state, and recovery.
 - HTTP remains suitable for bounded actions such as image upload, ticket issue, confirmations, and future configuration changes.
@@ -49,7 +49,7 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 
 ### Phase 1: Establish the terminal contract
 
-- [x] Herdr 0.8 terminal sessions and Hedr's validated message layer define attach, canonical synchronization, ordered output, input, dimensions, release, pane exit, sequence-gap detection, limits, and errors. Evidence: `server/terminal-session.ts` and `tests/terminal-session.test.ts`.
+- [x] Herdr 0.8 terminal sessions and herdr-web's validated message layer define attach, canonical synchronization, ordered output, input, dimensions, release, pane exit, sequence-gap detection, limits, and errors. Evidence: `server/terminal-session.ts` and `tests/terminal-session.test.ts`.
 - [x] Herdr control, observe, and takeover sessions define concurrent-client ownership and explicit conflict handling without silent control theft. Evidence: `src/components/InteractiveTerminal.tsx` and `tests/terminal-websocket.test.ts`.
 - [x] Herdr's first full ANSI frame restores the canonical running screen before ordered delta frames are applied. Evidence: live Herdr 0.8 observation and `terminal.frame` fixtures.
 - [x] The browser uses a same-origin ticketed WebSocket, while the bridge uses bounded NDJSON over a local Herdr process or authenticated host proxy with explicit backpressure and cancellation. Evidence: `server/terminal-websocket.ts`, `server/terminal-session.ts`, and `scripts/terminal-session-proxy.mjs`.
@@ -66,7 +66,7 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 - [x] Image paste, drop, and selection stage a preview before upload, cancel without side effects, and insert a shell-escaped host path without submitting or executing it automatically. Evidence: `tests/interactive-terminal.test.tsx`.
 - [x] Loading, live, read-only, reconnecting, exited, control-conflict, and per-pane error states remain explicit without input replay or scrollback replacement.
 
-**Outcome:** A user can operate a live Herdr pane from Hedr as a real terminal, with the terminal occupying the main work surface and structured prompting remaining optional.
+**Outcome:** A user can operate a live Herdr pane from herdr-web as a real terminal, with the terminal occupying the main work surface and structured prompting remaining optional.
 
 ### Phase 3: Make streaming reliable across devices
 
@@ -84,16 +84,16 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 - [x] Structural Herdr events and pane-scoped Agent-status subscriptions update the control plane without remounting terminals or depending on continuous 1.5-second polling. Evidence: `LiveHerdrService.subscribeEvents` and live `tab_created` verification.
 - [x] Structured prompt, image, split, close, Agent launch, and control-handoff actions expose pending, rejected, unknown, cancellation, and recovery states appropriate to each mutation.
 - [ ] Herdr exposes typed configuration reads, validation, preview, revision-checked atomic patches, and actionable errors while preserving unknown fields and the previous valid configuration on failure.
-- [ ] Hedr presents only web-relevant Herdr settings first, with meaningful defaults and concrete change previews rather than directly reading or rewriting `config.toml`.
+- [ ] herdr-web presents only web-relevant Herdr settings first, with meaningful defaults and concrete change previews rather than directly reading or rewriting `config.toml`.
 - [x] Independent viewer and controller tokens constrain terminal input, image upload, destructive pane actions, Agent launch, and future settings mutations. Evidence: `tests/herdr-http.test.ts` and read-only terminal-session tests.
 
-**Outcome:** Hedr adds value beyond a web terminal by making Herdr's structured runtime and safe configuration workflows directly usable in the browser.
+**Outcome:** herdr-web adds value beyond a web terminal by making Herdr's structured runtime and safe configuration workflows directly usable in the browser.
 
 ### Phase 5: Establish release readiness
 
 - [ ] The full terminal and control-plane compatibility matrix passes in supported desktop and mobile browsers against the minimum interactive-capable Herdr release.
 - [ ] Security verification covers authentication expiry, origin policy, transport encryption guidance, pane authorization, input and upload limits, control takeover, denial-of-service boundaries, and audit-relevant actions.
-- [x] Existing `hedr [directory]`, `just run`, `just up`, `just down`, Docker, remote image, split, close, and Agent-launch workflows have an interactive-terminal implementation and documented compatibility disposition.
+- [x] Existing `herdr-web [directory]`, `just run`, `just up`, `just down`, Docker, remote image, split, close, and Agent-launch workflows have an interactive-terminal implementation and documented compatibility disposition.
 - [x] Fallback, reconnect, controller conflict, terminal shortcut, image insertion, viewer access, and recovery guidance is documented in `README.md`.
 - [ ] The old DOM terminal renderer and persistent composer are removed only after interactive mode and snapshot-only fallback meet their acceptance evidence.
 
@@ -124,7 +124,7 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 ## Test Strategy
 
 - Herdr protocol contract tests cover framing, terminal synchronization, revisions, backpressure, resize ownership, controller leases, cancellation, exit, and reconnect behavior.
-- Hedr bridge tests use a deterministic fake Herdr stream to verify authentication, authorization, limits, lifecycle cleanup, error mapping, and browser-stream framing.
+- herdr-web bridge tests use a deterministic fake Herdr stream to verify authentication, authorization, limits, lifecycle cleanup, error mapping, and browser-stream framing.
 - Emulator component tests cover attach and detach, input routing, resize, clipboard text, staged images, optional structured prompts, disabled states, and unknown outcomes.
 - Playwright covers real keyboard input, IME composition, copy and paste shortcuts, mouse selection, scrollback, alternate-screen programs, reconnect, control conflict, responsive layouts, and accessibility behavior.
 - Live verification uses isolated Herdr workspaces and representative shells and Agent TUIs, sends only disposable commands, records protocol and browser versions, and removes temporary panes afterward.
@@ -132,7 +132,7 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 
 ## Risks and Dependencies
 
-- **Upstream terminal evolution:** Hedr currently adapts Herdr 0.8's terminal-session CLI stream rather than a socket API method; monitor protocol changes and keep capability fallback explicit.
+- **Upstream terminal evolution:** herdr-web currently adapts Herdr 0.8's terminal-session CLI stream rather than a socket API method; monitor protocol changes and keep capability fallback explicit.
 - **Mid-session reconstruction:** Recent ANSI text may not restore alternate-screen or cursor state; require a canonical synchronization format or replay contract rather than treating `pane.read` as sufficient.
 - **Multi-client dimensions:** A browser and native Herdr client can disagree about terminal size; resolve this through explicit controller and resize authority instead of last-writer-wins behavior.
 - **Streaming pressure:** Agent output can exceed browser or bridge capacity; define bounded buffers, backpressure, resynchronization, and observable truncation before launch.
@@ -144,9 +144,9 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 ## Non-Goals
 
 - Expose a generic browser shell, SSH server, or host-level `node-pty` endpoint outside Herdr.
-- Run the Herdr TUI inside the web terminal as Hedr's primary interface.
+- Run the Herdr TUI inside the web terminal as herdr-web's primary interface.
 - Claim full terminal support from ANSI snapshot polling plus `pane.send_input`.
-- Persist terminal recordings, command history, or Agent prompt drafts on the Hedr server in the initial terminal release.
+- Persist terminal recordings, command history, or Agent prompt drafts on the herdr-web server in the initial terminal release.
 - Support simultaneous collaborative typing in the first controller model.
 - Expose every Herdr configuration field before the typed settings contract and preservation rules exist.
 
@@ -160,10 +160,10 @@ Hedr uses the Herdr API as its control plane and a terminal emulator as its term
 
 ## Decisions and Changes
 
-- Hedr remains a Herdr-native workbench rather than becoming a branded generic web terminal.
+- herdr-web remains a Herdr-native workbench rather than becoming a branded generic web terminal.
 - Herdr 0.8's terminal-session stream satisfies the initial synchronization and control contract, so xterm.js is now the default for configured protocol-19 panes.
 - The Herdr API is the control plane, while the terminal attachment stream is the data plane.
 - The fixed Agent composer is not part of the long-term primary terminal surface.
 - `agent.prompt` remains an optional structured action rather than being removed from the product.
 - Older or unconfigured Herdr installations receive an honest snapshot-only compatibility experience instead of a misleading partial terminal.
-- Herdr owns configuration persistence, validation, revisions, and unknown-field preservation; Hedr never edits `config.toml` directly.
+- Herdr owns configuration persistence, validation, revisions, and unknown-field preservation; herdr-web never edits `config.toml` directly.

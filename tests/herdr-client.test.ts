@@ -15,7 +15,7 @@ async function fakeHerdr(
   respond: (request: Record<string, unknown>) => Record<string, unknown>,
   afterRespond?: (socket: Socket, request: Record<string, unknown>) => void,
 ): Promise<{ socketPath: string; requests: Array<Record<string, unknown>> }> {
-  const directory = await mkdtemp(join(tmpdir(), "hedr-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "herdr-web-test-"));
   const socketPath = join(directory, "herdr.sock");
   const requests: Array<Record<string, unknown>> = [];
   const sockets = new Set<Socket>();

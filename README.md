@@ -1,6 +1,6 @@
-# Hedr
+# herdr-web
 
-Hedr is a responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
+herdr-web is a responsive browser workbench for [herdr](https://github.com/herdrdev/herdr), the persistent runtime for coding-agent terminals.
 
 It keeps herdr's core job visible: find the Agent that needs input, control its live terminal, and send a real prompt without hunting through sessions.
 
@@ -82,7 +82,7 @@ Install dependencies once:
 just install
 ```
 
-Start Vite and the authenticated Hedr bridge:
+Start Vite and the authenticated herdr-web bridge:
 
 ```sh
 just run
@@ -95,16 +95,20 @@ Open the printed `network` URL from another device on the same trusted network.
 For a stable controller token, optional independent viewer token, or a named-session socket:
 
 ```sh
-HEDR_TOKEN=my-long-random-controller-token \
-HEDR_VIEW_TOKEN=my-different-read-only-token \
+HERDR_WEB_TOKEN=my-long-random-controller-token \
+HERDR_WEB_VIEW_TOKEN=my-different-read-only-token \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 just run
 ```
 
+When updating from an earlier checkout, rename product-owned token, view-token, port, and host-identity variables to the documented `HERDR_WEB_*` form; upstream Herdr variables remain `HERDR_*`.
+
+Saved appearance, Agent ordering, sidebar width, and session token values migrate to `herdr-web-*` browser keys on first use.
+
 Without `just`, set a token explicitly before running the development processes:
 
 ```sh
-HEDR_TOKEN=my-long-random-token npm run dev
+HERDR_WEB_TOKEN=my-long-random-token npm run dev
 ```
 
 Vite prints the network URL, and the page asks for the token when it is not included in the URL.
@@ -125,7 +129,7 @@ Returning to a Space restores its last selected tab, while choosing a Needs inpu
 
 Use the **+** beside the tab strip to start another Agent in the current Space without leaving the terminal context.
 
-Use **Split right** for side-by-side panes or **Split down** for stacked panes; Hedr forwards the same `right` or `down` direction used by Herdr's `pane.split` API.
+Use **Split right** for side-by-side panes or **Split down** for stacked panes; herdr-web forwards the same `right` or `down` direction used by Herdr's `pane.split` API.
 
 Split panes stay inside their parent tab, follow that Herdr direction on wide screens, and use a readable pane selector on narrow screens.
 
@@ -147,7 +151,7 @@ A controller conflict offers explicit read-only observation or takeover instead 
 
 Standalone Terminals support the same interactive session when Herdr terminal streaming is available.
 
-If terminal streaming is unavailable, Hedr keeps the bounded snapshot view and Agent composer as an explicit compatibility fallback.
+If terminal streaming is unavailable, herdr-web keeps the bounded snapshot view and Agent composer as an explicit compatibility fallback.
 
 Use **New agent** to review and launch one of the four approved runtime presets.
 
@@ -191,7 +195,7 @@ Pasting during connection still opens the review dialog, but uploading waits unt
 
 The staged-image dialog performs no upload until **Upload and insert path** or its multi-image equivalent is confirmed.
 
-The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under the active pane's `.hedr/uploads/` directory.
+The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under the active pane's `.herdr-web/uploads/` directory.
 
 herdr-web uploads a batch sequentially and inserts all shell-escaped absolute paths in one terminal input only after every image succeeds, without pressing Enter.
 
@@ -206,10 +210,12 @@ The compatibility composer retains its existing single-image paste, drag/drop, a
 Remove old attachments manually when they are no longer needed:
 
 ```sh
-find /path/to/project/.hedr/uploads -type f -delete
+find /path/to/project/.herdr-web/uploads -type f -delete
 ```
 
-Add `.hedr/` to each target repository's ignore rules if untracked local files should stay hidden from `git status`.
+Add `.herdr-web/` to each target repository's ignore rules if untracked local files should stay hidden from `git status`.
+
+Uploads created by earlier versions are left untouched and can be removed manually after any Agent references to them are no longer needed.
 
 ## Run with Docker
 
@@ -221,7 +227,7 @@ just up
 
 `just up` performs these steps:
 
-1. Creates an access token unless `HEDR_TOKEN` is already set.
+1. Creates an access token unless `HERDR_WEB_TOKEN` is already set.
 2. Starts a loopback-only TCP forwarder for the host Herdr Unix socket.
 3. Starts a separately authenticated loopback proxy for host-side Herdr terminal-session processes.
 4. Builds and starts the Node.js production container.
@@ -230,7 +236,7 @@ just up
 Set a fixed web port, custom herdr socket, or narrower project mount when needed:
 
 ```sh
-HEDR_PORT=4173 \
+HERDR_WEB_PORT=4173 \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 HERDR_PROJECTS_ROOT="$HOME/workspace" \
 just up
@@ -254,9 +260,9 @@ Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/
 
 ## Security
 
-The Hedr bridge can submit prompts and control terminal panes, so it fails closed when `HEDR_TOKEN` is empty.
+The herdr-web bridge can submit prompts and control terminal panes, so it fails closed when `HERDR_WEB_TOKEN` is empty.
 
-Set a different `HEDR_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, or takeover permissions.
+Set a different `HERDR_WEB_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, or takeover permissions.
 
 The browser exchanges its bearer token for a random terminal ticket that expires after 30 seconds and can be consumed only once.
 
@@ -313,10 +319,10 @@ Release verifies that the stable semver tag belongs to `main`, matches both pack
 
 Publish performs the same metadata checks, runs the repository and Chromium test gates, and sends `herdr-web` to the public npm registry through npm Trusted Publishing.
 
-It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, then pushes immutable version, minor, major, commit, and `latest` tags to `ghcr.io/narumiruna/hedr`.
+It also builds `linux/amd64` and `linux/arm64` images with SBOM and provenance, then pushes immutable version, minor, major, commit, and `latest` tags to `ghcr.io/narumiruna/herdr-web`.
 
 ```sh
-docker pull ghcr.io/narumiruna/hedr:latest
+docker pull ghcr.io/narumiruna/herdr-web:latest
 ```
 
 The **Publish** and **Release** workflows can be rerun manually only from a matching `vX.Y.Z` tag, and Publish skips an npm version that already exists.
@@ -343,7 +349,7 @@ If a bump reports that its version commit succeeded but tag creation failed, cre
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 
-Hedr does not edit Herdr configuration files directly.
+herdr-web does not edit Herdr configuration files directly.
 
 Use Herdr's own configuration commands until it exposes typed configuration reads and atomic patches through its public API.
 

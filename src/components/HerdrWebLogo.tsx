@@ -1,15 +1,15 @@
-interface HedrLogoProps {
+interface HerdrWebLogoProps {
   compact?: boolean;
 }
 
-export function HedrLogo({ compact = false }: HedrLogoProps) {
+export function HerdrWebLogo({ compact = false }: HerdrWebLogoProps) {
   return (
     <div className="brand-lockup">
       <svg
         className="brand-mark"
         viewBox="0 0 64 64"
         role="img"
-        aria-label="Hedr terminal mark"
+        aria-label="herdr-web terminal mark"
       >
         <rect
           x="5"

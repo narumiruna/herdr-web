@@ -16,7 +16,7 @@ function renderApp() {
   return user;
 }
 
-describe("Hedr terminal-first workbench", () => {
+describe("herdr-web terminal-first workbench", () => {
   beforeEach(() => {
     document.documentElement.classList.remove("dark", "light");
     const values = new Map<string, string>();
@@ -31,13 +31,17 @@ describe("Hedr terminal-first workbench", () => {
 
   test("defaults to dark and restores an explicit light appearance", () => {
     const dark = render(<App live={false} />);
-    expect(dark.container.querySelector(".hedr-theme")).toHaveClass("dark");
+    expect(dark.container.querySelector(".herdr-web-theme")).toHaveClass(
+      "dark",
+    );
     expect(document.documentElement).toHaveClass("dark");
     dark.unmount();
 
-    window.localStorage.setItem("hedr-appearance", "light");
+    window.localStorage.setItem("herdr-web-appearance", "light");
     const light = render(<App live={false} />);
-    expect(light.container.querySelector(".hedr-theme")).toHaveClass("light");
+    expect(light.container.querySelector(".herdr-web-theme")).toHaveClass(
+      "light",
+    );
     expect(document.documentElement).toHaveClass("light");
   });
 
@@ -48,10 +52,10 @@ describe("Hedr terminal-first workbench", () => {
       screen.getByText("herdr-web", { selector: ".brand-type strong" }),
     ).toBeVisible();
     expect(
-      screen.getAllByRole("img", { name: "Hedr terminal mark" })[0],
+      screen.getAllByRole("img", { name: "herdr-web terminal mark" })[0],
     ).toBeVisible();
     expect(
-      screen.getByRole("navigation", { name: "Hedr navigation" }),
+      screen.getByRole("navigation", { name: "herdr-web navigation" }),
     ).toBeVisible();
   });
 
@@ -166,7 +170,9 @@ describe("Hedr terminal-first workbench", () => {
       expect.stringContaining("plugin-index"),
       expect.stringContaining("agent-guide"),
     ]);
-    expect(window.localStorage.getItem("hedr-agent-sort")).toBe("priority");
+    expect(window.localStorage.getItem("herdr-web-agent-sort")).toBe(
+      "priority",
+    );
   });
 
   test("previews, cancels, and creates a new Space safely", async () => {

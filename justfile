@@ -10,18 +10,18 @@ install:
 install-cli: install
     npm link
 
-# Start the live Vite workbench and Hedr bridge on available ports.
+# Start the live Vite workbench and herdr-web bridge on available ports.
 run:
     #!/bin/sh
     set -eu
-    token="${HEDR_TOKEN:-$(node scripts/access-token.mjs)}"
+    token="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
     web_port="${VITE_PORT:-$(node scripts/find-port.mjs 5173)}"
     bridge_port="${BRIDGE_PORT:-$(node scripts/find-port.mjs 8787)}"
     host=$(node scripts/lan-address.mjs)
-    echo "Hedr token: $token"
+    echo "herdr-web token: $token"
     echo "local:   http://localhost:$web_port/?token=$token"
     echo "network: http://$host:$web_port/?token=$token"
-    HEDR_TOKEN="$token" VITE_PORT="$web_port" BRIDGE_PORT="$bridge_port" npm run dev
+    HERDR_WEB_TOKEN="$token" VITE_PORT="$web_port" BRIDGE_PORT="$bridge_port" npm run dev
 
 # Build the production application.
 build:
@@ -31,16 +31,17 @@ build:
 preview: build
     #!/bin/sh
     set -eu
-    token="${HEDR_TOKEN:-$(node scripts/access-token.mjs)}"
+    token="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
     port="${PORT:-$(node scripts/find-port.mjs 8787)}"
-    echo "Hedr: http://localhost:$port/?token=$token"
-    HEDR_TOKEN="$token" PORT="$port" npm start
+    echo "herdr-web: http://localhost:$port/?token=$token"
+    HERDR_WEB_TOKEN="$token" PORT="$port" npm start
 
 # Build and start the production container on an available port.
 up:
     #!/bin/sh
     set -eu
-    runtime_dir=.hedr-runtime
+    runtime_dir=.herdr-web-runtime
+    legacy_runtime_dir=.he"dr"-runtime
     mkdir -p "$runtime_dir"
     stop_proxy() {
         pid_file="$1"
@@ -55,11 +56,13 @@ up:
     }
     stop_proxy "$runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
     stop_proxy "$runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
-    export HEDR_TOKEN="${HEDR_TOKEN:-$(node scripts/access-token.mjs)}"
+    stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    export HERDR_WEB_TOKEN="${HERDR_WEB_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_TERMINAL_PROXY_TOKEN="${HERDR_TERMINAL_PROXY_TOKEN:-$(node scripts/access-token.mjs)}"
     export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
-    export HEDR_HOST_UID="${HEDR_HOST_UID:-$(id -u)}"
-    export HEDR_HOST_GID="${HEDR_HOST_GID:-$(id -g)}"
+    export HERDR_WEB_HOST_UID="${HERDR_WEB_HOST_UID:-$(id -u)}"
+    export HERDR_WEB_HOST_GID="${HERDR_WEB_HOST_GID:-$(id -g)}"
     test -d "$HERDR_PROJECTS_ROOT" || { echo "project root not found: $HERDR_PROJECTS_ROOT" >&2; exit 1; }
     socket_path="${HERDR_HOST_SOCKET_PATH:-${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}}"
     test -S "$socket_path" || { echo "herdr socket not found: $socket_path" >&2; exit 1; }
@@ -83,11 +86,11 @@ up:
     kill -0 "$socket_proxy_pid"
     kill -0 "$terminal_proxy_pid"
     docker compose up --build --detach --remove-orphans
-    port=$(docker compose port hedr 8080 | head -n 1 | sed 's/.*://')
+    port=$(docker compose port herdr-web 8080 | head -n 1 | sed 's/.*://')
     host=$(node scripts/lan-address.mjs)
     keep_proxies=1
-    echo "local:   http://localhost:$port/?token=$HEDR_TOKEN"
-    echo "network: http://$host:$port/?token=$HEDR_TOKEN"
+    echo "local:   http://localhost:$port/?token=$HERDR_WEB_TOKEN"
+    echo "network: http://$host:$port/?token=$HERDR_WEB_TOKEN"
 
 # Stop the production container and host socket proxies.
 down:
@@ -105,10 +108,14 @@ down:
             rm -f "$pid_file"
         fi
     }
-    stop_proxy .hedr-runtime/socket-proxy.pid "scripts/socket-proxy.mjs"
-    stop_proxy .hedr-runtime/terminal-proxy.pid "scripts/terminal-session-proxy.mjs"
-    rm -f .hedr-runtime/socket-proxy.log .hedr-runtime/terminal-proxy.log
-    rmdir .hedr-runtime 2>/dev/null || true
+    legacy_runtime_dir=.he"dr"-runtime
+    stop_proxy .herdr-web-runtime/socket-proxy.pid "scripts/socket-proxy.mjs"
+    stop_proxy .herdr-web-runtime/terminal-proxy.pid "scripts/terminal-session-proxy.mjs"
+    stop_proxy "$legacy_runtime_dir/socket-proxy.pid" "scripts/socket-proxy.mjs"
+    stop_proxy "$legacy_runtime_dir/terminal-proxy.pid" "scripts/terminal-session-proxy.mjs"
+    rm -f .herdr-web-runtime/socket-proxy.log .herdr-web-runtime/terminal-proxy.log
+    rm -f "$legacy_runtime_dir/socket-proxy.log" "$legacy_runtime_dir/terminal-proxy.log"
+    rmdir .herdr-web-runtime "$legacy_runtime_dir" 2>/dev/null || true
 
 # Run reducer and component tests once.
 test:

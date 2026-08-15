@@ -16,8 +16,17 @@ function requireValue(condition, message) {
 
 requireValue(manifest.name === "herdr-web", "Unexpected package name");
 requireValue(
-  manifest.bin?.["herdr-web"] === "./scripts/herdr-web.mjs",
+  manifest.bin?.["herdr-web"] === "scripts/herdr-web.mjs",
   "Unexpected CLI executable mapping",
+);
+requireValue(
+  manifest.repository?.url ===
+    "git+https://github.com/narumiruna/herdr-web.git",
+  "Repository URL must match the GitHub provenance repository",
+);
+requireValue(
+  manifest.homepage === "https://github.com/narumiruna/herdr-web#readme",
+  "Unexpected package homepage",
 );
 requireValue(
   manifest.private !== true,
@@ -57,7 +66,7 @@ for (const path of [
 }
 for (const path of [
   ".github/workflows/ci.yml",
-  "e2e/hedr.e2e.ts",
+  "e2e/herdr-web.e2e.ts",
   "scripts/check-package.mjs",
   "tests/app.test.tsx",
 ]) {

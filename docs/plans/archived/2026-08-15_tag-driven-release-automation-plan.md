@@ -9,9 +9,10 @@ Make the manual version-bump workflow commit and tag the new version directly, t
 - `power-monitor` uses a PAT for its version commit and tag so tag-triggered workflows run.
 - `pi-extensions` publishes to npm with GitHub OIDC and npm Trusted Publishing instead of a stored npm token.
 - `hath-rust` creates releases from pushed tags after reusable build work succeeds.
-- Herdr Web currently commits the version directly but does not create a tag.
-- Herdr Web currently requires a manually signed annotated tag, so an automatically created lightweight tag would be rejected.
+- herdr-web currently commits the version directly but does not create a tag.
+- herdr-web currently requires a manually signed annotated tag, so an automatically created lightweight tag would be rejected.
 - The repository has `PAT_TOKEN`; npm authentication is configured at npmjs through Trusted Publishing.
+- The first `v0.1.2` run authenticated through OIDC and produced signed provenance, but npm rejected the stale `narumiruna/herdr-web` repository URL after GitHub moved the repository to `narumiruna/herdr-web`.
 
 ## Architecture
 
@@ -23,7 +24,8 @@ Make the manual version-bump workflow commit and tag the new version directly, t
 ## Risks
 
 - `PAT_TOKEN` needs GitHub repository Contents read/write permission.
-- npm Trusted Publishing must authorize this repository, `publish.yml`, and the `release` environment before the next release.
+- npm Trusted Publishing must authorize this repository, `publish.yml`, and the `release` environment before a release.
+- npm provenance rejects publication when `package.json` repository metadata differs from the GitHub repository, so package checks enforce the canonical URL.
 - Commit and tag creation are separate GitHub API operations; if tag creation fails after the commit, the workflow must report the exact recovery tag and commit and must not hide the partial result.
 - A concurrent default-branch update is rejected by `expectedHeadOid` before a version commit is created.
 
@@ -39,6 +41,7 @@ Make the manual version-bump workflow commit and tag the new version directly, t
 - [x] Update `.github/workflows/publish.yml` to trigger directly from `vX.Y.Z`, validate and test the tagged source, use npm Trusted Publishing, and retain `GITHUB_TOKEN` for GHCR.
 - [x] Update `.github/workflows/release.yml` to trigger independently from `vX.Y.Z`, validate the generated tag, and create generated release notes without requiring a manually signed annotated tag.
 - [x] Update `README.md` with the automatic tag flow, token responsibilities, and tag-recovery procedure.
+- [x] Align `package.json`, package validation, and GHCR documentation with `narumiruna/herdr-web`; the package check and packed manifest preserve the CLI while matching npm provenance.
 - [x] Parse all workflow YAML, inspect embedded scripts and permissions, run repository checks, and verify the final diff; actionlint, bump simulations, positive and negative tag validators, 133 repository tests, both builds, and 17 Chromium tests pass.
 
 ## Completion Checklist

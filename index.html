@@ -9,8 +9,14 @@
     <meta name="theme-color" content="#11110f" />
     <script>
       try {
-        const appearance =
-          localStorage.getItem("hedr-appearance") === "light" ? "light" : "dark";
+        const key = "herdr-web-appearance";
+        const legacyKey = ["he", "dr-appearance"].join("");
+        const saved = localStorage.getItem(key) ?? localStorage.getItem(legacyKey);
+        if (localStorage.getItem(key) === null && saved !== null) {
+          localStorage.setItem(key, saved);
+          localStorage.removeItem(legacyKey);
+        }
+        const appearance = saved === "light" ? "light" : "dark";
         document.documentElement.classList.add(appearance);
         document
           .querySelector('meta[name="theme-color"]')
@@ -21,9 +27,9 @@
     </script>
     <meta
       name="description"
-      content="Hedr is a browser workbench for herdr coding-agent sessions."
+      content="herdr-web is a browser workbench for herdr coding-agent sessions."
     />
-    <title>Hedr — agent workbench</title>
+    <title>herdr-web — agent workbench</title>
   </head>
   <body>
     <div id="root"></div>

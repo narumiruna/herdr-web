@@ -1,4 +1,5 @@
 import type { LiveSnapshotPayload } from "./live-state";
+import { readProductStorage, writeProductStorage } from "./product-storage";
 import type { PaneSplitDirection, RuntimeName } from "./state";
 
 interface ApiErrorBody {
@@ -242,13 +243,11 @@ export class HerdrApiClient {
   }
 }
 
-const TOKEN_KEY = "hedr-token";
-
 export function browserAccessToken(): string {
   const url = new URL(window.location.href);
   const queryToken = url.searchParams.get("token")?.trim();
   if (queryToken) {
-    window.sessionStorage.setItem(TOKEN_KEY, queryToken);
+    writeProductStorage(window.sessionStorage, "token", queryToken);
     url.searchParams.delete("token");
     window.history.replaceState(
       {},
@@ -257,9 +256,9 @@ export function browserAccessToken(): string {
     );
     return queryToken;
   }
-  return window.sessionStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+  return readProductStorage(window.sessionStorage, "token")?.trim() ?? "";
 }
 
 export function rememberAccessToken(token: string): void {
-  window.sessionStorage.setItem(TOKEN_KEY, token.trim());
+  writeProductStorage(window.sessionStorage, "token", token.trim());
 }

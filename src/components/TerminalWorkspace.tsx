@@ -817,7 +817,7 @@ export function TerminalWorkspace({
                     {Math.max(1, Math.ceil(draft.attachment.size / 1024))} KB ·{" "}
                     {draft.uploadedPath
                       ? `stored at ${draft.uploadedPath}`
-                      : `will be stored under ${currentWorkingDirectory}/.hedr/uploads`}
+                      : `will be stored under ${currentWorkingDirectory}/.herdr-web/uploads`}
                   </small>
                 </span>
                 <button

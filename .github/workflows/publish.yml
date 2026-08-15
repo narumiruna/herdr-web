@@ -136,7 +136,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
-            org.opencontainers.image.title=Hedr
+            org.opencontainers.image.title=herdr-web
             org.opencontainers.image.description=Browser workbench for Herdr coding-agent sessions
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -150,7 +150,7 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           {
-            echo "## Published Hedr $VERSION"
+            echo "## Published herdr-web $VERSION"
             echo
             echo "npm: \`herdr-web@$VERSION\`"
             echo

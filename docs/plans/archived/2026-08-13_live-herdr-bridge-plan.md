@@ -49,7 +49,7 @@ If startup or prompt verification fails, close only the temporary test tab and l
 
 ## Completion Checklist
 
-- [x] Live state is verified by a headless browser showing the real `hedr` workspace and connected state from a protocol-19 snapshot.
+- [x] Live state is verified by a headless browser showing the real `herdr-web` workspace and connected state from a protocol-19 snapshot.
 - [x] Real prompt delivery and response visibility are verified by an isolated Pi agent receiving only `hi`, replying `Hi! How can I help?`, and exposing that output through the web state endpoint before cleanup.
 - [x] Unauthorized API requests are verified to return `401`, while valid bearer tokens returned live state both locally and from the container.
 - [x] Local and container workflows are verified with `npm run ci`, 3 passing Playwright checks, `docker compose config`, `just run`, `just up/down`, and a successful final image build.

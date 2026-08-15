@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "herdr-web": "./scripts/herdr-web.mjs"
+    "herdr-web": "scripts/herdr-web.mjs"
   },
   "files": [
     "index.html",
@@ -26,9 +26,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/narumiruna/hedr.git"
+    "url": "git+https://github.com/narumiruna/herdr-web.git"
   },
-  "homepage": "https://github.com/narumiruna/hedr#readme",
+  "homepage": "https://github.com/narumiruna/herdr-web#readme",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"

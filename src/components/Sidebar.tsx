@@ -11,7 +11,7 @@ import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
 import { useId, useRef } from "react";
 import type { HerdrState } from "../state";
-import { HedrLogo } from "./HedrLogo";
+import { HerdrWebLogo } from "./HerdrWebLogo";
 import { agentStatusLabel, StatusPill } from "./StatusPill";
 
 export type AgentSortMode = "grouped" | "priority";
@@ -103,13 +103,13 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <HedrLogo />
+        <HerdrWebLogo />
       </div>
 
       <div className="spaces-panel">
         <ScrollArea.Root className="sidebar-scroll">
           <ScrollArea.Viewport className="sidebar-viewport">
-            <nav aria-label="Hedr navigation">
+            <nav aria-label="herdr-web navigation">
               {attention.length > 0 && (
                 <section
                   className="nav-section attention-section"

@@ -12,9 +12,11 @@ import {
 import { TerminalTicketStore } from "./terminal-tickets.js";
 import { attachTerminalWebSocket } from "./terminal-websocket.js";
 
-const token = process.env.HEDR_TOKEN?.trim();
+const token = process.env.HERDR_WEB_TOKEN?.trim();
 if (!token) {
-  console.error("HEDR_TOKEN is required; use `just run` or set it explicitly.");
+  console.error(
+    "HERDR_WEB_TOKEN is required; use `just run` or set it explicitly.",
+  );
   process.exit(1);
 }
 
@@ -34,7 +36,7 @@ const endpoint =
         port: tcpPort,
       }
     : socketPath;
-const staticRoot = resolve(process.env.HEDR_STATIC_ROOT ?? "dist");
+const staticRoot = resolve(process.env.HERDR_WEB_STATIC_ROOT ?? "dist");
 const projectsRoot = process.env.HERDR_PROJECTS_ROOT?.trim() || undefined;
 const terminalProxyPort = Number.parseInt(
   process.env.HERDR_TERMINAL_PROXY_PORT ?? "",
@@ -61,7 +63,7 @@ const api = createHerdrHttpHandler({
   terminalConfigured: terminalBackend.configured,
   terminalTickets,
   token,
-  viewToken: process.env.HEDR_VIEW_TOKEN?.trim() || undefined,
+  viewToken: process.env.HERDR_WEB_VIEW_TOKEN?.trim() || undefined,
 });
 const staticFiles = createStaticHandler(staticRoot);
 
@@ -89,7 +91,7 @@ const terminalWebSocket = attachTerminalWebSocket({
 });
 
 server.listen(port, host, () => {
-  console.log(`Hedr bridge listening on http://${host}:${port}`);
+  console.log(`herdr-web bridge listening on http://${host}:${port}`);
   console.log(
     typeof endpoint === "string"
       ? `herdr socket: ${endpoint}`

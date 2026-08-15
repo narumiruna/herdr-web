@@ -21,7 +21,7 @@ import {
   SettingsDialog,
 } from "./components/AppDialogs";
 import { ConnectionScreen } from "./components/ConnectionScreen";
-import { HedrLogo } from "./components/HedrLogo";
+import { HerdrWebLogo } from "./components/HerdrWebLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
 import { SessionDetails } from "./components/SessionDetails";
@@ -37,6 +37,7 @@ import {
   EMPTY_COMPOSER_DRAFT,
   TerminalWorkspace,
 } from "./components/TerminalWorkspace";
+import { readProductStorage, writeProductStorage } from "./product-storage";
 import { type HerdrState, type RuntimeName, tabsForWorkspace } from "./state";
 import { useHerdrRuntime } from "./use-herdr-runtime";
 
@@ -66,7 +67,7 @@ export function App({
   const [appearance, setAppearance] = useState<"light" | "dark">(() => {
     const saved =
       typeof window.localStorage?.getItem === "function"
-        ? window.localStorage.getItem("hedr-appearance")
+        ? readProductStorage(window.localStorage, "appearance")
         : null;
     if (saved === "light" || saved === "dark") return saved;
     return "dark";
@@ -74,14 +75,14 @@ export function App({
   const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
     const saved =
       typeof window.localStorage?.getItem === "function"
-        ? window.localStorage.getItem("hedr-agent-sort")
+        ? readProductStorage(window.localStorage, "agent-sort")
         : null;
     return saved === "priority" ? "priority" : "grouped";
   });
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored =
       typeof window.localStorage?.getItem === "function"
-        ? window.localStorage.getItem("hedr-sidebar-width")
+        ? readProductStorage(window.localStorage, "sidebar-width")
         : null;
     const saved = stored === null ? Number.NaN : Number(stored);
     return Number.isFinite(saved)
@@ -208,19 +209,23 @@ export function App({
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
-      window.localStorage.setItem("hedr-agent-sort", agentSort);
+      writeProductStorage(window.localStorage, "agent-sort", agentSort);
     }
   }, [agentSort]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
-      window.localStorage.setItem("hedr-sidebar-width", String(sidebarWidth));
+      writeProductStorage(
+        window.localStorage,
+        "sidebar-width",
+        String(sidebarWidth),
+      );
     }
   }, [sidebarWidth]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
-      window.localStorage.setItem("hedr-appearance", appearance);
+      writeProductStorage(window.localStorage, "appearance", appearance);
     }
     document.documentElement.classList.toggle("dark", appearance === "dark");
     document.documentElement.classList.toggle("light", appearance === "light");
@@ -280,7 +285,7 @@ export function App({
         accentColor="amber"
         grayColor="sand"
         radius="medium"
-        className="hedr-theme"
+        className="herdr-web-theme"
       >
         <ConnectionScreen
           error={runtime.error}
@@ -382,7 +387,7 @@ export function App({
       grayColor="sand"
       radius="medium"
       scaling="100%"
-      className="hedr-theme"
+      className="herdr-web-theme"
     >
       <Tooltip.Provider>
         <div
@@ -424,9 +429,9 @@ export function App({
                   <HamburgerMenuIcon />
                 </IconButton>
                 <span className="mobile-brand-mark">
-                  <HedrLogo compact />
+                  <HerdrWebLogo compact />
                 </span>
-                <strong>{workspace?.name ?? "Hedr"}</strong>
+                <strong>{workspace?.name ?? "herdr-web"}</strong>
               </div>
 
               <div className="topbar-actions">
@@ -699,7 +704,7 @@ export function App({
             ) : (
               <main className="empty-workbench">
                 <div className="empty-workbench-mark">
-                  <HedrLogo compact />
+                  <HerdrWebLogo compact />
                 </div>
                 <span>{workspace ? "Empty Space" : "No Spaces"}</span>
                 <h1>
