@@ -41,6 +41,7 @@ interface PaneInfoResponse {
 interface ServiceOptions {
   projectsRoot?: string;
   terminalStreamingConfigured?: boolean;
+  uploadsRoot?: string;
 }
 
 export interface CreateSessionInput {
@@ -252,7 +253,12 @@ export class LiveHerdrService {
     if (!cwd) {
       throw new TypeError("Herdr pane did not report a working directory");
     }
-    return writePaneImage(cwd, input, this.options.projectsRoot);
+    return writePaneImage(
+      cwd,
+      input,
+      this.options.projectsRoot,
+      this.options.uploadsRoot,
+    );
   }
 
   promptAgent(target: string, text: string): Promise<unknown> {

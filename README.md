@@ -105,6 +105,22 @@ When updating from an earlier checkout, rename product-owned token, view-token, 
 
 Saved appearance, Agent ordering, sidebar width, and session token values migrate to `herdr-web-*` browser keys on first use.
 
+## Data directory
+
+herdr-web stores new file data under one product-owned directory:
+
+```text
+$HOME/.herdr-web/
+├── uploads/
+└── runtime/
+```
+
+Set the absolute `HERDR_WEB_HOME` path to override this location.
+
+Uploads from earlier versions remain in their original project directories and are never moved or deleted automatically.
+
+Herdr continues to own `$HOME/.config/herdr/`, its socket, API, and `HERDR_*` variables; herdr-web does not change them.
+
 Without `just`, set a token explicitly before running the development processes:
 
 ```sh
@@ -195,7 +211,7 @@ Pasting during connection still opens the review dialog, but uploading waits unt
 
 The staged-image dialog performs no upload until **Upload and insert path** or its multi-image equivalent is confirmed.
 
-The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under the active pane's `.herdr-web/uploads/` directory.
+The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under `$HOME/.herdr-web/uploads/` by default.
 
 herdr-web uploads a batch sequentially and inserts all shell-escaped absolute paths in one terminal input only after every image succeeds, without pressing Enter.
 
@@ -210,12 +226,10 @@ The compatibility composer retains its existing single-image paste, drag/drop, a
 Remove old attachments manually when they are no longer needed:
 
 ```sh
-find /path/to/project/.herdr-web/uploads -type f -delete
+find "$HOME/.herdr-web/uploads" -type f -delete
 ```
 
-Add `.herdr-web/` to each target repository's ignore rules if untracked local files should stay hidden from `git status`.
-
-Uploads created by earlier versions are left untouched and can be removed manually after any Agent references to them are no longer needed.
+Uploads created by earlier versions are left untouched in their project directories and can be removed manually after any Agent references to them are no longer needed.
 
 ## Run with Docker
 
@@ -233,16 +247,17 @@ just up
 4. Builds and starts the Node.js production container.
 5. Selects an available host port and prints local and LAN URLs.
 
-Set a fixed web port, custom herdr socket, or narrower project mount when needed:
+Set a fixed web port, custom product data home, custom herdr socket, or narrower project mount when needed:
 
 ```sh
 HERDR_WEB_PORT=4173 \
+HERDR_WEB_HOME="$HOME/.herdr-web" \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 HERDR_PROJECTS_ROOT="$HOME/workspace" \
 just up
 ```
 
-`just up` mounts `HERDR_PROJECTS_ROOT` at the same absolute container path and runs the container with the host UID and GID so uploaded files remain accessible to both the container and host Agent.
+`just up` mounts both `HERDR_PROJECTS_ROOT` and `HERDR_WEB_HOME` at their same absolute container paths and runs the container with the host UID and GID so uploaded files remain accessible to both the container and host Agent.
 
 The default project root is `$HOME`; choose the narrowest common parent containing all Herdr project directories.
 
@@ -253,6 +268,8 @@ Stop both the container and host socket forwarder:
 ```sh
 just down
 ```
+
+`just down` remembers the last `HERDR_WEB_HOME` used by `just up`, so a plain shutdown also cleans helper state started with an inline custom home.
 
 The container serves the SPA and authenticated API from one Node.js process.
 
@@ -272,7 +289,7 @@ The token in a printed URL is moved into `sessionStorage` and removed from the a
 
 The Docker socket forwarder listens only on host loopback.
 
-Docker image paste requires write access to the configured `HERDR_PROJECTS_ROOT`, so mount only trusted project directories.
+Docker image paste requires read access to the configured `HERDR_PROJECTS_ROOT` and write access to `HERDR_WEB_HOME`, so mount only trusted directories.
 
 Treat the printed URL like a password, use this directly only on a trusted LAN, and place the app behind HTTPS and stronger access controls before exposing it to an untrusted network.
 

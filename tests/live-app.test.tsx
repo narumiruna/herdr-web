@@ -332,7 +332,7 @@ describe("live herdr-web app", () => {
 
   test("uploads a selected image and prompts the agent with its host path", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
-    const imagePath = "/repo/.herdr-web/uploads/remote-shot.png";
+    const imagePath = "/home/user/.herdr-web/uploads/remote-shot.png";
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/images")) {
@@ -439,7 +439,7 @@ describe("live herdr-web app", () => {
         return new Response(
           JSON.stringify({
             mediaType: "image/png",
-            path: "/repo/tools/.herdr-web/uploads/split.png",
+            path: "/home/user/.herdr-web/uploads/split.png",
             size: 11,
             type: "image_uploaded",
           }),
@@ -469,7 +469,7 @@ describe("live herdr-web app", () => {
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
     await user.upload(screen.getByLabelText("Choose image"), file);
     expect(
-      screen.getByText(/will be stored under \/repo\/tools/),
+      screen.getByText(/will be stored in the configured upload directory/),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -487,7 +487,7 @@ describe("live herdr-web app", () => {
 
   test("reuses a successful image upload when a rejected prompt is retried", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
-    const imagePath = "/repo/.herdr-web/uploads/retry.png";
+    const imagePath = "/home/user/.herdr-web/uploads/retry.png";
     let prompts = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

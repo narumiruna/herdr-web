@@ -15,7 +15,7 @@ Use `herdr-web` consistently for this product, including release titles, UI copy
 
 - Product-owned identifiers use `herdr-web`, `HerdrWeb`, or `HERDR_WEB` according to their syntax.
 - Upstream executable, protocol, API, socket, and runtime references remain `herdr`, `Herdr`, or `HERDR`.
-- New uploads use `.herdr-web/uploads`, while the old local upload directory remains untouched and ignored as compatibility-only data.
+- New uploads use `$HOME/.herdr-web/uploads`, while old project-local upload directories remain untouched and ignored as compatibility-only data.
 - Browser preferences migrate once from legacy keys to `herdr-web-*` keys without exposing the retired brand in the interface.
 
 ## Risks

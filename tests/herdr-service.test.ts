@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
@@ -155,8 +155,10 @@ describe("LiveHerdrService", () => {
     });
   });
 
-  test("stores a verified image under the target pane working directory", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "herdr-image-upload-"));
+  test("stores a verified image in the central product data home", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-image-project-"));
+    const dataHome = await mkdtemp(join(tmpdir(), "herdr-web-data-"));
+    const uploadsRoot = join(dataHome, "uploads");
     const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
     const request = vi.fn().mockResolvedValue({
       pane: {
@@ -165,7 +167,10 @@ describe("LiveHerdrService", () => {
       },
       type: "pane_info",
     });
-    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { uploadsRoot },
+    );
 
     try {
       const result = await service.uploadImage("w5:p1", {
@@ -179,10 +184,17 @@ describe("LiveHerdrService", () => {
         size: png.length,
         type: "image_uploaded",
       });
-      expect(result.path).toContain(join(directory, ".herdr-web", "uploads"));
+      expect(result.path).toContain(uploadsRoot);
       await expect(readFile(result.path)).resolves.toEqual(png);
+      expect((await stat(uploadsRoot)).mode & 0o777).toBe(0o700);
+      expect((await stat(result.path)).mode & 0o777).toBe(0o600);
+      await expect(readdir(directory)).resolves.toEqual([]);
     } finally {
-      await rm(directory, { force: true, recursive: true });
+      await Promise.all(
+        [directory, dataHome].map((path) =>
+          rm(path, { force: true, recursive: true }),
+        ),
+      );
     }
   });
 
@@ -220,13 +232,14 @@ describe("LiveHerdrService", () => {
   test("rejects pane directories outside the configured Docker project root", async () => {
     const projectsRoot = await mkdtemp(join(tmpdir(), "herdr-project-root-"));
     const outside = await mkdtemp(join(tmpdir(), "herdr-outside-root-"));
+    const dataHome = await mkdtemp(join(tmpdir(), "herdr-web-data-"));
     const request = vi.fn().mockResolvedValue({
       pane: { cwd: outside, pane_id: "w5:p1" },
       type: "pane_info",
     });
     const service = new LiveHerdrService(
       { request } as unknown as HerdrClient,
-      { projectsRoot },
+      { projectsRoot, uploadsRoot: join(dataHome, "uploads") },
     );
 
     try {
@@ -238,7 +251,7 @@ describe("LiveHerdrService", () => {
       ).rejects.toThrow("outside the Docker-mounted HERDR_PROJECTS_ROOT");
     } finally {
       await Promise.all(
-        [projectsRoot, outside].map((path) =>
+        [projectsRoot, outside, dataHome].map((path) =>
           rm(path, { force: true, recursive: true }),
         ),
       );

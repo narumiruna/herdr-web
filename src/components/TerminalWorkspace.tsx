@@ -341,7 +341,6 @@ export function TerminalWorkspace({
     actionsEnabled && Boolean(draft.message.trim() || draft.attachment);
   const activePane =
     agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
-  const currentWorkingDirectory = activePane?.cwd || workspace.path;
   const sourcePaneRatio = clampPaneRatio(agent.paneSplit?.ratio ?? 0.5);
   const paneSplitDirection = agent.paneSplit?.direction ?? "right";
   const visiblePanes = agent.panes.filter(
@@ -817,7 +816,7 @@ export function TerminalWorkspace({
                     {Math.max(1, Math.ceil(draft.attachment.size / 1024))} KB ·{" "}
                     {draft.uploadedPath
                       ? `stored at ${draft.uploadedPath}`
-                      : `will be stored under ${currentWorkingDirectory}/.herdr-web/uploads`}
+                      : "will be stored in the configured upload directory"}
                   </small>
                 </span>
                 <button
