@@ -141,7 +141,7 @@ The focused terminal owns the remaining screen and is the primary interaction su
 
 Typing, paste, mouse input, terminal applications, and resize are forwarded through a dedicated WebSocket to one Herdr terminal session.
 
-Use the terminal toolbar to search output, stage an image path, or open the optional Agent prompt dialog.
+Use the terminal toolbar to search output, stage image paths, or open the optional Agent prompt dialog.
 
 A controller conflict offers explicit read-only observation or takeover instead of silently stealing control.
 
@@ -183,17 +183,25 @@ On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigat
 
 ## Send remote images
 
-Focus the interactive terminal, then paste an image with `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux; the image button is the fallback.
+Focus the interactive terminal, then paste images with `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux; the image button is the fallback.
+
+Each batch accepts up to eight PNG, JPEG, GIF, or WebP images, preserves clipboard order, and allows the same image to be pasted again in a later batch.
 
 Pasting during connection still opens the review dialog, but uploading waits until the terminal reports **Interactive**.
 
-The staged-image dialog performs no upload until **Upload and insert path** is confirmed.
+The staged-image dialog performs no upload until **Upload and insert path** or its multi-image equivalent is confirmed.
 
-The bridge verifies PNG, JPEG, GIF, or WebP signatures, enforces an 8 MiB limit, writes a random file under the active pane's `.hedr/uploads/` directory, and inserts a shell-escaped absolute path at the terminal cursor.
+The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under the active pane's `.hedr/uploads/` directory.
 
-If insertion cannot be confirmed, the dialog keeps the uploaded path available for copy or retry without uploading a duplicate.
+herdr-web uploads a batch sequentially and inserts all shell-escaped absolute paths in one terminal input only after every image succeeds, without pressing Enter.
 
-The compatibility composer still supports workbench-wide image paste, drag/drop, and file selection when interactive terminal streaming is unavailable.
+If part of a batch fails, successful paths remain visible and **Retry failed uploads** uploads only unfinished images.
+
+Cancelling after a partial failure does not remove files that already reached the Herdr host, so remove those files manually when they are no longer needed.
+
+If path insertion cannot be confirmed, the dialog retains every uploaded path for insertion retry without uploading a duplicate.
+
+The compatibility composer retains its existing single-image paste, drag/drop, and file-selection behavior when interactive terminal streaming is unavailable.
 
 Remove old attachments manually when they are no longer needed:
 

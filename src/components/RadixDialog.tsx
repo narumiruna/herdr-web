@@ -10,6 +10,7 @@ interface RadixDialogProps {
   description: string;
   children: ReactNode;
   className?: string;
+  closeDisabled?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   onCloseAutoFocus?: () => void;
 }
@@ -21,6 +22,7 @@ export function RadixDialog({
   description,
   children,
   className = "",
+  closeDisabled = false,
   initialFocusRef,
   onCloseAutoFocus,
 }: RadixDialogProps) {
@@ -50,6 +52,7 @@ export function RadixDialog({
               <Dialog.Close
                 className="bare-icon dialog-close"
                 aria-label="Close dialog"
+                disabled={closeDisabled}
               >
                 <Cross2Icon />
               </Dialog.Close>
