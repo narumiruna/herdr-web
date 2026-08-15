@@ -148,7 +148,7 @@ function HarnessTerminal({
 const split = new URL(window.location.href).searchParams.has("split");
 createRoot(root).render(
   <Theme appearance="dark" accentColor="amber" grayColor="sand">
-    <div style={{ display: "flex", width: "100%", height: "100%" }}>
+    <div style={{ display: "flex", width: "100%", height: "100dvh" }}>
       {split && <HarnessTerminal focused={false} paneId="w5:p1" />}
       <HarnessTerminal focused paneId={split ? "w5:p2" : "w5:p1"} />
     </div>

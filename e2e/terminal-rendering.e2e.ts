@@ -59,6 +59,69 @@ async function terminalLineMetrics(
   };
 }
 
+test("keeps the final row visible at fractional browser scales", async ({
+  browser,
+}) => {
+  for (const { deviceScaleFactor, height } of [
+    { deviceScaleFactor: 1.25, height: 701 },
+    { deviceScaleFactor: 1.5, height: 900 },
+  ]) {
+    const context = await browser.newContext({
+      deviceScaleFactor,
+      viewport: { width: 1_200, height },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto("/e2e/terminal-harness.html");
+      await expect
+        .poll(() => page.evaluate(() => window.__terminalSockets.length))
+        .toBe(1);
+      const host = page.locator(".xterm-host");
+      await expect(host).toHaveAttribute("data-fonts", "ready");
+      await page.evaluate(() => {
+        const output = Array.from(
+          { length: 80 },
+          (_, index) => `zoom line ${index}\r\n`,
+        ).join("");
+        window.__terminalSockets[0]?.frame(`${output}BOTTOM ROW`);
+      });
+      await expect(page.locator(".xterm-accessibility-tree")).toContainText(
+        "BOTTOM ROW",
+      );
+
+      for (const viewportHeight of [height, height - 37]) {
+        await page.setViewportSize({ width: 1_200, height: viewportHeight });
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const xterm = document.querySelector(".xterm");
+              const screen = document.querySelector(".xterm-screen");
+              if (!xterm || !screen) return false;
+              const xtermBounds = xterm.getBoundingClientRect();
+              const screenBounds = screen.getBoundingClientRect();
+              const xtermStyle = getComputedStyle(xterm);
+              const contentTop =
+                xtermBounds.top + Number.parseFloat(xtermStyle.paddingTop);
+              const contentBottom =
+                xtermBounds.bottom -
+                Number.parseFloat(xtermStyle.paddingBottom);
+              return (
+                screenBounds.top >= contentTop - 1 &&
+                screenBounds.bottom <= contentBottom + 1
+              );
+            }),
+          )
+          .toBe(true);
+      }
+      await expect(page.locator(".xterm-accessibility-tree")).toContainText(
+        "BOTTOM ROW",
+      );
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 for (const deviceScaleFactor of [1, 2]) {
   test(`renders continuous terminal glyphs at DPR ${deviceScaleFactor}`, async ({
     browser,
