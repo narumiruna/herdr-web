@@ -221,6 +221,11 @@ export function InteractiveTerminal({
     pasteEnabled: imagePasteEnabled,
   });
 
+  const cancelPendingReconnect = useCallback(() => {
+    window.clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = undefined;
+  }, []);
+
   const cancelPendingResize = useCallback(() => {
     window.clearTimeout(resizeTimer.current);
     resizeTimer.current = undefined;
@@ -251,7 +256,7 @@ export function InteractiveTerminal({
 
   const closeSocket = useCallback(() => {
     stopReason.current = "manual";
-    window.clearTimeout(reconnectTimer.current);
+    cancelPendingReconnect();
     cancelPendingResize();
     const socket = socketRef.current;
     socketRef.current = undefined;
@@ -265,7 +270,7 @@ export function InteractiveTerminal({
     ctrlArmedRef.current = false;
     connectingRef.current = false;
     lastSentResize.current = undefined;
-  }, [cancelPendingResize]);
+  }, [cancelPendingReconnect, cancelPendingResize]);
 
   const connectTerminal = useCallback(
     async (
@@ -273,6 +278,7 @@ export function InteractiveTerminal({
       takeover = false,
       reconnecting = false,
     ) => {
+      cancelPendingReconnect();
       const terminal = terminalRef.current;
       if (
         !terminal ||
@@ -451,7 +457,13 @@ export function InteractiveTerminal({
         setStatus("error");
       }
     },
-    [actionsEnabled, cancelPendingResize, paneId, queueTerminalResize],
+    [
+      actionsEnabled,
+      cancelPendingReconnect,
+      cancelPendingResize,
+      paneId,
+      queueTerminalResize,
+    ],
   );
   connectRef.current = connectTerminal;
 

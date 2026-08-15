@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
@@ -382,6 +388,33 @@ describe("InteractiveTerminal", () => {
     FakeWebSocket.instances[2]?.message(frame("unfocused observation"));
     expect(await screen.findByText("Watching")).toBeVisible();
     expect(screen.getByRole("button", { name: "Take control" })).toBeDisabled();
+  });
+
+  test("cancels a pending control retry when focus switches to observation", async () => {
+    const { createTicket, props, rerender, socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    vi.useFakeTimers();
+
+    await act(async () => {
+      socket.close(1006);
+      rerender(<InteractiveTerminal {...props} focused={false} />);
+      await Promise.resolve();
+    });
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    FakeWebSocket.instances[2]?.message(frame("unfocused observation"));
+
+    rerender(<InteractiveTerminal {...props} focused />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    expect(createTicket.mock.calls.map(([, input]) => input.mode)).toEqual([
+      "observe",
+      "control",
+      "observe",
+    ]);
   });
 
   test("resynchronizes from a fresh canonical frame after a sequence gap", async () => {
