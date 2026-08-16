@@ -5,6 +5,7 @@ const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const requiredDependencies = [
   "@vitejs/plugin-react",
+  "citty",
   "concurrently",
   "tsx",
   "vite",
