@@ -68,6 +68,7 @@ async function runCli(
       ...process.env,
       CALL_LOG: logPath,
       HERDR_SNAPSHOT: JSON.stringify(snapshot),
+      NO_COLOR: "1",
       PATH: `${binDirectory}:${process.env.PATH}`,
       ...env,
     },
@@ -187,11 +188,55 @@ describe("herdr-web CLI", () => {
     expect(result.invocations).toEqual([]);
   });
 
+  it("rejects unknown options before calling external commands", async () => {
+    const result = await runCli(["--unknown"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Expected zero or one directory argument");
+    expect(result.invocations).toEqual([]);
+  });
+
+  it("rejects extra positional arguments before calling external commands", async () => {
+    const target = await mkdtemp(resolve(tmpdir(), "extra-herdr-project-"));
+    const result = await runCli([target, "extra"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Expected zero or one directory argument");
+    expect(result.invocations).toEqual([]);
+  });
+
+  it("does not start the web workbench when Herdr fails", async () => {
+    const target = await mkdtemp(resolve(tmpdir(), "failing-herdr-project-"));
+    const canonicalTarget = await realpath(target);
+    const result = await runCli([target], { env: { HERDR_ACTION_EXIT: "7" } });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Herdr command failed");
+    expect(result.invocations).toEqual([
+      { command: "herdr", args: ["api", "snapshot"], cwd: result.root },
+      {
+        command: "herdr",
+        args: [
+          "workspace",
+          "create",
+          "--cwd",
+          canonicalTarget,
+          "--label",
+          basename(target),
+          "--focus",
+        ],
+        cwd: result.root,
+      },
+    ]);
+  });
+
   it("prints help without calling external commands", async () => {
     const result = await runCli(["--help"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Usage: herdr-web [directory]");
+    expect(result.stdout).toContain("Start the herdr-web workbench");
+    expect(result.stdout).toContain("USAGE herdr-web [OPTIONS] [DIRECTORY]");
+    expect(result.stdout).toContain("Project directory to focus or create");
     expect(result.invocations).toEqual([]);
   });
 });

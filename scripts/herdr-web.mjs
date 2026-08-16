@@ -5,18 +5,7 @@ import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-const HELP = `Start the herdr-web workbench, optionally opening a project directory.
-
-Usage: herdr-web [directory]
-
-Arguments:
-  directory  Project directory to focus or create
-
-With no directory, the command starts herdr-web without changing Herdr workspaces.
-With a directory, it focuses a matching workspace or creates one before startup.
-Use "herdr-web ." to open the current directory.
-`;
+import { defineCommand, renderUsage, runMain } from "citty";
 
 function fail(message) {
   process.stderr.write(`herdr-web: ${message}\n`);
@@ -79,6 +68,13 @@ function matchingWorkspace(snapshotText, targetDirectory) {
   }
 }
 
+async function rejectUnsupportedInvocation(rawArgs, command) {
+  if (rawArgs.length <= 1 && !rawArgs[0]?.startsWith("-")) return false;
+  process.stderr.write(`${await renderUsage(command)}\n`);
+  fail("Expected zero or one directory argument");
+  return true;
+}
+
 async function startWeb() {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   try {
@@ -106,36 +102,47 @@ async function startWeb() {
   }
 }
 
-const args = process.argv.slice(2);
-if (args.includes("--help") || args.includes("-h")) {
-  process.stdout.write(HELP);
-} else if (args.length > 1 || args[0]?.startsWith("-")) {
-  process.stderr.write(HELP);
-  fail("Expected zero or one directory argument");
-} else if (args.length === 0) {
-  await startWeb();
-} else {
-  const targetDirectory = canonicalDirectory(args[0]);
-  if (targetDirectory) {
-    const snapshot = runHerdr(["api", "snapshot"], true);
-    if (snapshot !== undefined) {
-      const workspaceId = matchingWorkspace(snapshot, targetDirectory);
-      if (process.exitCode !== 1) {
-        const action = workspaceId
-          ? ["workspace", "focus", workspaceId]
-          : [
-              "workspace",
-              "create",
-              "--cwd",
-              targetDirectory,
-              "--label",
-              basename(targetDirectory) || "workspace",
-              "--focus",
-            ];
-        if (runHerdr(action) !== undefined) {
-          await startWeb();
-        }
-      }
+const main = defineCommand({
+  meta: {
+    name: "herdr-web",
+    description:
+      "Start the herdr-web workbench, optionally opening a project directory.",
+  },
+  args: {
+    directory: {
+      type: "positional",
+      required: false,
+      description: "Project directory to focus or create",
+    },
+  },
+  async run(context) {
+    if (await rejectUnsupportedInvocation(context.rawArgs, context.cmd)) return;
+    const { directory } = context.args;
+    if (directory === undefined) {
+      await startWeb();
+      return;
     }
-  }
-}
+    const targetDirectory = canonicalDirectory(directory);
+    if (!targetDirectory) return;
+    const snapshot = runHerdr(["api", "snapshot"], true);
+    if (snapshot === undefined) return;
+    const workspaceId = matchingWorkspace(snapshot, targetDirectory);
+    if (process.exitCode === 1) return;
+    const action = workspaceId
+      ? ["workspace", "focus", workspaceId]
+      : [
+          "workspace",
+          "create",
+          "--cwd",
+          targetDirectory,
+          "--label",
+          basename(targetDirectory) || "workspace",
+          "--focus",
+        ];
+    if (runHerdr(action) !== undefined) {
+      await startWeb();
+    }
+  },
+});
+
+await runMain(main);
