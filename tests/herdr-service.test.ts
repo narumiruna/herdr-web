@@ -96,6 +96,47 @@ branch refs/heads/narumi/feat/tree
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  test("uses Herdr 0.8.2 protocol 20 terminal sessions when the CLI matches", async () => {
+    const request = vi.fn().mockResolvedValueOnce({
+      snapshot: { panes: [{ pane_id: "w5:p1" }], protocol: 20 },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { herdrClientProtocol: 20, terminalStreamingConfigured: true },
+    );
+
+    await expect(service.getState()).resolves.toMatchObject({
+      capabilities: { terminalReason: "", terminalStreaming: true },
+      reads: {},
+    });
+  });
+
+  test("falls back when the terminal CLI and server protocols differ", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        snapshot: { panes: [{ pane_id: "w5:p1" }], protocol: 20 },
+        type: "session_snapshot",
+      })
+      .mockResolvedValueOnce({
+        read: { pane_id: "w5:p1", revision: 1, text: "fallback" },
+        type: "pane_read",
+      });
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { herdrClientProtocol: 19, terminalStreamingConfigured: true },
+    );
+
+    await expect(service.getState()).resolves.toMatchObject({
+      capabilities: {
+        terminalReason: expect.stringContaining("CLI uses protocol 19"),
+        terminalStreaming: false,
+      },
+      reads: { "w5:p1": { text: "fallback" } },
+    });
+  });
+
   test("reports partial pane read failures without discarding the snapshot", async () => {
     const request = vi
       .fn()
@@ -382,6 +423,75 @@ branch refs/heads/narumi/feat/tree
       type: "agent_started",
     });
     expect(request).toHaveBeenCalledTimes(5);
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      "agent.start",
+      {
+        args: [],
+        kind: "pi",
+        name: "ready-agent",
+        pane_id: "w5:p9",
+        timeout_ms: 60_000,
+      },
+      { timeoutMs: 65_000 },
+    );
+  });
+
+  test("launches Qwen Code through Herdr's ready Agent workflow", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        root_pane: { pane_id: "w5:pq" },
+        tab: { tab_id: "w5:tq" },
+        type: "tab_created",
+      })
+      .mockResolvedValueOnce({ type: "agent_started" })
+      .mockResolvedValueOnce({
+        agent: { agent: "qwen", interactive_ready: true },
+        type: "agent_info",
+      });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await service.createSession({
+      command: "qwen",
+      label: "qwen-review",
+      runtime: "Qwen Code",
+      workspaceId: "w5",
+    });
+
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "agent.start",
+      expect.objectContaining({ args: [], kind: "qwen", name: "qwen-review" }),
+      { timeoutMs: 65_000 },
+    );
+  });
+
+  test("routes plugin and integration management through typed Herdr methods", async () => {
+    const request = vi.fn().mockResolvedValue({ type: "ok" });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    await service.listPlugins();
+    await service.listPluginActions();
+    await service.listPluginLogs("example.board");
+    await service.setPluginEnabled("example.board", false);
+    await service.invokePluginAction("example.board.refresh");
+    await service.manageIntegration("qwen", "install");
+
+    expect(request.mock.calls).toEqual([
+      ["plugin.list", {}],
+      ["plugin.action.list", {}],
+      ["plugin.log.list", { limit: 50, plugin_id: "example.board" }],
+      ["plugin.disable", { plugin_id: "example.board" }],
+      [
+        "plugin.action.invoke",
+        {
+          action_id: "example.board.refresh",
+          context: { invocation_source: "herdr-web" },
+        },
+      ],
+      ["integration.install", { target: "qwen" }],
+    ]);
   });
 
   test("creates and focuses a Space through the Herdr workspace API", async () => {

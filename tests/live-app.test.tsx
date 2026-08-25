@@ -614,14 +614,14 @@ describe("live herdr-web app", () => {
     ).toHaveLength(1);
   });
 
-  test("keeps a failed prompt draft and offers inline retry", async () => {
+  test("explains a raced agent_blocked rejection and keeps the draft", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/prompt")) {
         return new Response(
           JSON.stringify({
-            error: { code: "agent_busy", message: "Agent is busy" },
+            error: { code: "agent_blocked", message: "Agent is blocked" },
           }),
           {
             headers: { "content-type": "application/json" },
@@ -647,7 +647,7 @@ describe("live herdr-web app", () => {
 
     expect(
       await screen.findByRole("alert", { name: "Message failed" }),
-    ).toHaveTextContent("Agent is busy");
+    ).toHaveTextContent("Respond in the terminal");
     expect(message).toHaveValue("keep this draft");
     expect(screen.getByRole("button", { name: "Retry message" })).toBeVisible();
   });

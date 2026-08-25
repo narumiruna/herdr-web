@@ -15,6 +15,8 @@
     "scripts/find-port.mjs",
     "scripts/herdr-web.mjs",
     "scripts/lan-address.mjs",
+    "scripts/start-workbench.d.mts",
+    "scripts/start-workbench.mjs",
     "server",
     "src",
     "tsconfig.json",

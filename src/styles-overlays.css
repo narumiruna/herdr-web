@@ -888,6 +888,172 @@
   background: var(--sand-4);
 }
 
+/* Herdr runtime management */
+.runtime-management-dialog {
+  width: min(94vw, 780px);
+  max-height: min(92dvh, 900px);
+}
+.runtime-management-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 20px 22px;
+}
+.runtime-management-heading,
+.runtime-management-heading > span {
+  display: flex;
+  align-items: center;
+}
+.runtime-management-heading {
+  justify-content: space-between;
+  gap: 12px;
+}
+.runtime-management-heading > span {
+  gap: 7px;
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+.runtime-management-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.runtime-management-section h3,
+.runtime-management-section p {
+  margin: 0;
+}
+.runtime-management-section h3 {
+  font-family: "Zen Old Mincho", serif;
+  font-size: 15px;
+  font-weight: 600;
+}
+.runtime-management-section > p {
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.runtime-management-list,
+.runtime-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.runtime-management-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel);
+}
+.runtime-management-card > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.runtime-management-card strong {
+  font-size: 12px;
+}
+.runtime-management-card small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+.runtime-management-card p {
+  color: var(--ink-secondary);
+  font-size: 11px;
+}
+.runtime-management-warning,
+.runtime-management-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11px;
+}
+.runtime-management-warning {
+  color: var(--red-11);
+}
+.runtime-management-notice {
+  margin: 0;
+  color: var(--grass-11);
+}
+.runtime-management-empty {
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  color: var(--ink-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.runtime-log-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 10px;
+}
+.runtime-log-list article > span {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+.runtime-log-list time {
+  color: var(--ink-muted);
+}
+.runtime-log-list pre {
+  grid-column: 1 / -1;
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.integration-management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.integration-management-grid article {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.integration-management-grid strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.integration-management-grid span {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+@media (max-width: 640px) {
+  .integration-management-grid {
+    grid-template-columns: 1fr;
+  }
+  .integration-management-grid article {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .runtime-log-list article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .runtime-log-list time {
+    grid-column: 1 / -1;
+  }
+}
+
 @keyframes overlay-enter {
   from {
     opacity: 0;

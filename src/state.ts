@@ -1,6 +1,11 @@
 export type AgentStatus = "working" | "blocked" | "idle" | "done" | "unknown";
 
-export type RuntimeName = "Claude Code" | "Codex" | "Pi" | "OpenCode";
+export type RuntimeName =
+  | "Claude Code"
+  | "Codex"
+  | "OpenCode"
+  | "Pi"
+  | "Qwen Code";
 
 export interface WorkspaceWorktree {
   branch: string;

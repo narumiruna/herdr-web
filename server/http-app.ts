@@ -12,6 +12,7 @@ import type {
   CreateSessionInput,
   CreateTerminalInput,
   CreateWorkspaceInput,
+  IntegrationAction,
   PaneSplitDirection,
 } from "./herdr-service.js";
 import {
@@ -33,9 +34,18 @@ export interface HerdrService {
   createTerminal?(input: CreateTerminalInput): Promise<unknown>;
   createWorkspace(input: CreateWorkspaceInput): Promise<unknown>;
   getState(): Promise<unknown>;
+  invokePluginAction?(actionId: string): Promise<unknown>;
+  listPluginActions?(): Promise<unknown>;
+  listPluginLogs?(pluginId?: string): Promise<unknown>;
+  listPlugins?(): Promise<unknown>;
+  manageIntegration?(
+    target: string,
+    action: IntegrationAction,
+  ): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
   moveTab?(tabId: string, direction: "left" | "right"): Promise<unknown>;
   renameTab?(tabId: string, label: string): Promise<unknown>;
+  setPluginEnabled?(pluginId: string, enabled: boolean): Promise<unknown>;
   setSplitRatio(
     tabId: string,
     path: boolean[],
@@ -60,6 +70,26 @@ interface HandlerOptions {
 }
 
 const RESOURCE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
+const EXTENSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const INTEGRATION_TARGETS = new Set([
+  "antigravity_cli",
+  "claude",
+  "codex",
+  "copilot",
+  "cursor",
+  "devin",
+  "droid",
+  "grok",
+  "hermes",
+  "kilo",
+  "kimi",
+  "mastracode",
+  "omp",
+  "opencode",
+  "pi",
+  "qodercli",
+  "qwen",
+]);
 const MAX_JSON_BODY_BYTES = 16_384;
 
 class PayloadTooLargeError extends Error {}
@@ -148,6 +178,32 @@ function cleanId(value: string): string {
   if (!RESOURCE_ID.test(decoded))
     throw new TypeError("Invalid herdr resource id");
   return decoded;
+}
+
+function cleanExtensionId(value: string, field: string): string {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    throw new TypeError(`Invalid ${field}`);
+  }
+  if (!EXTENSION_ID.test(decoded)) throw new TypeError(`Invalid ${field}`);
+  return decoded;
+}
+
+function cleanIntegrationTarget(value: string): string {
+  const target = cleanExtensionId(value, "integration target");
+  if (!INTEGRATION_TARGETS.has(target)) {
+    throw new TypeError("Unsupported Herdr integration target");
+  }
+  return target;
+}
+
+function cleanIntegrationAction(value: unknown): IntegrationAction {
+  if (value !== "install" && value !== "uninstall") {
+    throw new TypeError("action must be install or uninstall");
+  }
+  return value;
 }
 
 function cleanText(value: unknown, field: string, max: number): string {
@@ -411,6 +467,129 @@ export function createHerdrHttpHandler({
             message: "This access token does not permit Herdr mutations",
           },
         });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/herdr/plugins") {
+        if (!service.listPlugins) {
+          sendJson(response, 404, {
+            error: {
+              code: "plugin_api_unavailable",
+              message: "Herdr plugin management is unavailable",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, await service.listPlugins());
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/herdr/plugin-actions"
+      ) {
+        if (!service.listPluginActions) {
+          sendJson(response, 404, {
+            error: {
+              code: "plugin_api_unavailable",
+              message: "Herdr plugin actions are unavailable",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, await service.listPluginActions());
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/herdr/plugin-logs"
+      ) {
+        if (!service.listPluginLogs) {
+          sendJson(response, 404, {
+            error: {
+              code: "plugin_api_unavailable",
+              message: "Herdr plugin logs are unavailable",
+            },
+          });
+          return;
+        }
+        const pluginId = url.searchParams.get("pluginId")?.trim();
+        sendJson(
+          response,
+          200,
+          await service.listPluginLogs(
+            pluginId ? cleanExtensionId(pluginId, "plugin id") : undefined,
+          ),
+        );
+        return;
+      }
+      const plugin = url.pathname.match(/^\/api\/herdr\/plugins\/([^/]+)$/);
+      if (request.method === "PATCH" && plugin?.[1]) {
+        if (!service.setPluginEnabled) {
+          sendJson(response, 404, {
+            error: {
+              code: "plugin_api_unavailable",
+              message: "Herdr plugin management is unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        if (typeof body.enabled !== "boolean") {
+          throw new TypeError("enabled must be a boolean");
+        }
+        sendJson(
+          response,
+          200,
+          await service.setPluginEnabled(
+            cleanExtensionId(plugin[1], "plugin id"),
+            body.enabled,
+          ),
+        );
+        return;
+      }
+      const pluginAction = url.pathname.match(
+        /^\/api\/herdr\/plugin-actions\/([^/]+)\/invoke$/,
+      );
+      if (request.method === "POST" && pluginAction?.[1]) {
+        if (!service.invokePluginAction) {
+          sendJson(response, 404, {
+            error: {
+              code: "plugin_api_unavailable",
+              message: "Herdr plugin actions are unavailable",
+            },
+          });
+          return;
+        }
+        sendJson(
+          response,
+          200,
+          await service.invokePluginAction(
+            cleanExtensionId(pluginAction[1], "plugin action id"),
+          ),
+        );
+        return;
+      }
+      const integration = url.pathname.match(
+        /^\/api\/herdr\/integrations\/([^/]+)$/,
+      );
+      if (request.method === "POST" && integration?.[1]) {
+        if (!service.manageIntegration) {
+          sendJson(response, 404, {
+            error: {
+              code: "integration_api_unavailable",
+              message: "Herdr integration management is unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        sendJson(
+          response,
+          200,
+          await service.manageIntegration(
+            cleanIntegrationTarget(integration[1]),
+            cleanIntegrationAction(body.action),
+          ),
+        );
         return;
       }
       const image = url.pathname.match(

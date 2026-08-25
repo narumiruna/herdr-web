@@ -1,6 +1,7 @@
 import {
   ChevronRightIcon,
   Component1Icon,
+  CubeIcon,
   ExclamationTriangleIcon,
   GearIcon,
   KeyboardIcon,
@@ -26,6 +27,7 @@ interface SidebarProps {
   onNewSpace: (returnFocus?: HTMLElement | null) => void;
   onOpenSettings: (returnFocus?: HTMLElement | null) => void;
   onOpenKeybindings: (returnFocus?: HTMLElement | null) => void;
+  onOpenRuntime: (returnFocus?: HTMLElement | null) => void;
   onRefresh: () => void | Promise<void>;
   onDismiss?: () => void;
 }
@@ -94,6 +96,7 @@ export function Sidebar({
   onNewSpace,
   onOpenSettings,
   onOpenKeybindings,
+  onOpenRuntime,
   onRefresh,
   onDismiss,
 }: SidebarProps) {
@@ -311,6 +314,13 @@ export function Sidebar({
               <DropdownMenu.Item onSelect={() => runMenuAction(onOpenSettings)}>
                 <GearIcon aria-hidden="true" />
                 Settings
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!canCreateSpace}
+                onSelect={() => runMenuAction(onOpenRuntime)}
+              >
+                <CubeIcon aria-hidden="true" />
+                Herdr runtime
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => runMenuAction(onOpenKeybindings)}

@@ -259,6 +259,65 @@ describe("mapLiveSnapshot", () => {
     expect(state.selectedAgentId).toBe("w5:p3");
   });
 
+  test("disables semantic prompts while an Agent is blocked", () => {
+    const pane = {
+      agent: "qwen",
+      agent_status: "blocked",
+      pane_id: "w1:p1",
+      revision: 2,
+      tab_id: "w1:t1",
+      workspace_id: "w1",
+    };
+    const state = mapLiveSnapshot({
+      reads: {},
+      snapshot: {
+        agents: [pane],
+        focused_pane_id: "w1:p1",
+        focused_workspace_id: "w1",
+        layouts: [
+          {
+            focused_pane_id: "w1:p1",
+            panes: [{ focused: true, pane_id: "w1:p1" }],
+            tab_id: "w1:t1",
+            workspace_id: "w1",
+          },
+        ],
+        panes: [pane],
+        protocol: 20,
+        tabs: [
+          {
+            agent_status: "blocked",
+            focused: true,
+            label: "qwen",
+            number: 1,
+            pane_count: 1,
+            tab_id: "w1:t1",
+            workspace_id: "w1",
+          },
+        ],
+        version: "0.8.2",
+        workspaces: [
+          {
+            active_tab_id: "w1:t1",
+            agent_status: "blocked",
+            focused: true,
+            label: "project",
+            number: 1,
+            pane_count: 1,
+            tab_count: 1,
+            workspace_id: "w1",
+          },
+        ],
+      },
+    });
+
+    expect(state.agents[0]).toMatchObject({
+      canPrompt: false,
+      runtime: "qwen",
+      status: "blocked",
+    });
+  });
+
   test("represents missing pane reads as an empty terminal state", () => {
     const payload = {
       reads: {},

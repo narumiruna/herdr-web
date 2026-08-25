@@ -778,8 +778,11 @@ export function TerminalWorkspace({
         <section className="attention-banner" aria-label="Agent needs input">
           <ExclamationTriangleIcon aria-hidden="true" />
           <div>
-            <strong>Waiting for your direction</strong>
-            <span>{agent.currentStep}</span>
+            <strong>Answer in the terminal</strong>
+            <span>
+              {agent.currentStep ||
+                "This Agent is waiting for approval or an answer before it can accept another prompt."}
+            </span>
           </div>
         </section>
       )}

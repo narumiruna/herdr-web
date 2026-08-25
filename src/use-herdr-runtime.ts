@@ -11,10 +11,15 @@ import {
   browserAccessToken,
   HerdrApiClient,
   HerdrBridgeError,
+  type IntegrationAction,
+  type IntegrationTarget,
   type NewLiveSession,
   type NewLiveTerminal,
   type NewLiveWorkspace,
   normalizeWorkspacePath,
+  type PluginActionInfo,
+  type PluginInfo,
+  type PluginLogInfo,
   rememberAccessToken,
   type TerminalTicket,
   type TerminalTicketInput,
@@ -60,6 +65,12 @@ interface PromptResult {
   uploadedPath?: string;
 }
 
+export interface RuntimeManagementState {
+  actions: PluginActionInfo[];
+  logs: PluginLogInfo[];
+  plugins: PluginInfo[];
+}
+
 interface HerdrRuntime {
   accessRole: AccessRole;
   actionError: string;
@@ -85,12 +96,19 @@ interface HerdrRuntime {
     uploadPaneId?: string,
   ) => Promise<PromptResult>;
   refresh: () => Promise<void>;
+  invokePluginAction: (actionId: string) => Promise<void>;
+  loadRuntimeManagement: () => Promise<RuntimeManagementState>;
+  manageIntegration: (
+    target: IntegrationTarget,
+    action: IntegrationAction,
+  ) => Promise<void>;
   moveTab: (
     agentId: string,
     tabId: string,
     direction: "left" | "right",
   ) => Promise<void>;
   renameTab: (agentId: string, tabId: string, label: string) => Promise<void>;
+  setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
   resizePanes: (agentId: string, tabId: string, ratio: number) => Promise<void>;
   setAccessToken: (token: string) => void;
   splitPane: (
@@ -248,9 +266,12 @@ export function useHerdrRuntime(
         return result;
       } catch (requestError) {
         const message =
-          requestError instanceof Error
-            ? requestError.message
-            : "Herdr action failed";
+          requestError instanceof HerdrBridgeError &&
+          requestError.code === "agent_blocked"
+            ? "This Agent is waiting for approval or an answer. Respond in the terminal before sending another prompt."
+            : requestError instanceof Error
+              ? requestError.message
+              : "Herdr action failed";
         const error = new HerdrMutationError(
           message,
           requestError instanceof HerdrBridgeError ? "rejected" : "unknown",
@@ -377,6 +398,27 @@ export function useHerdrRuntime(
       return { uploadedPath };
     },
     refresh,
+    invokePluginAction: async (actionId) => {
+      if (!live) return;
+      await mutate((api) => api.invokePluginAction(actionId));
+    },
+    loadRuntimeManagement: async () => {
+      if (!live || !client) return { actions: [], logs: [], plugins: [] };
+      const [plugins, actions, logs] = await Promise.all([
+        client.plugins(),
+        client.pluginActions(),
+        client.pluginLogs(),
+      ]);
+      return {
+        actions: actions.actions,
+        logs: logs.logs,
+        plugins: plugins.plugins,
+      };
+    },
+    manageIntegration: async (target, action) => {
+      if (!live) return;
+      await mutate((api) => api.manageIntegration(target, action));
+    },
     moveTab: async (agentId, tabId, direction) => {
       if (!live) {
         dispatch({ type: "tab.moved", agentId, direction });
@@ -390,6 +432,10 @@ export function useHerdrRuntime(
         return;
       }
       await mutate((api) => api.renameTab(tabId, label));
+    },
+    setPluginEnabled: async (pluginId, enabled) => {
+      if (!live) return;
+      await mutate((api) => api.setPluginEnabled(pluginId, enabled));
     },
     resizePanes: async (agentId, tabId, ratio) => {
       if (!live) {

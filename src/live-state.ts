@@ -175,7 +175,7 @@ function mapAgent(
         ? layout.focused_pane_id
         : pane.pane_id,
     additions: 0,
-    canPrompt: kind === "agent" && Boolean(pane.agent),
+    canPrompt: kind === "agent" && Boolean(pane.agent) && status !== "blocked",
     contextPercent:
       Number.parseInt(pane.tokens?.context_percent ?? "0", 10) || 0,
     currentStep: currentStep(pane, status),
