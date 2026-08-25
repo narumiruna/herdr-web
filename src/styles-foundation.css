@@ -1,11 +1,13 @@
 /* Japanese editorial foundation: warm paper, sumi ink, and restrained accents. */
-:root,
-.light,
-.light-theme {
+:root {
   font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
-  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+.theme-editorial.light,
+.theme-editorial.light-theme {
+  color-scheme: light;
   --paper: #f6f3ed;
   --raised-paper: #fffdfa;
   --sumi: #26231f;
@@ -81,8 +83,8 @@
   --red-12: #702433;
 }
 
-.dark,
-.dark-theme {
+.theme-editorial.dark,
+.theme-editorial.dark-theme {
   color-scheme: dark;
   --paper: #11110f;
   --raised-paper: #1c1b18;
@@ -118,6 +120,7 @@
   --brand-cutout: var(--canvas);
   --focus-ring: var(--focus);
   --shadow-small: 0 1px 1px rgb(0 0 0 / 34%);
+  --shadow-dialog: 0 24px 72px rgb(0 0 0 / 45%);
   --terminal-shadow: 0 8px 24px rgb(0 0 0 / 22%);
   --sand-4: #292824;
   --sand-7: var(--control-border);
@@ -201,7 +204,7 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-.herdr-web-theme {
+.herdr-web-theme.theme-editorial {
   --radius-1: 1px;
   --radius-2: 2px;
   --radius-3: 3px;

@@ -436,7 +436,7 @@
   color: var(--red-11);
   font-size: 11px;
 }
-.appearance-options {
+.theme-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -444,14 +444,14 @@
   padding: 0;
   border: 0;
 }
-.appearance-options legend {
+.theme-options legend {
   grid-column: 1 / -1;
   margin-bottom: 3px;
   color: var(--ink-secondary);
   font-size: 11px;
   font-weight: 600;
 }
-.appearance-options label {
+.theme-options label {
   display: grid;
   min-height: 76px;
   grid-template-columns: 16px 18px minmax(0, 1fr);
@@ -463,21 +463,21 @@
   background: var(--panel);
   cursor: pointer;
 }
-.appearance-options label[data-selected="true"] {
+.theme-options label[data-selected="true"] {
   border-color: var(--amber-8);
   background: var(--amber-2);
   box-shadow: inset 0 0 0 1px var(--amber-7);
 }
-.appearance-options label > span {
+.theme-options label > span {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 3px;
 }
-.appearance-options strong {
+.theme-options strong {
   font-size: 12px;
 }
-.appearance-options small {
+.theme-options small {
   color: var(--ink-muted);
   font-size: 10px;
   line-height: 1.35;

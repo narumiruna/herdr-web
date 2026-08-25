@@ -19,3 +19,4 @@ import "./styles-terminal.css";
 import "./styles-terminal-responsive.css";
 import "./styles-overlays.css";
 import "./styles-responsive.css";
+import "./styles-classic.css";

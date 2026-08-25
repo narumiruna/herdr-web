@@ -18,31 +18,40 @@ function renderApp() {
 
 describe("herdr-web terminal-first workbench", () => {
   beforeEach(() => {
-    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.remove(
+      "dark",
+      "light",
+      "theme-classic",
+      "theme-editorial",
+    );
     const values = new Map<string, string>();
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       value: {
         getItem: (key: string) => values.get(key) ?? null,
+        removeItem: (key: string) => values.delete(key),
         setItem: (key: string, value: string) => values.set(key, value),
       },
     });
   });
 
-  test("defaults to dark and restores an explicit light appearance", () => {
+  test("defaults to Editorial Dark and migrates an explicit light appearance", () => {
     const dark = render(<App live={false} />);
     expect(dark.container.querySelector(".herdr-web-theme")).toHaveClass(
       "dark",
+      "theme-editorial",
     );
-    expect(document.documentElement).toHaveClass("dark");
+    expect(document.documentElement).toHaveClass("dark", "theme-editorial");
     dark.unmount();
 
+    window.localStorage.removeItem("herdr-web-theme");
     window.localStorage.setItem("herdr-web-appearance", "light");
     const light = render(<App live={false} />);
     expect(light.container.querySelector(".herdr-web-theme")).toHaveClass(
       "light",
+      "theme-editorial",
     );
-    expect(document.documentElement).toHaveClass("light");
+    expect(document.documentElement).toHaveClass("light", "theme-editorial");
   });
 
   test("shows the herdr-web product identity", () => {
@@ -298,8 +307,12 @@ describe("herdr-web terminal-first workbench", () => {
 
     await user.click(openMenu);
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await user.click(screen.getByRole("radio", { name: /Light/ }));
+    const settings = screen.getByRole("dialog", { name: "Settings" });
+    expect(settings).toBeVisible();
+    expect(
+      within(settings).getAllByRole("radio", { name: /Editorial|Classic/ }),
+    ).toHaveLength(4);
+    await user.click(screen.getByRole("radio", { name: /Classic Light/ }));
     await user.click(screen.getByRole("radio", { name: /Compact/ }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(document.documentElement).toHaveClass("dark");
@@ -309,10 +322,13 @@ describe("herdr-web terminal-first workbench", () => {
 
     await user.click(openMenu);
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
-    await user.click(screen.getByRole("radio", { name: /Light/ }));
+    await user.click(screen.getByRole("radio", { name: /Classic Light/ }));
     await user.click(screen.getByRole("radio", { name: /Comfortable/ }));
     await user.click(screen.getByRole("button", { name: "Apply" }));
-    expect(document.documentElement).toHaveClass("light");
+    expect(document.documentElement).toHaveClass("light", "theme-classic");
+    expect(window.localStorage.getItem("herdr-web-theme")).toBe(
+      "classic-light",
+    );
     expect(window.localStorage.getItem("herdr-web-terminal-font-size")).toBe(
       "15",
     );

@@ -41,6 +41,14 @@ import {
 import { readProductStorage, writeProductStorage } from "./product-storage";
 import { type HerdrState, type RuntimeName, tabsForWorkspace } from "./state";
 import { parseTerminalFontSize } from "./terminal-preferences";
+import {
+  themeAppearance,
+  themeBrowserColor,
+  themeFromSavedPreferences,
+  themeStyle,
+  toggleThemeAppearance,
+  type WorkbenchTheme,
+} from "./theme-preferences";
 import { useHerdrRuntime } from "./use-herdr-runtime";
 
 interface AppProps {
@@ -66,14 +74,17 @@ export function App({
 }: AppProps) {
   const runtime = useHerdrRuntime(live, initialState);
   const { state } = runtime;
-  const [appearance, setAppearance] = useState<"light" | "dark">(() => {
-    const saved =
-      typeof window.localStorage?.getItem === "function"
-        ? readProductStorage(window.localStorage, "appearance")
-        : null;
-    if (saved === "light" || saved === "dark") return saved;
-    return "dark";
+  const [workbenchTheme, setWorkbenchTheme] = useState<WorkbenchTheme>(() => {
+    if (typeof window.localStorage?.getItem !== "function") {
+      return "editorial-dark";
+    }
+    return themeFromSavedPreferences(
+      readProductStorage(window.localStorage, "theme"),
+      readProductStorage(window.localStorage, "appearance"),
+    );
   });
+  const appearance = themeAppearance(workbenchTheme);
+  const style = themeStyle(workbenchTheme);
   const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<string[]>(() => {
     const saved =
       typeof window.localStorage?.getItem === "function"
@@ -319,14 +330,23 @@ export function App({
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(window.localStorage, "theme", workbenchTheme);
       writeProductStorage(window.localStorage, "appearance", appearance);
     }
     document.documentElement.classList.toggle("dark", appearance === "dark");
     document.documentElement.classList.toggle("light", appearance === "light");
+    document.documentElement.classList.toggle(
+      "theme-editorial",
+      style === "editorial",
+    );
+    document.documentElement.classList.toggle(
+      "theme-classic",
+      style === "classic",
+    );
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", appearance === "dark" ? "#11110f" : "#f6f3ed");
-  }, [appearance]);
+      ?.setAttribute("content", themeBrowserColor(workbenchTheme));
+  }, [appearance, style, workbenchTheme]);
 
   useEffect(() => {
     if (runtime.connection !== "reconnecting") return;
@@ -478,7 +498,7 @@ export function App({
         accentColor="amber"
         grayColor="sand"
         radius="medium"
-        className="herdr-web-theme"
+        className={`herdr-web-theme theme-${style}`}
       >
         <ConnectionScreen
           error={runtime.error}
@@ -740,7 +760,7 @@ export function App({
         grayColor="sand"
         radius="medium"
         scaling="100%"
-        className="herdr-web-theme"
+        className={`herdr-web-theme theme-${style}`}
       >
         <Tooltip.Provider>
           <main
@@ -798,7 +818,7 @@ export function App({
       grayColor="sand"
       radius="medium"
       scaling="100%"
-      className="herdr-web-theme"
+      className={`herdr-web-theme theme-${style}`}
     >
       <Tooltip.Provider>
         <div
@@ -928,8 +948,8 @@ export function App({
                     className="theme-toggle desktop-appearance"
                     aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
                     onClick={() =>
-                      setAppearance((current) =>
-                        current === "light" ? "dark" : "light",
+                      setWorkbenchTheme((current) =>
+                        toggleThemeAppearance(current),
                       )
                     }
                   >
@@ -1157,12 +1177,12 @@ export function App({
           onCreate={createWorkspace}
         />
         <SettingsDialog
-          appearance={appearance}
+          theme={workbenchTheme}
           open={settingsOpen}
           terminalFontSize={terminalFontSize}
           onOpenChange={setSettingsOpen}
           onApply={(preferences) => {
-            setAppearance(preferences.appearance);
+            setWorkbenchTheme(preferences.theme);
             setTerminalFontSize(preferences.terminalFontSize);
           }}
         />
@@ -1233,9 +1253,7 @@ export function App({
             <button
               type="button"
               onClick={() =>
-                setAppearance((current) =>
-                  current === "light" ? "dark" : "light",
-                )
+                setWorkbenchTheme((current) => toggleThemeAppearance(current))
               }
             >
               {appearance === "light" ? <MoonIcon /> : <SunIcon />}

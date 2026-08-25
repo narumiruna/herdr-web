@@ -12,7 +12,9 @@ test("defaults to dark and preserves an explicit light appearance", async ({
   await page.goto("/");
 
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).toHaveClass(/theme-editorial/);
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
+  await expect(page.locator(".herdr-web-theme")).toHaveClass(/theme-editorial/);
   await expect(
     page.getByRole("button", { name: "Use light appearance" }),
   ).toBeVisible();
@@ -29,6 +31,9 @@ test("defaults to dark and preserves an explicit light appearance", async ({
       page.evaluate(() => localStorage.getItem("herdr-web-appearance")),
     )
     .toBe("light");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("herdr-web-theme")))
+    .toBe("editorial-light");
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/light/);
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/light/);
@@ -38,11 +43,162 @@ test("defaults to dark and preserves an explicit light appearance", async ({
   );
 });
 
+test("migrates a saved appearance to an Editorial theme on first load", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem("herdr-web-theme");
+    localStorage.setItem("herdr-web-appearance", "light");
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await expect(page.locator("html")).toHaveClass(/theme-editorial/);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("herdr-web-theme")))
+    .toBe("editorial-light");
+});
+
+test("Settings offers four themes and preserves style when toggling appearance", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const themes = settings.getByRole("group", { name: "Theme" });
+  await expect(themes.getByRole("radio")).toHaveCount(4);
+  await expect(
+    themes.getByRole("radio", { name: /^Editorial Dark/ }),
+  ).toBeChecked();
+  await themes.getByRole("radio", { name: /^Classic Light/ }).click();
+  await settings.getByRole("button", { name: "Apply" }).click();
+
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await expect(page.locator("html")).toHaveClass(/theme-classic/);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("herdr-web-theme")))
+    .toBe("classic-light");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    "#f9f9f8",
+  );
+  const classicMetrics = await page.evaluate(() => {
+    const theme = document.querySelector(".herdr-web-theme") as Element;
+    return {
+      accent: getComputedStyle(theme).getPropertyValue("--amber-9").trim(),
+      brandFont: getComputedStyle(
+        document.querySelector(".brand-type strong") as Element,
+      ).fontFamily,
+      tabBorder: getComputedStyle(
+        document.querySelector(".session-tabs") as Element,
+      ).borderBottomWidth,
+      terminalRadius: getComputedStyle(
+        document.querySelector(".terminal-shell") as Element,
+      ).borderRadius,
+    };
+  });
+  expect(classicMetrics.accent).not.toBe("#9c3d2d");
+  expect(classicMetrics.brandFont).toContain("Bricolage Grotesque");
+  expect(classicMetrics.tabBorder).toBe("0px");
+  expect(classicMetrics.terminalRadius).toBe("10px");
+
+  await page.getByRole("button", { name: "Use dark appearance" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).toHaveClass(/theme-classic/);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("herdr-web-theme")))
+    .toBe("classic-dark");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    "#111110",
+  );
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(
+    page.getByRole("radio", { name: /^Classic Dark/ }),
+  ).toBeChecked();
+});
+
+test("Classic themes retain accessible controls, focus, and dialogs", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  for (const theme of ["classic-light", "classic-dark"] as const) {
+    await page.goto("/");
+    await page.evaluate((value) => {
+      localStorage.setItem("herdr-web-theme", value);
+      localStorage.setItem(
+        "herdr-web-appearance",
+        value.endsWith("-light") ? "light" : "dark",
+      );
+    }, theme);
+    await page.reload();
+
+    const command = page.getByRole("button", { name: "Open command palette" });
+    await command.focus();
+    const ratios = await command.evaluate((element) => {
+      const channels = (color: string) => {
+        const values =
+          color
+            .match(/[\d.]+/g)
+            ?.slice(0, 3)
+            .map(Number) ?? [];
+        return color.startsWith("color(")
+          ? values.map((value) => value * 255)
+          : values;
+      };
+      const luminance = (color: string) => {
+        const values = channels(color).map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return (
+          0.2126 * (values[0] ?? 0) +
+          0.7152 * (values[1] ?? 0) +
+          0.0722 * (values[2] ?? 0)
+        );
+      };
+      const contrast = (left: string, right: string) => {
+        const values = [luminance(left), luminance(right)].sort(
+          (a, b) => b - a,
+        );
+        return ((values[0] ?? 0) + 0.05) / ((values[1] ?? 0) + 0.05);
+      };
+      const styles = getComputedStyle(element);
+      return {
+        border: contrast(styles.borderColor, styles.backgroundColor),
+        focus: contrast(styles.outlineColor, styles.backgroundColor),
+        outlineStyle: styles.outlineStyle,
+      };
+    });
+    expect(ratios.border, `${theme} control border`).toBeGreaterThanOrEqual(3);
+    expect(ratios.focus, `${theme} focus`).toBeGreaterThanOrEqual(3);
+    expect(ratios.outlineStyle).toBe("solid");
+
+    await page.getByRole("button", { name: "Open details" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Session details" }),
+    ).toHaveCSS("box-shadow", /.+/);
+    expect(
+      await page
+        .getByRole("dialog", { name: "Session details" })
+        .evaluate((element) => getComputedStyle(element).boxShadow),
+    ).not.toBe("none");
+  }
+});
+
 test("desktop workbench gives the terminal priority", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem("herdr-web-appearance")) {
+    if (!localStorage.getItem("herdr-web-theme")) {
+      localStorage.setItem("herdr-web-theme", "editorial-light");
       localStorage.setItem("herdr-web-appearance", "light");
     }
   });
@@ -243,6 +399,7 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
     await page.goto("/");
     await page.evaluate((value) => {
       localStorage.setItem("herdr-web-appearance", value);
+      localStorage.setItem("herdr-web-theme", `editorial-${value}`);
     }, appearance);
     await page.reload();
     await expect(page.locator(".herdr-web-theme")).toHaveClass(
@@ -387,11 +544,19 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
 // Linux rasterization varies slightly between the Playwright image and hosted runners.
 const CROSS_PLATFORM_RENDERING_DIFF_PIXELS = 15_000;
 
-async function prepareVisual(page: Page, appearance: "light" | "dark") {
+type VisualTheme =
+  | "editorial-light"
+  | "editorial-dark"
+  | "classic-light"
+  | "classic-dark";
+
+async function prepareVisual(page: Page, theme: VisualTheme) {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript((value) => {
-    localStorage.setItem("herdr-web-appearance", value);
-  }, appearance);
+    const appearance = value.endsWith("-light") ? "light" : "dark";
+    localStorage.setItem("herdr-web-appearance", appearance);
+    localStorage.setItem("herdr-web-theme", value);
+  }, theme);
   await page.goto("/");
   await page.evaluate(async () => {
     await Promise.all([
@@ -404,7 +569,7 @@ async function prepareVisual(page: Page, appearance: "light" | "dark") {
 
 test("desktop light visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
-  await prepareVisual(page, "light");
+  await prepareVisual(page, "editorial-light");
   await expect(page).toHaveScreenshot("japanese-literary-desktop-light.png", {
     animations: "disabled",
     caret: "hide",
@@ -415,7 +580,7 @@ test("desktop light visual baseline", async ({ page }) => {
 
 test("desktop dark visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
-  await prepareVisual(page, "dark");
+  await prepareVisual(page, "editorial-dark");
   await expect(page).toHaveScreenshot("japanese-literary-desktop-dark.png", {
     animations: "disabled",
     caret: "hide",
@@ -426,8 +591,30 @@ test("desktop dark visual baseline", async ({ page }) => {
 
 test("mobile light visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await prepareVisual(page, "light");
+  await prepareVisual(page, "editorial-light");
   await expect(page).toHaveScreenshot("japanese-literary-mobile-light.png", {
+    animations: "disabled",
+    caret: "hide",
+    fullPage: true,
+    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
+  });
+});
+
+test("classic light visual baseline", async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 960 });
+  await prepareVisual(page, "classic-light");
+  await expect(page).toHaveScreenshot("classic-desktop-light.png", {
+    animations: "disabled",
+    caret: "hide",
+    fullPage: true,
+    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
+  });
+});
+
+test("classic dark visual baseline", async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 960 });
+  await prepareVisual(page, "classic-dark");
+  await expect(page).toHaveScreenshot("classic-desktop-dark.png", {
     animations: "disabled",
     caret: "hide",
     fullPage: true,

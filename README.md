@@ -21,8 +21,8 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
-- A restrained Japanese editorial appearance in warm paper and subdued sumi tones, with dark mode enabled by default and a saved light option.
-- Interactive terminals retain their independent high-contrast dark palette for reliable ANSI and TUI readability.
+- Four saved themes: Editorial Light and Dark use warm paper and subdued sumi tones, while Classic Light and Dark preserve the original Sand and Amber workbench.
+- Interactive terminals retain their independent high-contrast dark palette across every theme for reliable ANSI and TUI readability.
 - JetBrains Mono terminal text with bundled Nerd Font symbols, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback.
 - Browser-saved Compact, Default, and Comfortable terminal text sizes with focused-terminal zoom shortcuts.
 - Controller and optional independent viewer tokens, same-origin WebSockets, and short-lived one-use terminal tickets.
@@ -149,7 +149,8 @@ Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surfac
 
 Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
 
-Use **Menu** for saved appearance and terminal text-size settings, the workbench keybinding reference, and an explicit Herdr reload.
+Use **Menu → Settings** to choose Editorial Light, Editorial Dark, Classic Light, or Classic Dark and adjust terminal text size.
+Use **Menu** for the workbench keybinding reference and an explicit Herdr reload.
 
 Returning to a Space restores its last selected tab, while choosing a Needs input or Agents item opens that exact Agent.
 

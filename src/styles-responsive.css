@@ -186,7 +186,7 @@
     display: none;
   }
   .runtime-options,
-  .appearance-options,
+  .theme-options,
   .terminal-size-options {
     grid-template-columns: 1fr;
   }
