@@ -58,6 +58,73 @@ test("migrates a saved appearance to an Editorial theme on first load", async ({
     .toBe("editorial-light");
 });
 
+test("Editorial palette propagates into portalled Radix themes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const expectedThemes = {
+    light: {
+      buttonBackground: "rgb(156, 61, 45)",
+      selectedBackground: "rgb(245, 230, 225)",
+      tokens: {
+        "--amber-9": "#9c3d2d",
+        "--blue-9": "#405779",
+        "--grass-9": "#4c6540",
+        "--red-9": "#8f3040",
+        "--radius-4": "4px",
+      },
+    },
+    dark: {
+      buttonBackground: "rgb(241, 154, 132)",
+      selectedBackground: "rgb(56, 34, 29)",
+      tokens: {
+        "--amber-9": "#f19a84",
+        "--blue-9": "#a9c2ec",
+        "--grass-9": "#abc995",
+        "--red-9": "#f29aa5",
+        "--radius-4": "4px",
+      },
+    },
+  } as const;
+
+  for (const appearance of ["light", "dark"] as const) {
+    await page.goto("/");
+    await page.evaluate((value) => {
+      localStorage.setItem("herdr-web-appearance", value);
+      localStorage.setItem("herdr-web-theme", `editorial-${value}`);
+    }, appearance);
+    await page.reload();
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await expect(settings).toHaveClass(/radix-themes/);
+    await expect(settings).toHaveClass(new RegExp(appearance));
+    const palette = await settings.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return Object.fromEntries(
+        ["--amber-9", "--blue-9", "--grass-9", "--red-9", "--radius-4"].map(
+          (token) => [token, styles.getPropertyValue(token).trim()],
+        ),
+      );
+    });
+    expect(palette).toEqual(expectedThemes[appearance].tokens);
+
+    const selectedTheme = settings.locator(
+      '.theme-options label[data-selected="true"]',
+    );
+    await expect(selectedTheme).toHaveCSS(
+      "background-color",
+      expectedThemes[appearance].selectedBackground,
+    );
+    await expect(settings.getByRole("button", { name: "Apply" })).toHaveCSS(
+      "background-color",
+      expectedThemes[appearance].buttonBackground,
+    );
+  }
+});
+
 test("Settings offers four themes and preserves style when toggling appearance", async ({
   page,
 }) => {

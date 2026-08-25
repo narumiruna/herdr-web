@@ -6,7 +6,9 @@
 }
 
 .theme-editorial.light,
-.theme-editorial.light-theme {
+.theme-editorial.light-theme,
+.theme-editorial:is(.light, .light-theme)
+  :where(.radix-themes:is(.light, .light-theme)) {
   color-scheme: light;
   --paper: #f6f3ed;
   --raised-paper: #fffdfa;
@@ -84,7 +86,9 @@
 }
 
 .theme-editorial.dark,
-.theme-editorial.dark-theme {
+.theme-editorial.dark-theme,
+.theme-editorial:is(.dark, .dark-theme)
+  :where(.radix-themes:is(.dark, .dark-theme)) {
   color-scheme: dark;
   --paper: #11110f;
   --raised-paper: #1c1b18;
@@ -204,7 +208,8 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-.herdr-web-theme.theme-editorial {
+.herdr-web-theme.theme-editorial,
+.theme-editorial .radix-themes {
   --radius-1: 1px;
   --radius-2: 2px;
   --radius-3: 3px;
