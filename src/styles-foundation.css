@@ -1,0 +1,283 @@
+/* Japanese editorial foundation: warm paper, sumi ink, and restrained accents. */
+:root,
+.light,
+.light-theme {
+  font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --paper: #f6f3ed;
+  --raised-paper: #fffdfa;
+  --sumi: #26231f;
+  --secondary-ink: #625b52;
+  --fine-rule: #d3ccc1;
+  --control-border: #948b7e;
+  --indigo: #405779;
+  --indigo-fill: #e8edf4;
+  --vermilion: #9c3d2d;
+  --vermilion-fill: #f5e6e1;
+  --moss: #4c6540;
+  --moss-fill: #e8eee3;
+  --danger: #8f3040;
+  --danger-fill: #f4e4e7;
+  --focus: #365f91;
+  --canvas: var(--paper);
+  --panel: #f0ece4;
+  --panel-raised: var(--raised-paper);
+  --panel-muted: #e9e4db;
+  --border: var(--fine-rule);
+  --border-strong: var(--control-border);
+  --ink: var(--sumi);
+  --ink-secondary: var(--secondary-ink);
+  --ink-muted: var(--secondary-ink);
+  --muted: var(--secondary-ink);
+  --terminal: var(--raised-paper);
+  --terminal-panel: #f0ece4;
+  --terminal-elevated: #e7e1d7;
+  --terminal-border: var(--control-border);
+  --terminal-text: var(--sumi);
+  --terminal-muted: var(--secondary-ink);
+  --terminal-shadow: 0 8px 22px rgb(38 35 31 / 6%);
+  --brand-cutout: var(--canvas);
+  --focus-ring: var(--focus);
+  --shadow-small: 0 1px 1px rgb(38 35 31 / 8%);
+  --shadow-dialog: 0 24px 72px rgb(38 35 31 / 24%);
+  --sand-4: #e7e1d8;
+  --sand-7: var(--control-border);
+  --sand-8: #7d7469;
+  --sand-9: #6d665e;
+  --sand-10: #625b52;
+  --sand-11: var(--secondary-ink);
+  --sand-12: var(--sumi);
+  --amber-2: var(--vermilion-fill);
+  --amber-3: #eed8d1;
+  --amber-4: #e5c7bd;
+  --amber-6: #c98d7d;
+  --amber-7: #b96d5a;
+  --amber-8: #aa503d;
+  --amber-9: var(--vermilion);
+  --amber-10: #8d3527;
+  --amber-11: #843124;
+  --amber-12: #70291f;
+  --blue-2: var(--indigo-fill);
+  --blue-3: #dce4ef;
+  --blue-6: #9eafc6;
+  --blue-9: var(--indigo);
+  --blue-11: #374f70;
+  --blue-12: #304768;
+  --grass-2: var(--moss-fill);
+  --grass-3: #dce7d5;
+  --grass-6: #9daf91;
+  --grass-9: var(--moss);
+  --grass-10: #425b37;
+  --grass-11: #405a35;
+  --grass-12: #344b2c;
+  --red-3: var(--danger-fill);
+  --red-6: #ce929c;
+  --red-7: #bd7581;
+  --red-8: #a94f5e;
+  --red-9: var(--danger);
+  --red-11: #802a39;
+  --red-12: #702433;
+}
+
+.dark,
+.dark-theme {
+  color-scheme: dark;
+  --paper: #11110f;
+  --raised-paper: #1c1b18;
+  --sumi: #eeeae1;
+  --secondary-ink: #bbb4a8;
+  --fine-rule: #34322d;
+  --control-border: #706b61;
+  --indigo: #a9c2ec;
+  --indigo-fill: #222a36;
+  --vermilion: #f19a84;
+  --vermilion-fill: #38221d;
+  --moss: #abc995;
+  --moss-fill: #263022;
+  --danger: #f29aa5;
+  --danger-fill: #382126;
+  --focus: #dfaa72;
+  --canvas: var(--paper);
+  --panel: #171713;
+  --panel-raised: var(--raised-paper);
+  --panel-muted: #24231f;
+  --border: var(--fine-rule);
+  --border-strong: var(--control-border);
+  --ink: var(--sumi);
+  --ink-secondary: var(--secondary-ink);
+  --ink-muted: var(--secondary-ink);
+  --muted: var(--secondary-ink);
+  --terminal: var(--paper);
+  --terminal-panel: #191916;
+  --terminal-elevated: #262520;
+  --terminal-border: var(--control-border);
+  --terminal-text: var(--sumi);
+  --terminal-muted: var(--secondary-ink);
+  --brand-cutout: var(--canvas);
+  --focus-ring: var(--focus);
+  --shadow-small: 0 1px 1px rgb(0 0 0 / 34%);
+  --terminal-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  --sand-4: #292824;
+  --sand-7: var(--control-border);
+  --sand-8: #827b70;
+  --sand-9: #9b9489;
+  --sand-10: #aaa398;
+  --sand-11: var(--secondary-ink);
+  --sand-12: var(--sumi);
+  --amber-2: var(--vermilion-fill);
+  --amber-3: #462821;
+  --amber-4: #563027;
+  --amber-6: #844c3e;
+  --amber-7: #a8614f;
+  --amber-8: #d27e68;
+  --amber-9: var(--vermilion);
+  --amber-10: #f3a28e;
+  --amber-11: #f6ab98;
+  --amber-12: #ffc4b5;
+  --blue-2: var(--indigo-fill);
+  --blue-3: #293446;
+  --blue-6: #506888;
+  --blue-9: var(--indigo);
+  --blue-11: #bad0f3;
+  --blue-12: #ceddf6;
+  --grass-2: var(--moss-fill);
+  --grass-3: #2e3b28;
+  --grass-6: #5f7953;
+  --grass-9: var(--moss);
+  --grass-10: #b7d5a2;
+  --grass-11: #c1dcaf;
+  --grass-12: #d2e9c4;
+  --red-3: var(--danger-fill);
+  --red-6: #854c57;
+  --red-7: #a45c69;
+  --red-8: #d47d89;
+  --red-9: var(--danger);
+  --red-11: #f6aab4;
+  --red-12: #ffc1c8;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+body {
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  color: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="option"]:focus-visible,
+[role="separator"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.herdr-web-theme {
+  --radius-1: 1px;
+  --radius-2: 2px;
+  --radius-3: 3px;
+  --radius-4: 4px;
+  --radius-5: 5px;
+  --radius-6: 6px;
+}
+
+.session-tabs [role="tab"]:focus-visible,
+.terminal-shell button:focus-visible,
+.dialog-content button:focus-visible {
+  outline-offset: -3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 220px 6px minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  background: var(--canvas);
+}
+
+.app-surface {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.detached-pane-shell {
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--canvas);
+}
+
+.detached-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.detached-pane-header > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.detached-pane-header strong,
+.detached-pane-header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detached-pane-header span {
+  color: var(--muted);
+  font-size: 12px;
+}

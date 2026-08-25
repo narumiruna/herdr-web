@@ -21,7 +21,8 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
-- Dark appearance by default with a saved light option, while interactive terminals stay on a high-contrast dark palette for reliable ANSI and TUI readability.
+- A restrained Japanese editorial appearance in warm paper and subdued sumi tones, with dark mode enabled by default and a saved light option.
+- Interactive terminals retain their independent high-contrast dark palette for reliable ANSI and TUI readability.
 - JetBrains Mono terminal text with bundled Nerd Font symbols, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback.
 - Browser-saved Compact, Default, and Comfortable terminal text sizes with focused-terminal zoom shortcuts.
 - Controller and optional independent viewer tokens, same-origin WebSockets, and short-lived one-use terminal tickets.

@@ -177,6 +177,15 @@ for (const deviceScaleFactor of [1, 2]) {
           .locator(".interactive-terminal-state")
           .filter({ hasText: "Interactive" }),
       ).toBeVisible();
+      const terminalAction = page
+        .locator(".interactive-terminal-actions button:not(:disabled)")
+        .first();
+      await terminalAction.focus();
+      await expect(terminalAction).toHaveCSS("outline-width", "2px");
+      await expect(terminalAction).toHaveCSS(
+        "outline-color",
+        "rgb(223, 170, 114)",
+      );
       await expect(page.locator(".xterm-accessibility-tree")).toContainText(
         "herdr-web",
       );
