@@ -1,0 +1,227 @@
+@media (max-width: 1100px) {
+  .connection-state {
+    display: none;
+  }
+}
+
+@media (max-width: 840px) {
+  .app-shell,
+  .connection-screen,
+  .loading-workbench {
+    padding-right: env(safe-area-inset-right);
+    padding-left: env(safe-area-inset-left);
+  }
+  .app-shell {
+    display: block;
+  }
+  .app-surface {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .desktop-sidebar,
+  .sidebar-resize-handle {
+    display: none;
+  }
+  .topbar {
+    min-height: calc(60px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+  }
+  .topbar .mobile-nav-trigger {
+    display: inline-flex;
+  }
+  .topbar-context .mobile-brand-mark {
+    display: inline-flex;
+  }
+  .mobile-brand-mark .brand-mark {
+    width: 28px;
+    height: 28px;
+  }
+  .topbar-context {
+    gap: 7px;
+  }
+  .topbar-context > strong {
+    display: block;
+  }
+  .spaces-actions {
+    min-height: 52px;
+  }
+  .spaces-actions button,
+  .agent-sort-control .rt-SegmentedControlItem {
+    min-height: 44px;
+  }
+  .spaces-actions button {
+    min-width: 44px;
+    justify-content: center;
+  }
+  .agent-panel-heading {
+    min-height: 52px;
+  }
+  .agent-sort-control {
+    height: 44px;
+  }
+  .main-workspace {
+    padding: 12px 13px 13px;
+  }
+  .loading-workbench {
+    display: block;
+  }
+  .loading-sidebar {
+    display: none;
+  }
+  .loading-surface {
+    height: 100dvh;
+  }
+}
+
+@media (max-width: 700px) {
+  .topbar-actions .desktop-new-agent,
+  .topbar-actions .desktop-details,
+  .topbar-actions .desktop-appearance,
+  .topbar-actions .desktop-notifications {
+    display: none;
+  }
+  .topbar-actions .mobile-more-trigger {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 620px) {
+  .dialog-content {
+    max-width: calc(
+      100vw -
+      max(8px, env(safe-area-inset-left)) -
+      max(8px, env(safe-area-inset-right))
+    );
+  }
+  .topbar {
+    gap: 8px;
+    padding: env(safe-area-inset-top) 8px 0;
+  }
+  .topbar-context > strong {
+    display: none;
+  }
+  .topbar-actions {
+    gap: 5px;
+  }
+  .work-status-summary {
+    display: none;
+  }
+  .topbar-actions > .rt-Button {
+    min-height: 44px;
+    padding-inline: 10px;
+    font-size: 11px;
+  }
+  .command-button {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+  .command-button span,
+  .command-button kbd {
+    display: none;
+  }
+  .topbar-actions .rt-IconButton,
+  .topbar .mobile-nav-trigger,
+  .dialog-close {
+    width: 44px;
+    height: 44px;
+  }
+  .main-workspace {
+    gap: 8px;
+    padding: 9px 8px max(8px, env(safe-area-inset-bottom));
+  }
+  .workspace-copy-cwd {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+  .terminal-toolbar-location {
+    max-width: none;
+  }
+  .terminal-toolbar-branch,
+  .terminal-toolbar-title,
+  .terminal-status-detail {
+    display: none;
+  }
+  .workspace-cwd-full {
+    display: none;
+  }
+  .workspace-cwd-compact {
+    display: inline;
+  }
+  .attention-banner {
+    min-height: 42px;
+    padding: 6px 9px;
+  }
+  .attention-banner span {
+    max-width: 75vw;
+  }
+  .terminal-shell {
+    min-height: 220px;
+    border-radius: 3px;
+  }
+  .reconnect-banner,
+  .launch-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 8px 10px;
+  }
+  .reconnect-banner > span {
+    align-items: flex-start;
+  }
+  .dialog-content {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .dialog-heading {
+    padding: 15px;
+  }
+  .details-dialog,
+  .mobile-navigation-dialog {
+    width: min(94vw, 360px);
+    max-height: none;
+  }
+  .session-location code {
+    display: none;
+  }
+  .runtime-options,
+  .theme-options,
+  .terminal-size-options {
+    grid-template-columns: 1fr;
+  }
+  .space-form,
+  .settings-form,
+  .keybindings-content {
+    padding-inline: 15px;
+  }
+  .command-footer span:first-child {
+    display: none;
+  }
+  .connection-card {
+    padding: 30px 20px;
+  }
+  .connection-form {
+    flex-direction: column;
+  }
+}
+
+@media (max-height: 700px) and (min-width: 621px) {
+  .main-workspace {
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .attention-banner {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay,
+  .dialog-content,
+  .connection-spinner,
+  .skeleton {
+    animation: none;
+  }
+}

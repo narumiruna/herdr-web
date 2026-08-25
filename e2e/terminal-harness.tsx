@@ -1,18 +1,6 @@
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/600.css";
-import "@radix-ui/themes/styles.css";
-import "@radix-ui/colors/amber.css";
-import "@radix-ui/colors/amber-dark.css";
-import "@radix-ui/colors/grass.css";
-import "@radix-ui/colors/grass-dark.css";
-import "@radix-ui/colors/red.css";
-import "@radix-ui/colors/red-dark.css";
-import "@radix-ui/colors/sand.css";
-import "@radix-ui/colors/sand-dark.css";
-import "@xterm/xterm/css/xterm.css";
-import "../src/styles.css";
-import "../src/styles-workbench.css";
-import "../src/styles-overlays.css";
+import "../src/styles-entry";
 import { Theme } from "@radix-ui/themes";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -147,7 +135,12 @@ function HarnessTerminal({
 
 const split = new URL(window.location.href).searchParams.has("split");
 createRoot(root).render(
-  <Theme appearance="dark" accentColor="amber" grayColor="sand">
+  <Theme
+    appearance="dark"
+    accentColor="amber"
+    grayColor="sand"
+    className="herdr-web-theme theme-editorial"
+  >
     <div style={{ display: "flex", width: "100%", height: "100dvh" }}>
       {split && <HarnessTerminal focused={false} paneId="w5:p1" />}
       <HarnessTerminal focused paneId={split ? "w5:p2" : "w5:p1"} />

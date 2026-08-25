@@ -1,0 +1,170 @@
+/* Pre-editorial Sand and Amber visual style, selectable from Settings. */
+.theme-classic.light,
+.theme-classic.light-theme {
+  color-scheme: light;
+  --canvas: var(--sand-2);
+  --panel: var(--sand-1);
+  --panel-raised: #fff;
+  --panel-muted: var(--sand-3);
+  --border: var(--sand-6);
+  --border-strong: #948b7e;
+  --ink: var(--sand-12);
+  --ink-secondary: var(--sand-11);
+  --ink-muted: var(--sand-11);
+  --muted: var(--sand-11);
+  --terminal: var(--sand-1);
+  --terminal-panel: var(--sand-2);
+  --terminal-elevated: var(--sand-4);
+  --terminal-border: var(--sand-7);
+  --terminal-text: var(--sand-12);
+  --terminal-muted: var(--sand-11);
+  --terminal-shadow: 0 8px 24px rgb(42 38 29 / 7%);
+  --brand-cutout: var(--canvas);
+  --focus-ring: #365f91;
+  --shadow-small: 0 1px 2px rgb(33 30 22 / 7%), 0 8px 24px rgb(33 30 22 / 5%);
+  --shadow-dialog: 0 24px 90px rgb(20 18 13 / 30%);
+}
+
+.theme-classic.dark,
+.theme-classic.dark-theme {
+  color-scheme: dark;
+  --canvas: var(--sand-1);
+  --panel: var(--sand-2);
+  --panel-raised: var(--sand-3);
+  --panel-muted: var(--sand-3);
+  --border: var(--sand-6);
+  --border-strong: #706b61;
+  --ink: var(--sand-12);
+  --ink-secondary: var(--sand-11);
+  --ink-muted: var(--sand-11);
+  --muted: var(--sand-11);
+  --terminal: var(--sand-1);
+  --terminal-panel: var(--sand-2);
+  --terminal-elevated: var(--sand-4);
+  --terminal-border: var(--sand-7);
+  --terminal-text: var(--sand-12);
+  --terminal-muted: var(--sand-11);
+  --brand-cutout: var(--canvas);
+  --focus-ring: #dfaa72;
+  --shadow-small: 0 1px 2px rgb(0 0 0 / 26%), 0 8px 28px rgb(0 0 0 / 12%);
+  --shadow-dialog: 0 24px 90px rgb(20 18 13 / 30%);
+  --terminal-shadow: 0 8px 28px rgb(0 0 0 / 18%);
+}
+
+.theme-classic .brand-mark {
+  color: var(--ink);
+}
+.theme-classic .brand-type strong {
+  font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.05em;
+}
+.theme-classic .attention-item {
+  border-radius: 10px;
+}
+.theme-classic .workspace-item {
+  border-radius: 9px;
+}
+.theme-classic .workspace-glyph,
+.theme-classic .command-result-icon {
+  border-radius: 8px;
+  box-shadow: var(--shadow-small);
+}
+.theme-classic .agent-item {
+  border-radius: 8px;
+}
+.theme-classic .scrollbar-thumb {
+  border-radius: 10px;
+}
+.theme-classic .status-pill,
+.theme-classic .work-status-summary span {
+  border-radius: 999px;
+}
+.theme-classic .topbar {
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+}
+.theme-classic .command-button {
+  border-radius: 8px;
+  box-shadow: var(--shadow-small);
+}
+.theme-classic .attention-banner {
+  border-radius: 9px;
+}
+.theme-classic .empty-workbench h1,
+.theme-classic .connection-card h1 {
+  font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.theme-classic .session-tabs {
+  border-bottom: 0;
+  background: var(--panel);
+}
+.theme-classic .session-tab {
+  border-radius: 7px 7px 0 0;
+}
+.theme-classic .session-tab[data-state="active"] {
+  box-shadow: inset 0 -2px 0 var(--amber-9);
+}
+.theme-classic .session-tabs-scrollbar-thumb {
+  border-radius: 4px;
+}
+.theme-classic .terminal-shell {
+  border-radius: 10px;
+}
+.theme-classic
+  .pane-grid[data-split="true"]
+  .terminal-pane[data-focused="true"] {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--amber-9) 60%, transparent);
+}
+.theme-classic .pane-close {
+  border-radius: 6px;
+}
+.theme-classic .terminal-scrollbar-thumb {
+  border-radius: 8px;
+}
+.theme-classic .interactive-terminal-tools {
+  border-bottom: 0;
+}
+.theme-classic .interactive-terminal-actions button {
+  border-radius: 6px;
+}
+.theme-classic .composer-attach {
+  border-radius: 7px;
+}
+.theme-classic .composer-attachment {
+  border-radius: 8px;
+}
+.theme-classic .bare-icon {
+  border-radius: 8px;
+}
+.theme-classic .dialog-content {
+  border-radius: 14px;
+}
+.theme-classic .dialog-heading {
+  position: static;
+  background: transparent;
+}
+.theme-classic .dialog-heading h2 {
+  font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+.theme-classic .command-search {
+  border-radius: 8px;
+}
+.theme-classic .mobile-actions-dialog {
+  border-radius: 14px;
+}
+.theme-classic .connection-card {
+  border-radius: 18px;
+}
+
+@media (max-width: 620px) {
+  .theme-classic .terminal-shell {
+    border-radius: 9px;
+  }
+}

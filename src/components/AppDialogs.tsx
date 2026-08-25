@@ -14,6 +14,11 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeWorkspacePath, workspaceLabelFromPath } from "../herdr-api";
 import type { Agent, HerdrState, RuntimeName, Workspace } from "../state";
 import { TERMINAL_FONT_SIZE_PRESETS } from "../terminal-preferences";
+import {
+  themeAppearance,
+  WORKBENCH_THEMES,
+  type WorkbenchTheme,
+} from "../theme-preferences";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
 
@@ -604,8 +609,8 @@ export function NewSpaceDialog({
 }
 
 interface SettingsPreferences {
-  appearance: "light" | "dark";
   terminalFontSize: number;
+  theme: WorkbenchTheme;
 }
 
 interface SettingsDialogProps extends SettingsPreferences {
@@ -615,20 +620,20 @@ interface SettingsDialogProps extends SettingsPreferences {
 }
 
 export function SettingsDialog({
-  appearance,
   open,
   terminalFontSize,
+  theme,
   onOpenChange,
   onApply,
 }: SettingsDialogProps) {
-  const [draftAppearance, setDraftAppearance] = useState(appearance);
+  const [draftTheme, setDraftTheme] = useState(theme);
   const [draftFontSize, setDraftFontSize] = useState(terminalFontSize);
 
   useEffect(() => {
     if (!open) return;
-    setDraftAppearance(appearance);
+    setDraftTheme(theme);
     setDraftFontSize(terminalFontSize);
-  }, [appearance, open, terminalFontSize]);
+  }, [open, terminalFontSize, theme]);
 
   return (
     <RadixDialog
@@ -643,42 +648,34 @@ export function SettingsDialog({
         onSubmit={(event) => {
           event.preventDefault();
           onApply({
-            appearance: draftAppearance,
             terminalFontSize: draftFontSize,
+            theme: draftTheme,
           });
           onOpenChange(false);
         }}
       >
-        <fieldset className="appearance-options">
-          <legend>Appearance</legend>
-          <label data-selected={draftAppearance === "dark"}>
-            <input
-              type="radio"
-              name="appearance"
-              value="dark"
-              checked={draftAppearance === "dark"}
-              onChange={() => setDraftAppearance("dark")}
-            />
-            <MoonIcon aria-hidden="true" />
-            <span>
-              <strong>Dark</strong>
-              <small>Optimized for terminal contrast.</small>
-            </span>
-          </label>
-          <label data-selected={draftAppearance === "light"}>
-            <input
-              type="radio"
-              name="appearance"
-              value="light"
-              checked={draftAppearance === "light"}
-              onChange={() => setDraftAppearance("light")}
-            />
-            <SunIcon aria-hidden="true" />
-            <span>
-              <strong>Light</strong>
-              <small>Light navigation with a dark interactive terminal.</small>
-            </span>
-          </label>
+        <fieldset className="theme-options">
+          <legend>Theme</legend>
+          {WORKBENCH_THEMES.map(({ description, label, theme: option }) => (
+            <label key={option} data-selected={draftTheme === option}>
+              <input
+                type="radio"
+                name="theme"
+                value={option}
+                checked={draftTheme === option}
+                onChange={() => setDraftTheme(option)}
+              />
+              {themeAppearance(option) === "light" ? (
+                <SunIcon aria-hidden="true" />
+              ) : (
+                <MoonIcon aria-hidden="true" />
+              )}
+              <span>
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+            </label>
+          ))}
         </fieldset>
         <fieldset className="terminal-size-options">
           <legend>
