@@ -384,6 +384,9 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
   expect(fontState.semiboldFaces).toBeGreaterThan(0);
 });
 
+// Linux rasterization varies slightly between the Playwright image and hosted runners.
+const CROSS_PLATFORM_RENDERING_DIFF_PIXELS = 15_000;
+
 async function prepareVisual(page: Page, appearance: "light" | "dark") {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript((value) => {
@@ -406,6 +409,7 @@ test("desktop light visual baseline", async ({ page }) => {
     animations: "disabled",
     caret: "hide",
     fullPage: true,
+    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
   });
 });
 
@@ -416,6 +420,7 @@ test("desktop dark visual baseline", async ({ page }) => {
     animations: "disabled",
     caret: "hide",
     fullPage: true,
+    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
   });
 });
 
@@ -426,6 +431,7 @@ test("mobile light visual baseline", async ({ page }) => {
     animations: "disabled",
     caret: "hide",
     fullPage: true,
+    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
   });
 });
 
