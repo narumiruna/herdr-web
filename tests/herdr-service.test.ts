@@ -535,7 +535,7 @@ branch refs/heads/narumi/feat/tree
         },
         { timeoutMs: 300_000 },
       ],
-      ["integration.install", { target: "qwen" }],
+      ["integration.install", { target: "qwen" }, { timeoutMs: 300_000 }],
     ]);
   });
 

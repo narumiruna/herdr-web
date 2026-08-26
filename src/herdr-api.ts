@@ -6,8 +6,8 @@ interface ApiErrorBody {
   error?: { code?: string; message?: string };
 }
 
-const AGENT_CREATION_TIMEOUT_MS = 70_000;
-const PLUGIN_ACTION_TIMEOUT_MS = 305_000;
+const AGENT_CREATION_TIMEOUT_MS = 140_000;
+const RUNTIME_MUTATION_TIMEOUT_MS = 305_000;
 
 export class HerdrBridgeError extends Error {
   readonly code: string;
@@ -276,7 +276,7 @@ export class HerdrApiClient {
       {
         body: "{}",
         method: "POST",
-        signal: AbortSignal.timeout(PLUGIN_ACTION_TIMEOUT_MS),
+        signal: AbortSignal.timeout(RUNTIME_MUTATION_TIMEOUT_MS),
       },
     );
   }
@@ -287,7 +287,11 @@ export class HerdrApiClient {
   ): Promise<unknown> {
     return this.request(
       `/api/herdr/integrations/${encodeURIComponent(target)}`,
-      { body: JSON.stringify({ action }), method: "POST" },
+      {
+        body: JSON.stringify({ action }),
+        method: "POST",
+        signal: AbortSignal.timeout(RUNTIME_MUTATION_TIMEOUT_MS),
+      },
     );
   }
 

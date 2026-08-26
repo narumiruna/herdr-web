@@ -85,4 +85,42 @@ describe("RuntimeManagementDialog", () => {
       expect(manageIntegration).toHaveBeenCalledWith("qwen", "install"),
     );
   });
+
+  test("keeps an in-flight plugin action pending across dialog visibility changes", async () => {
+    let resolveInvoke!: () => void;
+    const invocation = new Promise<void>((resolve) => {
+      resolveInvoke = resolve;
+    });
+    const load = vi.fn().mockResolvedValue(management);
+    const invoke = vi.fn(() => invocation);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    const dialog = (open: boolean) => (
+      <RuntimeManagementDialog
+        open={open}
+        onOpenChange={vi.fn()}
+        load={load}
+        onInvokePluginAction={invoke}
+        onManageIntegration={vi.fn()}
+        onSetPluginEnabled={vi.fn()}
+      />
+    );
+    const { rerender } = render(dialog(true));
+
+    expect(await screen.findByText("Example board")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    rerender(dialog(false));
+    expect(screen.queryByRole("dialog", { name: "Herdr runtime" })).toBeNull();
+    rerender(dialog(true));
+
+    const run = await screen.findByRole("button", { name: "Run" });
+    expect(run).toBeDisabled();
+    await user.click(run);
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    resolveInvoke();
+    await waitFor(() => expect(run).toBeEnabled());
+  });
 });

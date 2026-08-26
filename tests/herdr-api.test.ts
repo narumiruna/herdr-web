@@ -35,7 +35,7 @@ describe("workspace paths", () => {
 });
 
 describe("Herdr API requests", () => {
-  test("allows Agent creation to outlive the bridge timeout", async () => {
+  test("allows Agent creation to cover startup and readiness", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ type: "agent_started" }), {
@@ -53,7 +53,7 @@ describe("Herdr API requests", () => {
       workspaceId: "w1",
     });
 
-    expect(timeout).toHaveBeenCalledWith(70_000);
+    expect(timeout).toHaveBeenCalledWith(140_000);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/herdr/sessions",
       expect.objectContaining({
@@ -103,6 +103,9 @@ describe("Herdr API requests", () => {
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.headers).toMatchObject({ authorization: "Bearer secret" });
     }
-    expect(timeout).toHaveBeenCalledWith(305_000);
+    expect(timeout).toHaveBeenCalledTimes(3);
+    expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 305_000);
+    expect(timeout).toHaveBeenNthCalledWith(3, 305_000);
   });
 });

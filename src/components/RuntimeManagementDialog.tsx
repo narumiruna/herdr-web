@@ -88,7 +88,6 @@ export function RuntimeManagementDialog({
 
   useEffect(() => {
     if (!open) {
-      setPending("");
       setError("");
       setNotice("");
       return;

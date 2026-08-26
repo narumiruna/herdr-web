@@ -118,7 +118,7 @@ const STRUCTURAL_SUBSCRIPTIONS = [
   "layout.updated",
 ].map((type) => ({ type }));
 
-const PLUGIN_ACTION_TIMEOUT_MS = 300_000;
+const RUNTIME_MUTATION_TIMEOUT_MS = 300_000;
 
 const RUNTIMES: Record<
   string,
@@ -426,7 +426,7 @@ export class LiveHerdrService {
         action_id: actionId,
         context: { invocation_source: "herdr-web" },
       },
-      { timeoutMs: PLUGIN_ACTION_TIMEOUT_MS },
+      { timeoutMs: RUNTIME_MUTATION_TIMEOUT_MS },
     );
   }
 
@@ -434,7 +434,11 @@ export class LiveHerdrService {
     target: string,
     action: IntegrationAction,
   ): Promise<unknown> {
-    return this.client.request(`integration.${action}`, { target });
+    return this.client.request(
+      `integration.${action}`,
+      { target },
+      { timeoutMs: RUNTIME_MUTATION_TIMEOUT_MS },
+    );
   }
 
   splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown> {
