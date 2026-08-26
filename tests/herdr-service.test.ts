@@ -227,7 +227,10 @@ branch refs/heads/narumi/feat/tree
   test("subscribes only to structural control-plane events", async () => {
     const subscribe = vi.fn().mockResolvedValue(undefined);
     const request = vi.fn().mockResolvedValue({
-      snapshot: { panes: [{ pane_id: "w5:p1" }] },
+      snapshot: {
+        agents: [{ pane_id: "w5:p1" }],
+        panes: [{ pane_id: "w5:p1" }, { pane_id: "w5:p2" }],
+      },
       type: "session_snapshot",
     });
     const service = new LiveHerdrService({
@@ -258,6 +261,26 @@ branch refs/heads/narumi/feat/tree
     expect(JSON.stringify(subscribe.mock.calls[0]?.[1])).not.toContain(
       "pane.output",
     );
+    expect(JSON.stringify(subscribe.mock.calls[0]?.[1])).not.toContain(
+      '"pane_id":"w5:p2","type":"pane.agent_status_changed"',
+    );
+  });
+
+  test("reports status subscription truncation from the detected Agent list", async () => {
+    const agents = Array.from({ length: 513 }, (_, index) => ({
+      pane_id: `w5:p${index + 1}`,
+    }));
+    const request = vi.fn().mockResolvedValueOnce({
+      snapshot: { agents, panes: [] },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService({
+      request,
+    } as unknown as HerdrClient);
+
+    await expect(service.getState()).resolves.toMatchObject({
+      capabilities: { statusSubscriptionsTruncated: true },
+    });
   });
 
   test("splits a pane in Herdr's requested direction", async () => {

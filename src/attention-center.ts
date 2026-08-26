@@ -268,11 +268,18 @@ export function useAttentionCenter({
   useEffect(() => {
     const onServiceWorkerMessage = (event: MessageEvent) => {
       const data = event.data as { type?: string; url?: string } | undefined;
-      if (data?.type !== "notification.navigate" || !data.url) return;
+      if (!data?.url) return;
       const url = new URL(data.url, window.location.href);
       const agentId = url.searchParams.get("session") ?? "";
       const paneId = url.searchParams.get("pane") ?? "";
-      if (agentId) onOpenAgent(agentId, paneId);
+      const canNavigate = state.agents.some(({ id }) => id === agentId);
+      if (data.type === "notification.can-navigate") {
+        event.ports[0]?.postMessage({ canNavigate });
+        return;
+      }
+      if (data.type === "notification.navigate" && canNavigate) {
+        onOpenAgent(agentId, paneId);
+      }
     };
     navigator.serviceWorker?.addEventListener(
       "message",
@@ -283,7 +290,7 @@ export function useAttentionCenter({
         "message",
         onServiceWorkerMessage,
       );
-  }, [onOpenAgent]);
+  }, [onOpenAgent, state.agents]);
 
   useEffect(() => {
     const timestamp = Date.now();

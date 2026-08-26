@@ -443,7 +443,10 @@ describe("herdr HTTP bridge", () => {
             tab_id: "w5:t1",
           },
         ],
-        panes: [{ pane_id: "w5:p1", tab_id: "w5:t1" }],
+        panes: [
+          { pane_id: "w5:p1", tab_id: "w5:t1" },
+          { pane_id: "w5:p2", tab_id: "w5:t1" },
+        ],
       },
     });
     const tickets = new TerminalTicketStore();
@@ -472,6 +475,21 @@ describe("herdr HTTP bridge", () => {
       paneId: "w5:p1",
       purpose: "attention-reply",
     });
+
+    const splitPane = await fetch(
+      `${baseUrl}/api/herdr/panes/w5%3Ap2/terminal-ticket`,
+      {
+        body: JSON.stringify({
+          cols: 80,
+          mode: "control",
+          purpose: "attention-reply",
+          rows: 24,
+        }),
+        headers,
+        method: "POST",
+      },
+    );
+    expect(splitPane.status).toBe(409);
 
     vi.mocked(service.getState).mockResolvedValue({
       snapshot: {

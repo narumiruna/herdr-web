@@ -75,8 +75,15 @@ export function usePlatform(keepAwake: boolean, connection: RuntimeConnection) {
   useEffect(() => {
     let cancelled = false;
     let requestPending = false;
+    let retryTimer: number | undefined;
     const lockApi = (navigator as Navigator & { wakeLock?: WakeLockLike })
       .wakeLock;
+    const eligible = () =>
+      !cancelled &&
+      keepAwake &&
+      connection === "connected" &&
+      document.visibilityState === "visible" &&
+      Boolean(lockApi);
     const release = async () => {
       const current = wakeLock.current;
       wakeLock.current = undefined;
@@ -85,25 +92,11 @@ export function usePlatform(keepAwake: boolean, connection: RuntimeConnection) {
       setWakeLockActive(false);
     };
     const request = async () => {
-      if (
-        !keepAwake ||
-        connection !== "connected" ||
-        document.visibilityState !== "visible" ||
-        !lockApi ||
-        wakeLock.current ||
-        requestPending
-      ) {
-        return;
-      }
+      if (!eligible() || wakeLock.current || requestPending || !lockApi) return;
       requestPending = true;
       try {
         const sentinel = await lockApi.request("screen");
-        if (
-          cancelled ||
-          !keepAwake ||
-          connection !== "connected" ||
-          document.visibilityState !== "visible"
-        ) {
+        if (!eligible()) {
           await sentinel.release().catch(() => undefined);
           return;
         }
@@ -112,8 +105,12 @@ export function usePlatform(keepAwake: boolean, connection: RuntimeConnection) {
         sentinel.addEventListener(
           "release",
           () => {
-            if (wakeLock.current === sentinel) wakeLock.current = undefined;
+            if (wakeLock.current !== sentinel) return;
+            wakeLock.current = undefined;
             setWakeLockActive(false);
+            if (eligible()) {
+              retryTimer = window.setTimeout(() => void request(), 0);
+            }
           },
           { once: true },
         );
@@ -131,6 +128,7 @@ export function usePlatform(keepAwake: boolean, connection: RuntimeConnection) {
     void request();
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       document.removeEventListener("visibilitychange", visibility);
       void release();
     };

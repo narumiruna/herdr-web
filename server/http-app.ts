@@ -459,41 +459,40 @@ function blockedAgentOwnsPane(state: unknown, paneId: string): boolean {
     return false;
   }
   const source = snapshot as {
-    agents?: Array<{
-      agent_status?: unknown;
-      pane_id?: unknown;
-      tab_id?: unknown;
-    }>;
-    panes?: Array<{ pane_id?: unknown; tab_id?: unknown }>;
+    agents?: Array<{ agent_status?: unknown; pane_id?: unknown }>;
   };
-  const pane = source.panes?.find(({ pane_id: id }) => id === paneId);
   return (
     source.agents?.some(
-      (agent) =>
-        agent.agent_status === "blocked" &&
-        (agent.pane_id === paneId ||
-          (pane?.tab_id !== undefined && agent.tab_id === pane.tab_id)),
+      (agent) => agent.agent_status === "blocked" && agent.pane_id === paneId,
     ) === true
   );
 }
 
-function shareEventAllowed(event: unknown, scope: ShareScope): boolean {
+function shareEventAllowed(
+  event: unknown,
+  scope: ShareScope,
+  state: unknown,
+): boolean {
   if (!event || typeof event !== "object" || Array.isArray(event)) return false;
   const data = (event as { data?: unknown }).data;
   if (!data || typeof data !== "object" || Array.isArray(data)) return false;
   const fields = data as Record<string, unknown>;
-  if (fields.workspace_id !== scope.workspaceId) return false;
+  if (
+    typeof fields.workspace_id === "string" &&
+    fields.workspace_id !== scope.workspaceId
+  ) {
+    return false;
+  }
+  if (typeof fields.pane_id === "string") {
+    return shareScopeAllowsPane(state, scope, fields.pane_id);
+  }
   if (scope.paneId) {
-    return fields.pane_id === scope.paneId;
+    return fields.target === scope.paneId;
   }
   if (scope.agentId) {
-    return (
-      fields.pane_id === scope.agentId ||
-      fields.agent_id === scope.agentId ||
-      fields.target === scope.agentId
-    );
+    return fields.agent_id === scope.agentId || fields.target === scope.agentId;
   }
-  return true;
+  return fields.workspace_id === scope.workspaceId;
 }
 
 function errorResponse(response: ServerResponse, error: unknown): void {
@@ -612,13 +611,16 @@ export function createHerdrHttpHandler({
             : undefined;
         response.once("close", () => controller.abort());
         try {
+          const shareState = principal.share
+            ? await service.getState()
+            : undefined;
           await service.subscribeEvents(
             controller.signal,
             (event) => {
               if (response.writableEnded) return;
               if (
                 principal.share &&
-                !shareEventAllowed(event, principal.share.scope)
+                !shareEventAllowed(event, principal.share.scope, shareState)
               ) {
                 return;
               }

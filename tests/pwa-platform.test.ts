@@ -2,6 +2,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
+import { MessageChannel } from "node:worker_threads";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createStaticHandler } from "../server/static-files";
@@ -70,6 +72,65 @@ describe("PWA platform shell", () => {
     expect(worker).not.toContain("caches.open");
   });
 
+  test("routes notification clicks to a client that confirms the target Agent", async () => {
+    const handlers = new Map<
+      string,
+      (event: Record<string, unknown>) => void
+    >();
+    const clients = [false, true].map((canNavigate) => ({
+      focus: vi.fn().mockResolvedValue(undefined),
+      postMessage: vi.fn(
+        (message: { type?: string }, ports?: MessagePort[]) => {
+          if (message.type === "notification.can-navigate") {
+            ports?.[0]?.postMessage({ canNavigate });
+          }
+        },
+      ),
+      url: "https://herdr.test/",
+    }));
+    const openWindow = vi.fn().mockResolvedValue(undefined);
+    const worker = {
+      addEventListener: (
+        type: string,
+        handler: (event: Record<string, unknown>) => void,
+      ) => handlers.set(type, handler),
+      clients: {
+        claim: vi.fn(),
+        matchAll: vi.fn().mockResolvedValue(clients),
+        openWindow,
+      },
+      location: { origin: "https://herdr.test" },
+      registration: { showNotification: vi.fn() },
+      skipWaiting: vi.fn(),
+    };
+    runInNewContext(await readFile("public/sw.js", "utf8"), {
+      clearTimeout,
+      MessageChannel,
+      self: worker,
+      setTimeout,
+      URL,
+    });
+    let completion = Promise.resolve();
+    handlers.get("notificationclick")?.({
+      notification: {
+        close: vi.fn(),
+        data: { url: "/?session=agent-review&pane=review-main" },
+      },
+      waitUntil: (value: Promise<void>) => {
+        completion = value;
+      },
+    });
+    await completion;
+
+    expect(clients[0]?.focus).not.toHaveBeenCalled();
+    expect(clients[1]?.focus).toHaveBeenCalledOnce();
+    expect(clients[1]?.postMessage).toHaveBeenCalledWith({
+      type: "notification.navigate",
+      url: "https://herdr.test/?session=agent-review&pane=review-main",
+    });
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
   test("acquires and releases only a foreground connected screen wake lock", async () => {
     const sentinel = new EventTarget() as EventTarget & {
       release: ReturnType<typeof vi.fn>;
@@ -95,6 +156,41 @@ describe("PWA platform shell", () => {
       configurable: true,
       value: undefined,
     });
+  });
+
+  test("reacquires a wake lock after an unsolicited browser release", async () => {
+    const makeSentinel = () => {
+      const sentinel = new EventTarget() as EventTarget & {
+        release: ReturnType<typeof vi.fn>;
+        released: boolean;
+      };
+      sentinel.released = false;
+      sentinel.release = vi.fn(async () => {
+        sentinel.released = true;
+        sentinel.dispatchEvent(new Event("release"));
+      });
+      return sentinel;
+    };
+    const first = makeSentinel();
+    const second = makeSentinel();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    Object.defineProperty(navigator, "wakeLock", {
+      configurable: true,
+      value: { request },
+    });
+    const hook = renderHook(() => usePlatform(true, "connected"));
+    await waitFor(() => expect(hook.result.current.wakeLockActive).toBe(true));
+
+    first.released = true;
+    act(() => first.dispatchEvent(new Event("release")));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(hook.result.current.wakeLockActive).toBe(true));
+    hook.unmount();
+    await waitFor(() => expect(second.release).toHaveBeenCalledOnce());
   });
 
   test("releases a wake lock that resolves after effect cleanup", async () => {
@@ -160,7 +256,7 @@ describe("PWA platform shell", () => {
     vi.stubGlobal("PushManager", class {});
     vi.stubGlobal("Notification", { permission: "granted" });
     const save = vi.fn().mockResolvedValue(undefined);
-    const remove = vi.fn().mockResolvedValue(undefined);
+    const remove = vi.fn().mockRejectedValue(new Error("bridge offline"));
     const input = {
       accessRole: "controller" as const,
       enabled: true,

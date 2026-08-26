@@ -46,14 +46,12 @@ export function ViewerShareDialog({
   const [now, setNow] = useState(() => Date.now());
   const loadRef = useRef(load);
   loadRef.current = load;
-  const agents = useMemo(
-    () =>
-      state.agents.filter(
-        (agent) => agent.kind === "agent" && agent.workspaceId === workspaceId,
-      ),
+  const sessions = useMemo(
+    () => state.agents.filter((session) => session.workspaceId === workspaceId),
     [state.agents, workspaceId],
   );
-  const panes = agents.find(({ id }) => id === agentId)?.panes ?? [];
+  const selectedSession = sessions.find(({ id }) => id === agentId);
+  const panes = selectedSession?.panes ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +88,7 @@ export function ViewerShareDialog({
       const result = await onCreate(
         {
           workspaceId,
-          ...(agentId ? { agentId } : {}),
+          ...(selectedSession?.kind === "agent" ? { agentId } : {}),
           ...(paneId ? { paneId } : {}),
         },
         expiresInMinutes,
@@ -148,19 +146,25 @@ export function ViewerShareDialog({
         </label>
         <label>
           <span>
-            Agent <small>optional</small>
+            Session <small>optional</small>
           </span>
           <select
             value={agentId}
             onChange={(event) => {
+              const session = sessions.find(
+                ({ id }) => id === event.target.value,
+              );
               setAgentId(event.target.value);
-              setPaneId("");
+              setPaneId(
+                session?.kind === "terminal" ? session.activePaneId : "",
+              );
             }}
           >
             <option value="">Entire Space</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.label}
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.label}
+                {session.kind === "terminal" ? " · Terminal" : " · Agent"}
               </option>
             ))}
           </select>
@@ -174,7 +178,11 @@ export function ViewerShareDialog({
             disabled={!agentId}
             onChange={(event) => setPaneId(event.target.value)}
           >
-            <option value="">All panes in session</option>
+            <option value="" disabled={selectedSession?.kind === "terminal"}>
+              {selectedSession?.kind === "terminal"
+                ? "Select a Terminal pane"
+                : "All panes in session"}
+            </option>
             {panes.map((pane) => (
               <option key={pane.id} value={pane.id}>
                 {pane.title}
@@ -200,7 +208,11 @@ export function ViewerShareDialog({
         <Button
           type="button"
           color="amber"
-          disabled={busy || !workspaceId}
+          disabled={
+            busy ||
+            !workspaceId ||
+            (selectedSession?.kind === "terminal" && !paneId)
+          }
           onClick={() => void create()}
         >
           <Link2Icon /> {busy ? "Working…" : "Create link"}

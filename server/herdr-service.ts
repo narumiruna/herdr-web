@@ -372,7 +372,7 @@ export class LiveHerdrService {
       if (snapshot.type !== "session_snapshot" || !snapshot.snapshot) {
         throw new Error("Herdr returned an invalid session snapshot");
       }
-      const agentStatusSubscriptions = (snapshot.snapshot.panes ?? [])
+      const agentStatusSubscriptions = (snapshot.snapshot.agents ?? [])
         .map(({ pane_id: paneId }) => paneId)
         .filter((paneId): paneId is string => Boolean(paneId))
         .slice(0, MAX_AGENT_STATUS_SUBSCRIPTIONS)

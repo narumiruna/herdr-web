@@ -214,16 +214,18 @@ describe("scoped viewer shares", () => {
         data: { pane_id: "p2", workspace_id: "w2" },
         event: "pane_updated",
       });
+      onEvent({ data: { pane_id: "p2" }, event: "pane_updated" });
       onEvent({
         data: { pane_id: "p1", workspace_id: "w1" },
         event: "pane_updated",
       });
+      onEvent({ data: { pane_id: "p1" }, event: "pane_updated" });
     });
     const events = await fetch(`${base}/api/herdr/events`, {
       headers: shareHeaders,
     });
     const eventText = await events.text();
-    expect(eventText).toContain("scope_updated");
+    expect(eventText.match(/scope_updated/g)).toHaveLength(2);
     expect(eventText).not.toContain("p2");
     expect(eventText).not.toContain("w2");
 

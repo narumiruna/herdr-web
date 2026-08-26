@@ -36,6 +36,31 @@ self.addEventListener("push", (event) => {
   );
 });
 
+function canNavigateNotification(client, url) {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    let settled = false;
+    const finish = (canNavigate) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(canNavigate);
+    };
+    const timer = setTimeout(() => finish(false), 500);
+    channel.port1.onmessage = (event) => {
+      finish(event.data?.canNavigate === true);
+    };
+    try {
+      client.postMessage({ type: "notification.can-navigate", url }, [
+        channel.port2,
+      ]);
+    } catch {
+      finish(false);
+    }
+  });
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = new URL(
@@ -47,9 +72,16 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ includeUncontrolled: true, type: "window" })
       .then(async (clients) => {
-        for (const client of clients) {
-          const current = new URL(client.url);
-          if (current.origin !== target.origin) continue;
+        const sameOriginClients = clients.filter(
+          (client) => new URL(client.url).origin === target.origin,
+        );
+        const support = await Promise.all(
+          sameOriginClients.map((client) =>
+            canNavigateNotification(client, target.toString()),
+          ),
+        );
+        const client = sameOriginClients[support.indexOf(true)];
+        if (client) {
           await client.focus();
           client.postMessage({
             type: "notification.navigate",

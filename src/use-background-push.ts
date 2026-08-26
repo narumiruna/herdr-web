@@ -78,7 +78,11 @@ export function useBackgroundPush({
         let subscription = await registration.pushManager.getSubscription();
         if (!enabled || Notification.permission !== "granted") {
           if (subscription) {
-            await methods.current.remove(subscription.endpoint);
+            // The expired browser endpoint will be pruned when Push next
+            // reports it as gone; local opt-out must not depend on the bridge.
+            void methods.current
+              .remove(subscription.endpoint)
+              .catch(() => undefined);
             await subscription.unsubscribe();
           }
           if (!cancelled) {

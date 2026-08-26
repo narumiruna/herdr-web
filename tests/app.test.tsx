@@ -6,8 +6,9 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/App";
+import { ViewerShareDialog } from "../src/components/ViewerShareDialog";
 import { createDemoState } from "../src/state";
 
 function renderApp() {
@@ -529,6 +530,36 @@ describe("herdr-web terminal-first workbench", () => {
         window.localStorage.getItem("herdr-web-workflow-templates"),
       ).toContain("Review PR"),
     );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Storage"),
+      "project",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save template" }),
+    );
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem("herdr-web-workflow-templates"),
+      ).not.toContain("Review PR"),
+    );
+    expect(
+      within(dialog).getAllByRole("button", { name: /Review PR/ }),
+    ).toHaveLength(1);
+    await user.selectOptions(
+      within(dialog).getByLabelText("Storage"),
+      "browser",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save template" }),
+    );
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem("herdr-web-workflow-templates"),
+      ).toContain("Review PR"),
+    );
+    expect(
+      within(dialog).getAllByRole("button", { name: /Review PR/ }),
+    ).toHaveLength(1);
     await user.click(
       within(dialog).getByRole("button", { name: "New template" }),
     );
@@ -544,6 +575,62 @@ describe("herdr-web terminal-first workbench", () => {
         name: "Workflow launch results",
       }),
     ).toHaveTextContent("agent-1Started");
+  });
+
+  test("creates pane-only viewer shares for standalone Terminals", async () => {
+    const state = createDemoState();
+    state.agents.push({
+      ...structuredClone(
+        state.agents[0] as NonNullable<(typeof state.agents)[0]>,
+      ),
+      activePaneId: "shell-main",
+      id: "terminal-shell",
+      kind: "terminal",
+      label: "shell",
+      panes: [
+        {
+          command: "zsh",
+          id: "shell-main",
+          lines: ["$"],
+          title: "shell",
+        },
+      ],
+      workspaceId: "herdr-core",
+    });
+    const onCreate = vi.fn().mockResolvedValue({
+      share: {
+        createdAt: 1,
+        expiresAt: 2,
+        id: "share-1",
+        scope: { paneId: "shell-main", workspaceId: "herdr-core" },
+      },
+      token: "secret",
+      type: "viewer_share_created",
+      url: "/#token=secret",
+    });
+    const user = userEvent.setup();
+    render(
+      <ViewerShareDialog
+        open
+        state={state}
+        load={vi.fn().mockResolvedValue([])}
+        onCreate={onCreate}
+        onOpenChange={vi.fn()}
+        onRevoke={vi.fn()}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText(/Session/),
+      "terminal-shell",
+    );
+    expect(screen.getByLabelText(/Pane/)).toHaveValue("shell-main");
+    await user.click(screen.getByRole("button", { name: "Create link" }));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      { paneId: "shell-main", workspaceId: "herdr-core" },
+      60,
+    );
   });
 
   test("restores focus after closing the command palette", async () => {

@@ -873,7 +873,18 @@ export function App({
   };
 
   const saveWorkflow = async (template: WorkflowTemplate) => {
+    const browserSource = browserWorkflows.find(({ id }) => id === template.id);
+    const projectSource = projectWorkflows.find(({ id }) => id === template.id);
     if (template.scope === "browser") {
+      if (projectSource?.projectKey) {
+        await runtime.deleteProjectWorkflow(
+          projectSource.id,
+          projectSource.projectKey,
+        );
+      }
+      setProjectWorkflows((current) =>
+        current.filter(({ id }) => id !== template.id),
+      );
       setBrowserWorkflows((current) => [
         template,
         ...current.filter(({ id }) => id !== template.id),
@@ -883,6 +894,11 @@ export function App({
     if (!workspace?.path) throw new Error("A project Space is required.");
     const projectTemplate = { ...template, projectKey: workspace.path };
     await runtime.saveProjectWorkflow(projectTemplate);
+    if (browserSource) {
+      setBrowserWorkflows((current) =>
+        current.filter(({ id }) => id !== template.id),
+      );
+    }
     setProjectWorkflows((current) => [
       projectTemplate,
       ...current.filter(({ id }) => id !== projectTemplate.id),
@@ -932,12 +948,14 @@ export function App({
         "Quick reply is available only while an Agent needs input.",
       );
     }
+    const agentPaneId = target.id;
     const usesFocusedTerminal =
       state.capabilities.terminalStreaming &&
       target.id === state.selectedAgentId &&
-      target.activePaneId === agent?.activePaneId;
+      target.activePaneId === agentPaneId &&
+      agent?.activePaneId === agentPaneId;
     if (!usesFocusedTerminal) {
-      await runtime.quickReply(target.activePaneId, message);
+      await runtime.quickReply(agentPaneId, message);
       return;
     }
     const requestId = crypto.randomUUID?.() ?? `${Date.now()}`;
@@ -973,7 +991,7 @@ export function App({
           detail: {
             action: "quick-reply",
             message,
-            paneId: target.activePaneId,
+            paneId: agentPaneId,
             requestId,
           },
         }),
