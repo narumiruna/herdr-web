@@ -49,7 +49,7 @@ The implementation must preserve Herdr as the source of truth, keep viewer acces
 - [x] Add manifest, icons, authenticated closed-app Web Push, service-worker notification clicks, install controls, secure no-cache behavior, reconnect visibility, and race-safe foreground wake-lock lifecycle without claiming offline support. Evidence: `tests/push-notifications.test.ts`, `tests/pwa-platform.test.ts`, and built assets.
 - [x] Add security headers, bounded resource limits, defensive parsing, and documentation for all features; run targeted review and hardening tests. Evidence: two adversarial review passes, `npm audit`, `git diff --check`, and security-focused tests.
 - [x] Run `npm run ci`, Chromium E2E, package inspection, diff/security audit, and live smoke checks. Evidence: 222 Vitest tests, 31 Playwright tests, package/font gates, zero high audit findings, and live Herdr state/share/revocation/push-config smoke verification.
-- [ ] Create signed Conventional Commits, push `narumi/feat/supervision-platform`, open a correctly titled pull request, and verify the PR checks and final diff. PR #20 is open and mergeable; CI is pending.
+- [x] Create signed Conventional Commits, push `narumi/feat/supervision-platform`, open a correctly titled pull request, and verify the PR checks and final diff. Evidence: PR #20 is open and mergeable; manual CI run 32987211543 passed Linux repository/browser gates and native Windows startup on commit `c33c60d`.
 
 ## Completion Checklist
 
@@ -59,4 +59,4 @@ The implementation must preserve Herdr as the source of truth, keep viewer acces
 - [x] Workflow templates cannot bypass the approved runtime command allowlist.
 - [x] Diagnostics contain no terminal content, credentials, environment values, or host paths.
 - [x] Existing controller, viewer, terminal, image, pane, workspace, plugin, Docker, CLI, and responsive tests remain green.
-- [ ] The pull request exists remotely with all intended signed commits and no unrelated changes.
+- [x] The pull request exists remotely with all intended signed commits and no unrelated changes.
