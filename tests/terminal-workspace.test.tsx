@@ -136,26 +136,33 @@ describe("TerminalWorkspace decision states", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("directs blocked snapshot fallback users to the composer", () => {
+  test("directs blocked Agents to an available input path", () => {
     const fallbackAgent = demoAgent();
     fallbackAgent.status = "blocked";
     fallbackAgent.canPrompt = true;
     fallbackAgent.currentStep = "";
     const { rerender } = render(<Harness agent={fallbackAgent} />);
+    const banner = () =>
+      screen.getByRole("region", { name: "Agent needs input" });
 
-    expect(
-      screen.getByRole("region", { name: "Agent needs input" }),
-    ).toHaveTextContent("Answer with the composer");
+    expect(banner()).toHaveTextContent("Answer with the composer");
     expect(
       screen.getByRole("form", { name: "Message composer" }),
     ).toBeVisible();
 
     const interactiveAgent = { ...fallbackAgent, canPrompt: false };
     rerender(<Harness agent={interactiveAgent} terminalStreaming />);
+    expect(banner()).toHaveTextContent("Answer in the terminal");
 
+    rerender(<Harness agent={interactiveAgent} />);
+    expect(banner()).toHaveTextContent("Open a native Herdr client");
+    expect(banner()).toHaveTextContent(
+      "Browser input is unavailable for this snapshot-only session.",
+    );
     expect(
-      screen.getByRole("region", { name: "Agent needs input" }),
-    ).toHaveTextContent("Answer in the terminal");
+      screen.queryByRole("form", { name: "Message composer" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Interactive unavailable")).toBeVisible();
   });
 
   test("does not submit Enter while an input method editor is composing", async () => {

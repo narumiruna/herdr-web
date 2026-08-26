@@ -211,12 +211,18 @@ export function App({
 
   useEffect(() => {
     const previousTitle = document.title;
-    const context = [agent?.label, workspace?.name].filter(Boolean).join(" · ");
-    document.title = `${statusCounts.needsInput ? `(${statusCounts.needsInput}) ` : ""}${context || "Workbench"} — herdr-web`;
+    if (runtime.status !== "ready") {
+      document.title = "herdr-web — agent workbench";
+    } else {
+      const context = [agent?.label, workspace?.name]
+        .filter(Boolean)
+        .join(" · ");
+      document.title = `${statusCounts.needsInput ? `(${statusCounts.needsInput}) ` : ""}${context || "Workbench"} — herdr-web`;
+    }
     return () => {
       document.title = previousTitle;
     };
-  }, [agent?.label, statusCounts.needsInput, workspace?.name]);
+  }, [agent?.label, runtime.status, statusCounts.needsInput, workspace?.name]);
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
