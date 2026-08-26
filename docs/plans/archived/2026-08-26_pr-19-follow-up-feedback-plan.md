@@ -50,15 +50,16 @@ Resolve every current review item on pull request 19 and verify the resulting be
 - [x] Scan the full pull request diff for the same capability-state and stale-session-title patterns; the blocked banner is the only input-path instruction and `App` is the only source of dynamic document titles.
 - [x] Run focused tests for the changed components and live application; 55 focused tests passed.
 - [x] Run `npm run ci`, `npm run test:e2e`, and `git diff --check`; CI passed 189 tests plus package, build, and font checks, Playwright passed 31 tests, and the diff check passed.
+  A redundant pre-commit CI rerun encountered two CLI timeouts while an unrelated external Vitest suite saturated the host; the isolated CLI retry passed all 10 tests, and both the earlier full local CI run and the pushed GitHub CI run passed.
 - [x] Re-read all fourteen threads and inspect the final diff so every ledger item has a final evidence-backed outcome; the twelve resolved items remain supported and only the two now-fixed follow-up threads are open.
-- [ ] Reply to and resolve the two open threads only after their fixes and checks pass.
-- [ ] Stage only intended files, create a signed Conventional Commit, and push the pull request branch.
-- [ ] Refresh the pull request once after pushing and confirm its checks, threads, head commit, and merge state.
+- [x] Reply to and resolve the two open threads only after their fixes and checks pass; replies `3860860574` and `3860860578` contain commit and test evidence, and all fourteen threads are resolved.
+- [x] Stage only intended files, create a signed Conventional Commit, and push the pull request branch; signed commit `c27b039f395fcb1300a6c530eb5c73ee90ba0676` is on the pull request branch.
+- [x] Refresh the pull request once after pushing and confirm its checks, threads, head commit, and merge state; the head is `c27b039`, all fourteen threads are resolved, both Linux and Windows checks passed in run `32946859532`, and the pull request is cleanly mergeable.
 
 ## Completion Checklist
 
 - [x] Every actionable review item has code and regression-test evidence.
 - [x] Every non-actionable review item has a supported ledger outcome.
-- [ ] Required local and pull request checks pass without concealed failures.
-- [ ] The signed fix commit is pushed and all addressed threads are resolved.
-- [ ] The completed plan is archived under `docs/plans/archived/`.
+- [x] Required local and pull request checks pass without concealed failures.
+- [x] The signed fix commit is pushed and all addressed threads are resolved.
+- [x] The completed plan is archived under `docs/plans/archived/`.
