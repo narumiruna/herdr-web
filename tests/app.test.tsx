@@ -348,7 +348,7 @@ describe("herdr-web terminal-first workbench", () => {
     expect(screen.getByText("⌘ K / Ctrl K")).toBeVisible();
     expect(screen.getByText("⌘ + / Ctrl +")).toBeVisible();
     expect(screen.getByText("⌘ 0 / Ctrl 0")).toBeVisible();
-  });
+  }, 10_000);
 
   test("sends direction to a blocked agent and resumes the session", async () => {
     const user = renderApp();
@@ -452,7 +452,7 @@ describe("herdr-web terminal-first workbench", () => {
 
     await user.keyboard("{Meta>}k{/Meta}");
     const search = await screen.findByRole("combobox", {
-      name: "Search Spaces, Agents, and Terminals",
+      name: "Search actions, Spaces, Agents, and Terminals",
     });
     await user.type(search, "plugin");
     await user.keyboard("{ArrowDown}{ArrowUp}{Enter}");
@@ -463,16 +463,99 @@ describe("herdr-web terminal-first workbench", () => {
     );
   });
 
+  test("runs pane actions from the role-filtered Action Palette", async () => {
+    const user = renderApp();
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const search = await screen.findByRole("combobox", {
+      name: "Search actions, Spaces, Agents, and Terminals",
+    });
+    await user.type(search, "Split right");
+    await user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByRole("region", { name: "shell terminal" }),
+    ).toBeVisible();
+  });
+
+  test("opens Attention Inbox previews and Mission Control without replacing the terminal", async () => {
+    const user = renderApp();
+
+    const inboxTrigger = screen.getByRole("button", {
+      name: /Open Attention Inbox/,
+    });
+    await user.click(inboxTrigger);
+    const inbox = screen.getByRole("dialog", { name: "Attention Inbox" });
+    expect(within(inbox).getByRole("document")).toHaveTextContent(
+      "Decision needed",
+    );
+    await user.click(screen.getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(inboxTrigger).toHaveFocus());
+
+    await user.click(
+      screen.getByRole("button", { name: "Open Mission Control" }),
+    );
+    const mission = screen.getByRole("dialog", { name: "Mission Control" });
+    expect(within(mission).getByText("Controller")).toBeVisible();
+    expect(within(mission).getByText("api-review")).toBeVisible();
+    expect(
+      within(mission).getAllByText(/attention (just )?observed/).length,
+    ).toBeGreaterThan(0);
+    await user.click(
+      within(mission).getByRole("button", { name: "Close dialog" }),
+    );
+    expect(
+      screen.getByRole("document", { name: "api-review output" }),
+    ).toBeVisible();
+  });
+
+  test("saves and launches a browser-local Agent workflow template", async () => {
+    const user = renderApp();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Workflow templates" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Agent workflow templates",
+    });
+    const name = within(dialog).getByLabelText("Template name");
+    await user.clear(name);
+    await user.type(name, "Review PR");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save template" }),
+    );
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem("herdr-web-workflow-templates"),
+      ).toContain("Review PR"),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "New template" }),
+    );
+    expect(within(dialog).getByLabelText("Template name")).toHaveValue(
+      "New workflow",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /Review PR/ }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Launch workflow" }),
+    );
+    expect(
+      await within(dialog).findByRole("list", {
+        name: "Workflow launch results",
+      }),
+    ).toHaveTextContent("agent-1Started");
+  });
+
   test("restores focus after closing the command palette", async () => {
     const user = renderApp();
     const trigger = screen.getByRole("button", {
-      name: "Open command palette",
+      name: "Open Action Palette",
     });
 
     await user.click(trigger);
     expect(
       screen.getByRole("combobox", {
-        name: "Search Spaces, Agents, and Terminals",
+        name: "Search actions, Spaces, Agents, and Terminals",
       }),
     ).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Close dialog" }));

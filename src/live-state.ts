@@ -75,12 +75,20 @@ interface LiveRead {
 export interface LiveSnapshotPayload {
   access?: {
     role?: "controller" | "viewer";
+    share?: {
+      expiresAt: number;
+      id: string;
+      scope: { agentId?: string; paneId?: string; workspaceId: string };
+    };
   };
   capabilities?: {
+    previewsTruncated?: boolean;
+    statusSubscriptionsTruncated?: boolean;
     terminalReason?: string;
     terminalStreaming?: boolean;
   };
   readErrors?: Record<string, string>;
+  previews?: Record<string, LiveRead>;
   reads: Record<string, LiveRead>;
   snapshot: {
     agents: LivePane[];
@@ -95,7 +103,14 @@ export interface LiveSnapshotPayload {
   };
 }
 
-const STATUS: AgentStatus[] = ["blocked", "done", "idle", "unknown", "working"];
+const STATUS: AgentStatus[] = [
+  "blocked",
+  "done",
+  "failed",
+  "idle",
+  "unknown",
+  "working",
+];
 
 function statusOf(value: string): AgentStatus {
   return STATUS.includes(value as AgentStatus)
@@ -161,6 +176,7 @@ function mapAgent(
   layouts: LiveLayout[],
   kind: Agent["kind"],
   protocol: number,
+  previews: Record<string, LiveRead>,
   tab: LiveTab | undefined,
 ): Agent {
   const status = statusOf(pane.agent_status);
@@ -190,6 +206,9 @@ function mapAgent(
     label,
     model: pane.tokens?.model ?? "",
     panes,
+    previewLines: paneLines(
+      previews[pane.pane_id] ?? reads[pane.pane_id],
+    ).slice(-8),
     paneSplit:
       panes.length === 2
         ? {
@@ -252,6 +271,7 @@ function paneFromSnapshot(pane: LivePane, allPanes: LivePane[]): LivePane {
 
 export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
   const { snapshot, reads } = payload;
+  const previews = payload.previews ?? {};
   const readErrors = payload.readErrors ?? {};
   const workspaces = snapshot.workspaces.map((workspace, index) =>
     mapWorkspace(workspace, snapshot.panes, index),
@@ -266,6 +286,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
       snapshot.layouts,
       "agent",
       snapshot.protocol,
+      previews,
       snapshot.tabs.find(({ tab_id: tabId }) => tabId === pane.tab_id),
     ),
   );
@@ -290,6 +311,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
               snapshot.layouts,
               "terminal",
               snapshot.protocol,
+              previews,
               tab,
             ),
           ]
@@ -328,6 +350,11 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
     activities: [],
     agents,
     capabilities: {
+      herdrVersion: snapshot.version,
+      previewsTruncated: payload.capabilities?.previewsTruncated === true,
+      protocol: snapshot.protocol,
+      statusSubscriptionsTruncated:
+        payload.capabilities?.statusSubscriptionsTruncated === true,
       terminalReason:
         payload.capabilities?.terminalReason ??
         "This Herdr version supports snapshot output only.",

@@ -1,0 +1,26 @@
+{
+  "name": "herdr-web Agent Workbench",
+  "short_name": "herdr-web",
+  "description": "Browser workbench for supervising Herdr coding-agent sessions.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11110f",
+  "theme_color": "#11110f",
+  "categories": ["developer tools", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/herdr-web-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/herdr-web-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

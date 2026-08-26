@@ -21,7 +21,27 @@ import {
   type UploadedImage,
   validateImage,
 } from "./image-upload.js";
+import type {
+  BrowserPushSubscription,
+  PushNotificationService,
+  PushPreferences,
+} from "./push-notifications.js";
+import {
+  projectStateForShare,
+  shareScopeAllowsPane,
+} from "./share-projection.js";
+import type {
+  PublicViewerShare,
+  ShareScope,
+  ViewerShareStore,
+} from "./share-store.js";
 import type { TerminalTicketStore } from "./terminal-tickets.js";
+import {
+  type ProjectWorkflowStep,
+  type ProjectWorkflowTemplate,
+  WORKFLOW_RUNTIMES,
+  type WorkflowTemplateStore,
+} from "./workflow-template-store.js";
 
 export interface HerdrService {
   agentLifecycle?(
@@ -64,9 +84,12 @@ export interface HerdrService {
 interface HandlerOptions {
   service: HerdrService;
   terminalConfigured?: boolean;
+  pushNotifications?: PushNotificationService;
+  shareStore?: ViewerShareStore;
   terminalTickets?: TerminalTicketStore;
   token: string;
   viewToken?: string;
+  workflowTemplates?: WorkflowTemplateStore;
 }
 
 const RESOURCE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -118,17 +141,24 @@ function tokenMatches(supplied: string, expected: string): boolean {
   );
 }
 
-function accessRole(
+interface AccessPrincipal {
+  role: "controller" | "viewer";
+  share?: PublicViewerShare;
+}
+
+function accessPrincipal(
   request: IncomingMessage,
   controllerToken: string,
   viewToken?: string,
-): "controller" | "viewer" | undefined {
+  shareStore?: ViewerShareStore,
+): AccessPrincipal | undefined {
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return undefined;
   const supplied = header.slice(7);
-  if (tokenMatches(supplied, controllerToken)) return "controller";
-  if (viewToken && tokenMatches(supplied, viewToken)) return "viewer";
-  return undefined;
+  if (tokenMatches(supplied, controllerToken)) return { role: "controller" };
+  if (viewToken && tokenMatches(supplied, viewToken)) return { role: "viewer" };
+  const share = shareStore?.resolve(supplied);
+  return share ? { role: "viewer", share } : undefined;
 }
 
 async function readBody(
@@ -272,17 +302,198 @@ function cleanSplitRatio(value: unknown): number {
   return value;
 }
 
-function cleanPath(value: unknown): string {
-  const path = cleanText(value, "cwd", 4_096);
+function cleanPath(value: unknown, field = "cwd"): string {
+  const path = cleanText(value, field, 4_096);
   if (
     [...path].some((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     })
   ) {
-    throw new TypeError("cwd must not contain control characters");
+    throw new TypeError(`${field} must not contain control characters`);
   }
   return path;
+}
+
+function cleanShareScope(value: unknown): ShareScope {
+  const body = objectBody(value);
+  const workspaceId = cleanId(cleanText(body.workspaceId, "workspaceId", 128));
+  const agentId =
+    body.agentId === undefined
+      ? undefined
+      : cleanId(cleanText(body.agentId, "agentId", 128));
+  const paneId =
+    body.paneId === undefined
+      ? undefined
+      : cleanId(cleanText(body.paneId, "paneId", 128));
+  return {
+    workspaceId,
+    ...(agentId ? { agentId } : {}),
+    ...(paneId ? { paneId } : {}),
+  };
+}
+
+function cleanPushSubscription(value: unknown): BrowserPushSubscription {
+  const body = objectBody(value);
+  const endpoint = cleanText(body.endpoint, "endpoint", 4_096);
+  const url = new URL(endpoint);
+  if (url.protocol !== "https:") {
+    throw new TypeError("push endpoint must use HTTPS");
+  }
+  const keys = objectBody(body.keys);
+  const auth = cleanText(keys.auth, "auth", 512);
+  const p256dh = cleanText(keys.p256dh, "p256dh", 512);
+  if (!/^[A-Za-z0-9_-]+$/.test(auth) || !/^[A-Za-z0-9_-]+$/.test(p256dh)) {
+    throw new TypeError("push subscription keys must be base64url values");
+  }
+  return { endpoint, keys: { auth, p256dh } };
+}
+
+function cleanPushPreferences(value: unknown): PushPreferences {
+  const body = objectBody(value);
+  const cooldownMs = Number(body.cooldownMs);
+  if (
+    !Number.isInteger(cooldownMs) ||
+    cooldownMs < 5_000 ||
+    cooldownMs > 600_000
+  ) {
+    throw new RangeError(
+      "cooldownMs must be an integer between 5000 and 600000",
+    );
+  }
+  if (!Array.isArray(body.mutedAgentIds) || body.mutedAgentIds.length > 256) {
+    throw new TypeError("mutedAgentIds must contain at most 256 Agent ids");
+  }
+  const mutedAgentIds = body.mutedAgentIds.map((id) =>
+    cleanId(cleanText(id, "muted Agent id", 128)),
+  );
+  if (body.privacy !== "full" && body.privacy !== "private") {
+    throw new TypeError("privacy must be full or private");
+  }
+  if (typeof body.soundEnabled !== "boolean") {
+    throw new TypeError("soundEnabled must be a boolean");
+  }
+  return {
+    cooldownMs,
+    mutedAgentIds: [...new Set(mutedAgentIds)],
+    privacy: body.privacy,
+    soundEnabled: body.soundEnabled,
+  };
+}
+
+function cleanShareDuration(value: unknown): number {
+  if (!Number.isInteger(value) || Number(value) < 5 || Number(value) > 10_080) {
+    throw new RangeError(
+      "expiresInMinutes must be an integer between 5 and 10080",
+    );
+  }
+  return Number(value) * 60_000;
+}
+
+function cleanWorkflowStep(value: unknown, index: number): ProjectWorkflowStep {
+  const step = objectBody(value);
+  const runtime = cleanText(step.runtime, "runtime", 40);
+  if (
+    !WORKFLOW_RUNTIMES.includes(runtime as (typeof WORKFLOW_RUNTIMES)[number])
+  ) {
+    throw new TypeError("Unsupported workflow Agent runtime");
+  }
+  if (
+    step.waitForPrevious !== undefined &&
+    typeof step.waitForPrevious !== "boolean"
+  ) {
+    throw new TypeError("waitForPrevious must be a boolean");
+  }
+  const cwd =
+    step.cwd === undefined || step.cwd === "" ? "" : cleanPath(step.cwd);
+  const prompt =
+    step.prompt === undefined || step.prompt === ""
+      ? ""
+      : cleanText(step.prompt, "prompt", 20_000);
+  return {
+    cwd,
+    id: cleanExtensionId(cleanText(step.id, "step id", 128), "step id"),
+    label: cleanText(step.label, "label", 80),
+    order:
+      Number.isInteger(step.order) &&
+      Number(step.order) >= 0 &&
+      Number(step.order) < 12
+        ? Number(step.order)
+        : index,
+    prompt,
+    runtime: runtime as ProjectWorkflowStep["runtime"],
+    waitForPrevious: step.waitForPrevious === true,
+  };
+}
+
+function cleanWorkflowTemplate(
+  id: string,
+  value: unknown,
+): ProjectWorkflowTemplate {
+  const body = objectBody(value);
+  if (
+    !Array.isArray(body.steps) ||
+    body.steps.length < 1 ||
+    body.steps.length > 12
+  ) {
+    throw new TypeError("steps must contain 1-12 workflow steps");
+  }
+  const steps = body.steps.map(cleanWorkflowStep);
+  if (new Set(steps.map((step) => step.id)).size !== steps.length) {
+    throw new TypeError("workflow step ids must be unique");
+  }
+  return {
+    id,
+    name: cleanText(body.name, "name", 80),
+    projectKey: cleanPath(body.projectKey, "projectKey"),
+    scope: "project",
+    steps,
+    version: 1,
+  };
+}
+
+function blockedAgentOwnsPane(state: unknown, paneId: string): boolean {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return false;
+  const snapshot = (state as { snapshot?: unknown }).snapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return false;
+  }
+  const source = snapshot as {
+    agents?: Array<{
+      agent_status?: unknown;
+      pane_id?: unknown;
+      tab_id?: unknown;
+    }>;
+    panes?: Array<{ pane_id?: unknown; tab_id?: unknown }>;
+  };
+  const pane = source.panes?.find(({ pane_id: id }) => id === paneId);
+  return (
+    source.agents?.some(
+      (agent) =>
+        agent.agent_status === "blocked" &&
+        (agent.pane_id === paneId ||
+          (pane?.tab_id !== undefined && agent.tab_id === pane.tab_id)),
+    ) === true
+  );
+}
+
+function shareEventAllowed(event: unknown, scope: ShareScope): boolean {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return false;
+  const data = (event as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  const fields = data as Record<string, unknown>;
+  if (fields.workspace_id !== scope.workspaceId) return false;
+  if (scope.paneId) {
+    return fields.pane_id === scope.paneId;
+  }
+  if (scope.agentId) {
+    return (
+      fields.pane_id === scope.agentId ||
+      fields.agent_id === scope.agentId ||
+      fields.target === scope.agentId
+    );
+  }
+  return true;
 }
 
 function errorResponse(response: ServerResponse, error: unknown): void {
@@ -324,17 +535,24 @@ function errorResponse(response: ServerResponse, error: unknown): void {
   });
 }
 
+// Route authorization, validation, and response ordering stay in one handler so
+// controller, global viewer, and scoped-share policy has one auditable gate;
+// persistence, projection, uploads, and terminal streaming remain separate owners.
 export function createHerdrHttpHandler({
   service,
+  pushNotifications,
+  shareStore,
   terminalConfigured = false,
   terminalTickets,
   token,
   viewToken,
+  workflowTemplates,
 }: HandlerOptions) {
   if (!token) throw new Error("HERDR_WEB_TOKEN must not be empty");
   if (viewToken === token) {
     throw new Error("HERDR_WEB_VIEW_TOKEN must differ from HERDR_WEB_TOKEN");
   }
+  let activeEventStreams = 0;
   return async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? "/", "http://herdr.local");
     if (!url.pathname.startsWith("/api/herdr/")) {
@@ -343,8 +561,8 @@ export function createHerdrHttpHandler({
       });
       return;
     }
-    const role = accessRole(request, token, viewToken);
-    if (!role) {
+    const principal = accessPrincipal(request, token, viewToken, shareStore);
+    if (!principal) {
       response.setHeader("www-authenticate", "Bearer");
       sendJson(response, 401, {
         error: {
@@ -355,6 +573,7 @@ export function createHerdrHttpHandler({
       return;
     }
 
+    const { role } = principal;
     try {
       if (request.method === "GET" && url.pathname === "/api/herdr/events") {
         if (!service.subscribeEvents) {
@@ -366,15 +585,52 @@ export function createHerdrHttpHandler({
           });
           return;
         }
+        if (activeEventStreams >= 32) {
+          sendJson(response, 429, {
+            error: {
+              code: "event_stream_capacity",
+              message: "Too many event streams are active",
+            },
+          });
+          return;
+        }
+        activeEventStreams += 1;
         const controller = new AbortController();
         let keepalive: NodeJS.Timeout | undefined;
+        const shareExpiry = principal.share
+          ? setTimeout(
+              () => controller.abort(),
+              Math.max(0, principal.share.expiresAt - Date.now()),
+            )
+          : undefined;
+        shareExpiry?.unref();
+        const stopRevocationListener =
+          principal.share && shareStore
+            ? shareStore.onRevoked((shareId) => {
+                if (shareId === principal.share?.id) controller.abort();
+              })
+            : undefined;
         response.once("close", () => controller.abort());
         try {
           await service.subscribeEvents(
             controller.signal,
             (event) => {
               if (response.writableEnded) return;
-              const writable = response.write(`${JSON.stringify(event)}\n`);
+              if (
+                principal.share &&
+                !shareEventAllowed(event, principal.share.scope)
+              ) {
+                return;
+              }
+              const projectedEvent = principal.share
+                ? {
+                    data: { shareId: principal.share.id },
+                    event: "scope_updated",
+                  }
+                : event;
+              const writable = response.write(
+                `${JSON.stringify(projectedEvent)}\n`,
+              );
               if (!writable) controller.abort();
             },
             () => {
@@ -397,12 +653,46 @@ export function createHerdrHttpHandler({
           if (!response.headersSent) errorResponse(response, error);
           else if (!response.writableEnded) response.end();
         } finally {
+          activeEventStreams -= 1;
+          stopRevocationListener?.();
+          if (shareExpiry) clearTimeout(shareExpiry);
           if (keepalive) clearInterval(keepalive);
         }
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/herdr/state") {
         const state = await service.getState();
+        if (principal.share) {
+          if (!shareStore?.isActive(principal.share.id)) {
+            sendJson(response, 401, {
+              error: {
+                code: "share_expired_or_revoked",
+                message: "This viewer share is no longer active",
+              },
+            });
+            return;
+          }
+          const projected = projectStateForShare(state, principal.share.scope);
+          if (!projected) {
+            sendJson(response, 404, {
+              error: {
+                code: "share_scope_unavailable",
+                message: "The shared Herdr scope is no longer available",
+              },
+            });
+            return;
+          }
+          projected.access = {
+            role: "viewer",
+            share: {
+              expiresAt: principal.share.expiresAt,
+              id: principal.share.id,
+              scope: principal.share.scope,
+            },
+          };
+          sendJson(response, 200, projected);
+          return;
+        }
         sendJson(
           response,
           200,
@@ -434,6 +724,12 @@ export function createHerdrHttpHandler({
         if (body.takeover !== undefined && typeof body.takeover !== "boolean") {
           throw new TypeError("takeover must be a boolean");
         }
+        if (body.purpose !== undefined && body.purpose !== "attention-reply") {
+          throw new TypeError("purpose must be attention-reply when supplied");
+        }
+        if (body.purpose === "attention-reply" && mode !== "control") {
+          throw new TypeError("attention replies require terminal control");
+        }
         if (mode === "observe" && body.takeover === true) {
           throw new TypeError("observe mode cannot take control");
         }
@@ -446,11 +742,62 @@ export function createHerdrHttpHandler({
           });
           return;
         }
+        const paneId = cleanId(terminalTicket[1]);
+        if (
+          body.purpose === "attention-reply" &&
+          !blockedAgentOwnsPane(await service.getState(), paneId)
+        ) {
+          sendJson(response, 409, {
+            error: {
+              code: "agent_not_blocked",
+              message:
+                "Quick reply is available only while the Agent needs input",
+            },
+          });
+          return;
+        }
+        if (
+          principal.share &&
+          !shareScopeAllowsPane(
+            await service.getState(),
+            principal.share.scope,
+            paneId,
+          )
+        ) {
+          sendJson(response, 403, {
+            error: {
+              code: "share_scope_denied",
+              message: "This viewer share does not include the requested pane",
+            },
+          });
+          return;
+        }
+        if (principal.share && !shareStore?.isActive(principal.share.id)) {
+          sendJson(response, 401, {
+            error: {
+              code: "share_expired_or_revoked",
+              message: "This viewer share is no longer active",
+            },
+          });
+          return;
+        }
         const issued = terminalTickets.issue({
           cols: cleanTerminalDimension(body.cols, "cols"),
+          ...(body.purpose === "attention-reply"
+            ? {
+                expiresInMs: 5_000,
+                purpose: "attention-reply" as const,
+              }
+            : {}),
           mode,
-          paneId: cleanId(terminalTicket[1]),
+          paneId,
           rows: cleanTerminalDimension(body.rows, "rows"),
+          ...(principal.share
+            ? {
+                shareExpiresAt: principal.share.expiresAt,
+                shareId: principal.share.id,
+              }
+            : {}),
           takeover: body.takeover === true,
         });
         sendJson(response, 201, {
@@ -460,6 +807,100 @@ export function createHerdrHttpHandler({
         });
         return;
       }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/herdr/viewer-shares"
+      ) {
+        if (role !== "controller" || !shareStore) {
+          sendJson(response, role === "controller" ? 404 : 403, {
+            error: {
+              code:
+                role === "controller"
+                  ? "share_api_unavailable"
+                  : "read_only_access",
+              message:
+                role === "controller"
+                  ? "Viewer share management is unavailable"
+                  : "Viewer shares require controller access",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, {
+          shares: shareStore.list(),
+          type: "viewer_share_list",
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/herdr/viewer-shares"
+      ) {
+        if (role !== "controller" || !shareStore) {
+          sendJson(response, role === "controller" ? 404 : 403, {
+            error: {
+              code:
+                role === "controller"
+                  ? "share_api_unavailable"
+                  : "read_only_access",
+              message: "Viewer share management requires controller access",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        const scope = cleanShareScope(body.scope);
+        if (!projectStateForShare(await service.getState(), scope)) {
+          sendJson(response, 404, {
+            error: {
+              code: "share_scope_unavailable",
+              message: "The requested Space, Agent, or pane does not exist",
+            },
+          });
+          return;
+        }
+        const created = await shareStore.create(
+          scope,
+          cleanShareDuration(body.expiresInMinutes),
+        );
+        sendJson(response, 201, {
+          share: created.share,
+          token: created.token,
+          type: "viewer_share_created",
+          url: `/#token=${encodeURIComponent(created.token)}`,
+        });
+        return;
+      }
+      const viewerShare = url.pathname.match(
+        /^\/api\/herdr\/viewer-shares\/([^/]+)$/,
+      );
+      if (request.method === "DELETE" && viewerShare?.[1]) {
+        if (role !== "controller" || !shareStore) {
+          sendJson(response, role === "controller" ? 404 : 403, {
+            error: {
+              code:
+                role === "controller"
+                  ? "share_api_unavailable"
+                  : "read_only_access",
+              message: "Viewer share management requires controller access",
+            },
+          });
+          return;
+        }
+        const id = cleanId(viewerShare[1]);
+        if (!(await shareStore.revoke(id))) {
+          sendJson(response, 404, {
+            error: {
+              code: "share_not_found",
+              message: "Viewer share not found",
+            },
+          });
+          return;
+        }
+        terminalTickets?.revokeShare(id);
+        sendJson(response, 200, { id, type: "viewer_share_revoked" });
+        return;
+      }
       if (role === "viewer") {
         sendJson(response, 403, {
           error: {
@@ -467,6 +908,141 @@ export function createHerdrHttpHandler({
             message: "This access token does not permit Herdr mutations",
           },
         });
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/herdr/push/config"
+      ) {
+        if (!pushNotifications) {
+          sendJson(response, 404, {
+            error: {
+              code: "push_api_unavailable",
+              message: "Background push notifications are unavailable",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, {
+          publicKey: pushNotifications.publicKey(),
+          type: "push_config",
+        });
+        return;
+      }
+      if (
+        request.method === "PUT" &&
+        url.pathname === "/api/herdr/push/subscription"
+      ) {
+        if (!pushNotifications) {
+          sendJson(response, 404, {
+            error: {
+              code: "push_api_unavailable",
+              message: "Background push notifications are unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        await pushNotifications.upsert(
+          cleanPushSubscription(body.subscription),
+          cleanPushPreferences(body.preferences),
+          await service.getState(),
+        );
+        sendJson(response, 200, { type: "push_subscription_saved" });
+        return;
+      }
+      if (
+        request.method === "DELETE" &&
+        url.pathname === "/api/herdr/push/subscription"
+      ) {
+        if (!pushNotifications) {
+          sendJson(response, 404, {
+            error: {
+              code: "push_api_unavailable",
+              message: "Background push notifications are unavailable",
+            },
+          });
+          return;
+        }
+        const body = objectBody(await readJson(request));
+        const endpoint = cleanText(body.endpoint, "endpoint", 4_096);
+        await pushNotifications.remove(endpoint);
+        sendJson(response, 200, { type: "push_subscription_removed" });
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/herdr/workflow-templates"
+      ) {
+        if (!workflowTemplates) {
+          sendJson(response, 404, {
+            error: {
+              code: "workflow_template_api_unavailable",
+              message: "Project workflow template storage is unavailable",
+            },
+          });
+          return;
+        }
+        const projectKey = cleanPath(
+          url.searchParams.get("projectKey"),
+          "projectKey",
+        );
+        sendJson(response, 200, {
+          templates: await workflowTemplates.list(projectKey),
+          type: "workflow_template_list",
+        });
+        return;
+      }
+      const workflowTemplate = url.pathname.match(
+        /^\/api\/herdr\/workflow-templates\/([^/]+)$/,
+      );
+      if (request.method === "PUT" && workflowTemplate?.[1]) {
+        if (!workflowTemplates) {
+          sendJson(response, 404, {
+            error: {
+              code: "workflow_template_api_unavailable",
+              message: "Project workflow template storage is unavailable",
+            },
+          });
+          return;
+        }
+        const id = cleanExtensionId(
+          workflowTemplate[1],
+          "workflow template id",
+        );
+        const template = cleanWorkflowTemplate(id, await readJson(request));
+        await workflowTemplates.save(template);
+        sendJson(response, 200, { template, type: "workflow_template_saved" });
+        return;
+      }
+      if (request.method === "DELETE" && workflowTemplate?.[1]) {
+        if (!workflowTemplates) {
+          sendJson(response, 404, {
+            error: {
+              code: "workflow_template_api_unavailable",
+              message: "Project workflow template storage is unavailable",
+            },
+          });
+          return;
+        }
+        const id = cleanExtensionId(
+          workflowTemplate[1],
+          "workflow template id",
+        );
+        const projectKey = cleanPath(
+          url.searchParams.get("projectKey"),
+          "projectKey",
+        );
+        if (!(await workflowTemplates.delete(projectKey, id))) {
+          sendJson(response, 404, {
+            error: {
+              code: "workflow_template_not_found",
+              message: "Workflow template not found",
+            },
+          });
+          return;
+        }
+        sendJson(response, 200, { id, type: "workflow_template_deleted" });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/herdr/plugins") {
@@ -811,6 +1387,18 @@ export function createHerdrHttpHandler({
         const body = objectBody(await readJson(request));
         const input: CreateSessionInput = {
           command: cleanText(body.command, "command", 120),
+          ...(body.cwd === undefined || body.cwd === ""
+            ? {}
+            : { cwd: cleanPath(body.cwd) }),
+          ...(body.initialPrompt === undefined || body.initialPrompt === ""
+            ? {}
+            : {
+                initialPrompt: cleanText(
+                  body.initialPrompt,
+                  "initialPrompt",
+                  20_000,
+                ),
+              }),
           label: cleanText(body.label, "label", 80),
           runtime: cleanText(body.runtime, "runtime", 40),
           workspaceId: cleanText(body.workspaceId, "workspaceId", 128),

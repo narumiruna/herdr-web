@@ -1,12 +1,16 @@
 import {
+  BellIcon,
   ChevronRightIcon,
   Component1Icon,
   CubeIcon,
+  DashboardIcon,
   ExclamationTriangleIcon,
   GearIcon,
   KeyboardIcon,
+  Link2Icon,
   PlusIcon,
   ReloadIcon,
+  StackIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
@@ -25,7 +29,11 @@ interface SidebarProps {
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onNewSpace: (returnFocus?: HTMLElement | null) => void;
+  onOpenAttention: (returnFocus?: HTMLElement | null) => void;
+  onOpenMissionControl: (returnFocus?: HTMLElement | null) => void;
   onOpenSettings: (returnFocus?: HTMLElement | null) => void;
+  onOpenShares: (returnFocus?: HTMLElement | null) => void;
+  onOpenWorkflows: (returnFocus?: HTMLElement | null) => void;
   onOpenKeybindings: (returnFocus?: HTMLElement | null) => void;
   onOpenRuntime: (returnFocus?: HTMLElement | null) => void;
   onRefresh: () => void | Promise<void>;
@@ -34,6 +42,7 @@ interface SidebarProps {
 
 const AGENT_ATTENTION_PRIORITY = {
   blocked: 5,
+  failed: 6,
   done: 4,
   working: 3,
   idle: 2,
@@ -94,7 +103,11 @@ export function Sidebar({
   onSelectWorkspace,
   onSelectAgent,
   onNewSpace,
+  onOpenAttention,
+  onOpenMissionControl,
   onOpenSettings,
+  onOpenShares,
+  onOpenWorkflows,
   onOpenKeybindings,
   onOpenRuntime,
   onRefresh,
@@ -310,6 +323,33 @@ export function Sidebar({
               sideOffset={6}
               size="1"
             >
+              <DropdownMenu.Label>Supervision</DropdownMenu.Label>
+              <DropdownMenu.Item
+                onSelect={() => runMenuAction(onOpenAttention)}
+              >
+                <BellIcon aria-hidden="true" />
+                Attention Inbox
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => runMenuAction(onOpenMissionControl)}
+              >
+                <DashboardIcon aria-hidden="true" />
+                Mission Control
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => runMenuAction(onOpenWorkflows)}
+              >
+                <StackIcon aria-hidden="true" />
+                Workflow templates
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!canCreateSpace}
+                onSelect={() => runMenuAction(onOpenShares)}
+              >
+                <Link2Icon aria-hidden="true" />
+                Viewer shares
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
               <DropdownMenu.Label>Workbench</DropdownMenu.Label>
               <DropdownMenu.Item onSelect={() => runMenuAction(onOpenSettings)}>
                 <GearIcon aria-hidden="true" />

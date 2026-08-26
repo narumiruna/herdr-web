@@ -18,6 +18,7 @@ import {
 interface SessionSnapshotResult {
   type: "session_snapshot";
   snapshot: {
+    agents?: Array<{ agent_status?: string; pane_id?: string }>;
     panes?: Array<{ pane_id?: string }>;
     workspaces?: SnapshotWorkspace[];
     [key: string]: unknown;
@@ -77,6 +78,8 @@ interface ServiceOptions {
 
 export interface CreateSessionInput {
   command: string;
+  cwd?: string;
+  initialPrompt?: string;
   label: string;
   runtime: string;
   workspaceId: string;
@@ -119,6 +122,34 @@ const STRUCTURAL_SUBSCRIPTIONS = [
 ].map((type) => ({ type }));
 
 const RUNTIME_MUTATION_TIMEOUT_MS = 300_000;
+const MAX_AGENT_PREVIEWS = 256;
+const MAX_AGENT_STATUS_SUBSCRIPTIONS = 512;
+
+async function settleWithConcurrency<T>(
+  values: string[],
+  concurrency: number,
+  run: (value: string) => Promise<T>,
+): Promise<Array<PromiseSettledResult<T>>> {
+  const results = new Array<PromiseSettledResult<T>>(values.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (!value) continue;
+      try {
+        results[index] = { status: "fulfilled", value: await run(value) };
+      } catch (reason) {
+        results[index] = { reason, status: "rejected" };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, worker),
+  );
+  return results;
+}
 
 const RUNTIMES: Record<
   string,
@@ -219,9 +250,12 @@ export class LiveHerdrService {
 
   async getState(): Promise<{
     capabilities: {
+      previewsTruncated: boolean;
+      statusSubscriptionsTruncated: boolean;
       terminalReason: string;
       terminalStreaming: boolean;
     };
+    previews: Record<string, PaneReadResponse["read"]>;
     readErrors: Record<string, string>;
     reads: Record<string, PaneReadResponse["read"]>;
     snapshot: SessionSnapshotResult["snapshot"];
@@ -249,17 +283,26 @@ export class LiveHerdrService {
       .map(({ pane_id: paneId }) => paneId)
       .filter((paneId): paneId is string => Boolean(paneId));
     const paneIds = terminalStreaming ? [] : allPaneIds.slice(0, 64);
-    const settled = await Promise.allSettled(
-      paneIds.map((paneId) =>
-        this.client.request<PaneReadResponse>("pane.read", {
-          format: "text",
-          lines: 240,
-          pane_id: paneId,
-          source: "recent_unwrapped",
-          strip_ansi: true,
-        }),
+    const agentPaneIds = (result.snapshot.agents ?? [])
+      .map(({ pane_id: paneId }) => paneId)
+      .filter((paneId): paneId is string => Boolean(paneId));
+    const previewPaneIds = terminalStreaming
+      ? agentPaneIds.slice(0, MAX_AGENT_PREVIEWS)
+      : [];
+    const readPane = (paneId: string, lines: number) =>
+      this.client.request<PaneReadResponse>("pane.read", {
+        format: "text",
+        lines,
+        pane_id: paneId,
+        source: "recent_unwrapped",
+        strip_ansi: true,
+      });
+    const [settled, previewSettled] = await Promise.all([
+      Promise.allSettled(paneIds.map((paneId) => readPane(paneId, 240))),
+      settleWithConcurrency(previewPaneIds, 8, (paneId) =>
+        readPane(paneId, 12),
       ),
-    );
+    ]);
     const readErrors: Record<string, string> = Object.fromEntries(
       (terminalStreaming ? [] : allPaneIds)
         .slice(64)
@@ -285,8 +328,30 @@ export class LiveHerdrService {
       }
       reads[paneId] = entry.value.read;
     });
+    const previews: Record<string, PaneReadResponse["read"]> = {};
+    previewSettled.forEach((entry, index) => {
+      const paneId = previewPaneIds[index];
+      if (
+        paneId &&
+        entry.status === "fulfilled" &&
+        entry.value.type === "pane_read"
+      ) {
+        previews[paneId] = {
+          ...entry.value.read,
+          text: entry.value.read.text.slice(-65_536),
+        };
+      }
+    });
     return {
-      capabilities: { terminalReason, terminalStreaming },
+      capabilities: {
+        previewsTruncated:
+          terminalStreaming && agentPaneIds.length > MAX_AGENT_PREVIEWS,
+        statusSubscriptionsTruncated:
+          agentPaneIds.length > MAX_AGENT_STATUS_SUBSCRIPTIONS,
+        terminalReason,
+        terminalStreaming,
+      },
+      previews,
       readErrors,
       reads,
       snapshot: result.snapshot,
@@ -310,7 +375,7 @@ export class LiveHerdrService {
       const agentStatusSubscriptions = (snapshot.snapshot.panes ?? [])
         .map(({ pane_id: paneId }) => paneId)
         .filter((paneId): paneId is string => Boolean(paneId))
-        .slice(0, 128)
+        .slice(0, MAX_AGENT_STATUS_SUBSCRIPTIONS)
         .map((paneId) => ({
           pane_id: paneId,
           type: "pane.agent_status_changed",
@@ -559,18 +624,32 @@ export class LiveHerdrService {
         focus: false,
         label: input.label,
         workspace_id: input.workspaceId,
+        ...(input.cwd ? { cwd: input.cwd } : {}),
       },
     );
     if (created.type !== "tab_created" || !created.root_pane?.pane_id) {
       throw new Error("Herdr did not return the new root pane");
     }
+    let started: unknown;
     try {
-      return await this.startAgent(input, created.root_pane.pane_id);
+      started = await this.startAgent(input, created.root_pane.pane_id);
     } catch (error) {
       await this.client
         .request("tab.close", { tab_id: created.tab.tab_id })
         .catch(() => undefined);
       throw error;
     }
+    if (input.initialPrompt) {
+      try {
+        await this.promptAgent(created.root_pane.pane_id, input.initialPrompt);
+      } catch (error) {
+        return {
+          ...(started && typeof started === "object" ? started : {}),
+          initial_prompt_error:
+            error instanceof Error ? error.message : "Initial prompt failed",
+        };
+      }
+    }
+    return started;
   }
 }

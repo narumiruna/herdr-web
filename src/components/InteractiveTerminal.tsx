@@ -1,4 +1,5 @@
 import {
+  ActivityLogIcon,
   ChatBubbleIcon,
   CopyIcon,
   EyeOpenIcon,
@@ -36,6 +37,10 @@ import {
   DEFAULT_TERMINAL_FONT_SIZE,
 } from "../terminal-preferences";
 import { RadixDialog } from "./RadixDialog";
+import {
+  type TerminalDiagnostics,
+  TerminalDiagnosticsDialog,
+} from "./TerminalDiagnosticsDialog";
 import { TerminalImageDialog } from "./TerminalImageDialog";
 import type { ComposerDraft } from "./TerminalWorkspace";
 import { terminalImageInput } from "./terminal-images";
@@ -45,6 +50,9 @@ import {
   waitForTerminalFonts,
 } from "./xterm-renderer";
 
+// This file intentionally keeps one terminal's xterm, WebSocket, input,
+// diagnostics, search, and attachment lifecycle together because splitting
+// those state machines would create competing owners for ordered input and teardown.
 const RECONNECT_DELAYS = [500, 1_000, 2_000, 5_000];
 const TERMINAL_LINK_PATTERN = /https?:\/\/[^\s"'<>]+|(?:~|\/)[^\s"'<>]*/gu;
 
@@ -77,6 +85,7 @@ type TerminalStatus =
   | "reconnecting";
 
 interface InteractiveTerminalProps {
+  accessibilityMode?: boolean;
   actionsEnabled: boolean;
   controlEnabled: boolean;
   structuredActionsEnabled: boolean;
@@ -96,6 +105,8 @@ interface InteractiveTerminalProps {
   onUploadFile?: (paneId: string, file: File) => Promise<UploadedFile>;
   onUploadImage: (paneId: string, image: File) => Promise<UploadedImage>;
   paneId: string;
+  protocol?: number;
+  reducedMotion?: boolean;
   toolbarActions?: ReactNode;
   toolbarContext?: ReactNode;
 }
@@ -108,6 +119,7 @@ interface TerminalFrame {
   seq: number;
   type: "terminal.frame";
   width: number;
+  serverUnixMs?: number;
 }
 
 interface TerminalError {
@@ -121,7 +133,9 @@ type TerminalMessage =
   | TerminalFrame
   | TerminalError
   | { reason?: string | null; type: "terminal.closed" }
-  | { type: "terminal.flow"; writable: boolean };
+  | { requestId: string; type: "terminal.input-accepted" }
+  | { type: "terminal.flow"; writable: boolean }
+  | { id: string; serverUnixMs: number; type: "terminal.pong" };
 
 function decodeBase64(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -156,6 +170,7 @@ function statusLabel(status: TerminalStatus): string {
 }
 
 export function InteractiveTerminal({
+  accessibilityMode = false,
   actionsEnabled,
   controlEnabled,
   structuredActionsEnabled,
@@ -172,6 +187,8 @@ export function InteractiveTerminal({
   onUploadFile,
   onUploadImage,
   paneId,
+  protocol = 0,
+  reducedMotion = false,
   toolbarActions,
   toolbarContext,
 }: InteractiveTerminalProps) {
@@ -222,8 +239,22 @@ export function InteractiveTerminal({
   const [fileUploading, setFileUploading] = useState(false);
   const [selectionText, setSelectionText] = useState("");
   const [fileUploadError, setFileUploadError] = useState("");
+  const [clipboardStatus, setClipboardStatus] = useState("");
   const [promptError, setPromptError] = useState("");
   const [ctrlArmed, setCtrlArmed] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [rendererKind, setRendererKind] = useState<"canvas" | "webgl">(
+    "canvas",
+  );
+  const [dimensions, setDimensions] = useState({ cols: 80, rows: 24 });
+  const [inputRoundTripMs, setInputRoundTripMs] = useState<number>();
+  const [outputDeliveryMs, setOutputDeliveryMs] = useState<number>();
+  const [reconnects, setReconnects] = useState(0);
+  const [unicodeVersion, setUnicodeVersion] = useState("");
+  const pendingPings = useRef(
+    new Map<string, { performanceStarted: number; unixStarted: number }>(),
+  );
+  const serverClockOffset = useRef<number | undefined>(undefined);
   createTicketRef.current = createTicket;
   fontSizeRef.current = fontSize;
   onFontSizeChangeRef.current = onFontSizeChange;
@@ -339,8 +370,36 @@ export function InteractiveTerminal({
             socket.close();
             return;
           }
+          if (message.type === "terminal.pong") {
+            const started = pendingPings.current.get(message.id);
+            pendingPings.current.delete(message.id);
+            if (started) {
+              const roundTrip = performance.now() - started.performanceStarted;
+              setInputRoundTripMs(roundTrip);
+              serverClockOffset.current =
+                message.serverUnixMs -
+                (started.unixStarted + (Date.now() - started.unixStarted) / 2);
+            }
+            return;
+          }
+          if (message.type === "terminal.input-accepted") {
+            window.dispatchEvent(
+              new CustomEvent("herdr-web:terminal-quick-reply-result", {
+                detail: { accepted: true, requestId: message.requestId },
+              }),
+            );
+            return;
+          }
           if (message.type === "terminal.frame") {
             reconnectAttempt.current = 0;
+            if (
+              typeof message.serverUnixMs === "number" &&
+              serverClockOffset.current !== undefined
+            ) {
+              const browserSentAt =
+                message.serverUnixMs - serverClockOffset.current;
+              setOutputDeliveryMs(Math.max(0, Date.now() - browserSentAt));
+            }
             const scrollLine = terminal.buffer?.active?.viewportY ?? 0;
             if (message.full) terminal.reset();
             terminal.write(decodeBase64(message.bytes), () => {
@@ -374,6 +433,7 @@ export function InteractiveTerminal({
             stopReason.current = "manual";
             writable.current = false;
             setStatus("reconnecting");
+            setReconnects((current) => current + 1);
             socket.close(1012, "terminal resynchronization required");
             reconnectTimer.current = window.setTimeout(
               () => void connectRef.current?.(mode, false, true),
@@ -404,6 +464,7 @@ export function InteractiveTerminal({
               Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)
             ] ?? 5_000;
           reconnectAttempt.current += 1;
+          setReconnects((current) => current + 1);
           setStatus("reconnecting");
           reconnectTimer.current = window.setTimeout(
             () => void connectRef.current?.(mode, false, true),
@@ -445,9 +506,9 @@ export function InteractiveTerminal({
       fontWeightBold: "600",
       lineHeight: 1.2,
       rescaleOverlappingGlyphs: true,
-      screenReaderMode: true,
+      screenReaderMode: accessibilityMode,
       scrollback: 5_000,
-      smoothScrollDuration: 80,
+      smoothScrollDuration: reducedMotion ? 0 : 80,
       theme: {
         background: "#0c0c0c",
         black: "#171717",
@@ -483,6 +544,8 @@ export function InteractiveTerminal({
       onRendererChange: (kind) => {
         element.dataset.renderer = kind;
         element.dataset.unicodeVersion = terminal.unicode.activeVersion;
+        setRendererKind(kind);
+        setUnicodeVersion(terminal.unicode.activeVersion);
       },
     });
     terminalRef.current = terminal;
@@ -491,6 +554,8 @@ export function InteractiveTerminal({
       element.dataset.renderer = kind;
       element.dataset.rendererReady = "true";
       element.dataset.unicodeVersion = terminal.unicode.activeVersion;
+      setRendererKind(kind);
+      setUnicodeVersion(terminal.unicode.activeVersion);
     });
     fitRef.current = fit;
     searchRef.current = searchAddon;
@@ -510,6 +575,7 @@ export function InteractiveTerminal({
       send({ data: terminalInput, type: "terminal.input" });
     });
     const resize = terminal.onResize(({ cols, rows }) => {
+      setDimensions({ cols, rows });
       if (!actionsEnabled || !writable.current) return;
       const size = `${cols}x${rows}`;
       if (size === lastSentSize.current) return;
@@ -549,7 +615,13 @@ export function InteractiveTerminal({
                       "noopener,noreferrer",
                     );
                   } else {
-                    void navigator.clipboard?.writeText(text);
+                    void navigator.clipboard
+                      ?.writeText(text)
+                      .catch(() =>
+                        setFileUploadError(
+                          "The host path could not be copied.",
+                        ),
+                      );
                   }
                 },
                 range: {
@@ -615,7 +687,11 @@ export function InteractiveTerminal({
         ((event.metaKey && event.key.toLowerCase() === "c") ||
           (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "c"))
       ) {
-        void navigator.clipboard?.writeText(terminal.getSelection());
+        void navigator.clipboard
+          ?.writeText(terminal.getSelection())
+          .catch(() =>
+            setFileUploadError("The terminal selection could not be copied."),
+          );
         return false;
       }
       return true;
@@ -681,7 +757,15 @@ export function InteractiveTerminal({
       scheduleFitRef.current = undefined;
       searchRef.current = undefined;
     };
-  }, [actionsEnabled, closeSocket, connectTerminal, controlEnabled, send]);
+  }, [
+    accessibilityMode,
+    actionsEnabled,
+    closeSocket,
+    connectTerminal,
+    controlEnabled,
+    reducedMotion,
+    send,
+  ]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -694,6 +778,77 @@ export function InteractiveTerminal({
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus();
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (status !== "live" && status !== "read-only") return;
+    const ping = () => {
+      const id = crypto.randomUUID?.() ?? `${Date.now()}`;
+      pendingPings.current.set(id, {
+        performanceStarted: performance.now(),
+        unixStarted: Date.now(),
+      });
+      if (!send({ id, type: "terminal.ping" })) pendingPings.current.delete(id);
+    };
+    ping();
+    const timer = window.setInterval(ping, 10_000);
+    return () => {
+      window.clearInterval(timer);
+      pendingPings.current.clear();
+    };
+  }, [send, status]);
+
+  useEffect(() => {
+    const onTerminalAction = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          action?: string;
+          message?: string;
+          paneId?: string;
+          requestId?: string;
+        }>
+      ).detail;
+      if (!focused || (detail.paneId && detail.paneId !== paneId)) return;
+      if (detail.action === "quick-reply" && detail.requestId) {
+        const accepted =
+          typeof detail.message === "string" &&
+          writable.current &&
+          send({
+            data: `${detail.message}\r`,
+            requestId: detail.requestId,
+            type: "terminal.input",
+          });
+        if (!accepted) {
+          window.dispatchEvent(
+            new CustomEvent("herdr-web:terminal-quick-reply-result", {
+              detail: { accepted: false, requestId: detail.requestId },
+            }),
+          );
+        }
+      } else if (detail.action === "search") setSearchOpen(true);
+      else if (
+        detail.action === "prompt" &&
+        canPrompt &&
+        structuredActionsEnabled
+      ) {
+        setPromptOpen(true);
+      } else if (detail.action === "take-control" && controlEnabled) {
+        void connectTerminal("control", true);
+      } else if (detail.action === "diagnostics") {
+        setDiagnosticsOpen(true);
+      }
+    };
+    window.addEventListener("herdr-web:terminal-action", onTerminalAction);
+    return () =>
+      window.removeEventListener("herdr-web:terminal-action", onTerminalAction);
+  }, [
+    canPrompt,
+    connectTerminal,
+    controlEnabled,
+    focused,
+    paneId,
+    send,
+    structuredActionsEnabled,
+  ]);
 
   useEffect(() => {
     if (!actionsEnabled) {
@@ -817,6 +972,19 @@ export function InteractiveTerminal({
       setError("The detached pane window was blocked by the browser.");
   };
 
+  const diagnostics: TerminalDiagnostics = {
+    accessMode: sessionMode,
+    cols: dimensions.cols,
+    inputRoundTripMs,
+    outputDeliveryMs,
+    protocol,
+    reconnects,
+    renderer: rendererKind,
+    rows: dimensions.rows,
+    status: statusLabel(status),
+    unicodeVersion,
+  };
+
   const searchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       setSearchOpen(false);
@@ -854,6 +1022,13 @@ export function InteractiveTerminal({
             onClick={() => setSearchOpen((open) => !open)}
           >
             <MagnifyingGlassIcon />
+          </button>
+          <button
+            type="button"
+            aria-label="Terminal diagnostics"
+            onClick={() => setDiagnosticsOpen(true)}
+          >
+            <ActivityLogIcon />
           </button>
           <input
             ref={fileInput}
@@ -1013,7 +1188,20 @@ export function InteractiveTerminal({
           <span>{selectionText.length.toLocaleString()} selected</span>
           <button
             type="button"
-            onClick={() => void navigator.clipboard?.writeText(selectionText)}
+            onClick={() => {
+              setClipboardStatus("");
+              void navigator.clipboard
+                ?.writeText(selectionText)
+                .then(() => {
+                  setClipboardStatus("Terminal selection copied");
+                  window.setTimeout(() => setClipboardStatus(""), 1_500);
+                })
+                .catch(() =>
+                  setFileUploadError(
+                    "The terminal selection could not be copied.",
+                  ),
+                );
+            }}
           >
             <CopyIcon /> Copy
           </button>
@@ -1041,6 +1229,9 @@ export function InteractiveTerminal({
           )}
         </div>
       )}
+      <span className="sr-only" aria-live="polite">
+        {clipboardStatus}
+      </span>
       {fileUploadError && (
         <div className="terminal-inline-error" role="alert">
           {fileUploadError}
@@ -1107,6 +1298,12 @@ export function InteractiveTerminal({
           </div>
         </div>
       )}
+
+      <TerminalDiagnosticsDialog
+        diagnostics={diagnostics}
+        open={diagnosticsOpen}
+        onOpenChange={setDiagnosticsOpen}
+      />
 
       <TerminalImageDialog
         batch={imageQueue.batch}

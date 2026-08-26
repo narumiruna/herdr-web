@@ -205,7 +205,7 @@ test("Classic themes retain accessible controls, focus, and dialogs", async ({
     }, theme);
     await page.reload();
 
-    const command = page.getByRole("button", { name: "Open command palette" });
+    const command = page.getByRole("button", { name: "Open Action Palette" });
     await command.focus();
     const ratios = await command.evaluate((element) => {
       const channels = (color: string) => {
@@ -554,7 +554,7 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
       expect(ratio, `${appearance} ${name}`).toBeGreaterThanOrEqual(4.5);
     }
 
-    const command = page.getByRole("button", { name: "Open command palette" });
+    const command = page.getByRole("button", { name: "Open Action Palette" });
     await command.focus();
     await expect(command).toHaveCSS("outline-width", "2px");
     const commandFocus = await command.evaluate((element) => {
@@ -900,7 +900,7 @@ test("command palette works with a keyboard only", async ({ page }) => {
 
   await page.keyboard.press("Control+KeyK");
   const search = page.getByRole("combobox", {
-    name: "Search Spaces, Agents, and Terminals",
+    name: "Search actions, Spaces, Agents, and Terminals",
   });
   await expect(search).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -982,7 +982,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   expect(metrics.navTarget).toBeGreaterThanOrEqual(44);
   for (const target of [
     page.getByRole("button", { name: "Open navigation" }),
-    page.getByRole("button", { name: "Open command palette" }),
+    page.getByRole("button", { name: "Open Action Palette" }),
     page.getByRole("button", { name: "New Agent in herdr" }),
     page.getByRole("button", { name: "Open more actions" }),
     page.getByRole("button", { name: "Attach image" }),

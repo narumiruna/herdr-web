@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createHerdrHttpHandler, type HerdrService } from "../server/http-app";
+import type { PushNotificationService } from "../server/push-notifications";
 import { TerminalTicketStore } from "../server/terminal-tickets";
 
 const servers: Server[] = [];
@@ -20,12 +21,14 @@ async function startApi(
   service: HerdrService,
   terminal?: {
     configured: boolean;
+    pushNotifications?: PushNotificationService;
     tickets: TerminalTicketStore;
     viewToken?: string;
   },
 ): Promise<string> {
   const server = createServer(
     createHerdrHttpHandler({
+      pushNotifications: terminal?.pushNotifications,
       service,
       terminalConfigured: terminal?.configured,
       terminalTickets: terminal?.tickets,
@@ -155,6 +158,57 @@ describe("herdr HTTP bridge", () => {
       },
     );
     expect(observe.status).toBe(201);
+  });
+
+  test("configures authenticated controller-only Web Push subscriptions", async () => {
+    const service = fakeService();
+    const pushNotifications = {
+      publicKey: vi.fn(() => "public_key"),
+      remove: vi.fn().mockResolvedValue(true),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    } as unknown as PushNotificationService;
+    const baseUrl = await startApi(service, {
+      configured: true,
+      pushNotifications,
+      tickets: new TerminalTicketStore(),
+      viewToken: "view-secret",
+    });
+    const controllerHeaders = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+    const config = await fetch(`${baseUrl}/api/herdr/push/config`, {
+      headers: controllerHeaders,
+    });
+    expect(await config.json()).toMatchObject({ publicKey: "public_key" });
+    const saved = await fetch(`${baseUrl}/api/herdr/push/subscription`, {
+      body: JSON.stringify({
+        preferences: {
+          cooldownMs: 60_000,
+          mutedAgentIds: ["w5:p1"],
+          privacy: "private",
+          soundEnabled: false,
+        },
+        subscription: {
+          endpoint: "https://push.example.test/subscription",
+          keys: { auth: "auth_key", p256dh: "p256dh_key" },
+        },
+      }),
+      headers: controllerHeaders,
+      method: "PUT",
+    });
+    expect(saved.status).toBe(200);
+    expect(pushNotifications.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: "https://push.example.test/subscription",
+      }),
+      expect.objectContaining({ privacy: "private" }),
+      expect.anything(),
+    );
+    const viewer = await fetch(`${baseUrl}/api/herdr/push/config`, {
+      headers: { authorization: "Bearer view-secret" },
+    });
+    expect(viewer.status).toBe(403);
   });
 
   test("routes controller-only plugin and integration management", async () => {
@@ -376,6 +430,69 @@ describe("herdr HTTP bridge", () => {
       rows: 40,
       takeover: false,
     });
+  });
+
+  test("issues attention-reply tickets only for a currently blocked Agent pane", async () => {
+    const service = fakeService();
+    vi.mocked(service.getState).mockResolvedValue({
+      snapshot: {
+        agents: [
+          {
+            agent_status: "blocked",
+            pane_id: "w5:p1",
+            tab_id: "w5:t1",
+          },
+        ],
+        panes: [{ pane_id: "w5:p1", tab_id: "w5:t1" }],
+      },
+    });
+    const tickets = new TerminalTicketStore();
+    const baseUrl = await startApi(service, { configured: true, tickets });
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+    const accepted = await fetch(
+      `${baseUrl}/api/herdr/panes/w5%3Ap1/terminal-ticket`,
+      {
+        body: JSON.stringify({
+          cols: 80,
+          mode: "control",
+          purpose: "attention-reply",
+          rows: 24,
+        }),
+        headers,
+        method: "POST",
+      },
+    );
+    expect(accepted.status).toBe(201);
+    const issued = (await accepted.json()) as { ticket: string };
+    expect(tickets.consume(issued.ticket)).toMatchObject({
+      expiresInMs: 5_000,
+      paneId: "w5:p1",
+      purpose: "attention-reply",
+    });
+
+    vi.mocked(service.getState).mockResolvedValue({
+      snapshot: {
+        agents: [{ agent_status: "done", pane_id: "w5:p1", tab_id: "w5:t1" }],
+        panes: [{ pane_id: "w5:p1", tab_id: "w5:t1" }],
+      },
+    });
+    const rejected = await fetch(
+      `${baseUrl}/api/herdr/panes/w5%3Ap1/terminal-ticket`,
+      {
+        body: JSON.stringify({
+          cols: 80,
+          mode: "control",
+          purpose: "attention-reply",
+          rows: 24,
+        }),
+        headers,
+        method: "POST",
+      },
+    );
+    expect(rejected.status).toBe(409);
   });
 
   test("rejects invalid terminal dimensions and unsupported bridge configuration", async () => {

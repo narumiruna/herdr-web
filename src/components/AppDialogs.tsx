@@ -19,10 +19,21 @@ import {
   WORKBENCH_THEMES,
   type WorkbenchTheme,
 } from "../theme-preferences";
+import { RUNTIME_COMMAND } from "../workflow-templates";
 import { RadixDialog } from "./RadixDialog";
 import { StatusPill } from "./StatusPill";
 
+export interface PaletteAction {
+  description: string;
+  disabled?: boolean;
+  id: string;
+  keywords?: string;
+  label: string;
+  onRun: () => void;
+}
+
 interface CommandPaletteProps {
+  actions?: PaletteAction[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pinnedWorkspaceIds?: string[];
@@ -34,6 +45,7 @@ interface CommandPaletteProps {
 }
 
 type CommandResult =
+  | { action: PaletteAction; id: string; kind: "action" }
   | { id: string; kind: "workspace"; workspace: Workspace }
   | { id: string; kind: "session"; session: Agent; workspace?: Workspace };
 
@@ -42,6 +54,7 @@ function resultDomId(result: CommandResult): string {
 }
 
 export function CommandPalette({
+  actions = [],
   open,
   onOpenChange,
   pinnedWorkspaceIds = [],
@@ -65,6 +78,17 @@ export function CommandPalette({
       if (recent >= 0) return 100 + recent;
       return 1_000 + state.workspaces.indexOf(workspace);
     };
+    const actionResults = actions
+      .filter((action) =>
+        matches(
+          `${action.label} ${action.description} ${action.keywords ?? ""}`,
+        ),
+      )
+      .map((action) => ({
+        action,
+        id: action.id,
+        kind: "action" as const,
+      }));
     const workspaces = state.workspaces
       .filter((workspace) =>
         matches(
@@ -108,8 +132,15 @@ export function CommandPalette({
         session.status !== "blocked" &&
         session.workspaceId !== state.selectedWorkspaceId,
     );
-    return [...attention, ...current, ...workspaces, ...other];
+    return [
+      ...actionResults,
+      ...attention,
+      ...current,
+      ...workspaces,
+      ...other,
+    ];
   }, [
+    actions,
     normalizedQuery,
     state.agents,
     state.selectedWorkspaceId,
@@ -124,7 +155,10 @@ export function CommandPalette({
   }, [open]);
 
   const choose = (result: CommandResult) => {
-    if (result.kind === "workspace") onSelectWorkspace(result.id);
+    if (result.kind === "action") {
+      if (result.action.disabled) return;
+      result.action.onRun();
+    } else if (result.kind === "workspace") onSelectWorkspace(result.id);
     else onSelectAgent(result.id);
     onOpenChange(false);
   };
@@ -134,6 +168,10 @@ export function CommandPalette({
     setActiveIndex((nextIndex + results.length) % results.length);
   };
 
+  const actionResults = results.filter(
+    (result): result is Extract<CommandResult, { kind: "action" }> =>
+      result.kind === "action",
+  );
   const workspaceResults = results.filter(
     (result): result is Extract<CommandResult, { kind: "workspace" }> =>
       result.kind === "workspace",
@@ -157,6 +195,32 @@ export function CommandPalette({
 
   const resultButton = (result: CommandResult) => {
     const index = results.indexOf(result);
+    if (result.kind === "action") {
+      return (
+        <button
+          id={resultDomId(result)}
+          type="button"
+          role="option"
+          tabIndex={-1}
+          aria-selected={index === activeIndex}
+          aria-disabled={result.action.disabled || undefined}
+          disabled={result.action.disabled}
+          className="command-result command-action-result"
+          key={`action-${result.id}`}
+          onPointerMove={() => setActiveIndex(index)}
+          onClick={() => choose(result)}
+        >
+          <span className="command-result-icon">
+            <RocketIcon aria-hidden="true" />
+          </span>
+          <span>
+            <strong>{result.action.label}</strong>
+            <small>{result.action.description}</small>
+          </span>
+          <kbd>action</kbd>
+        </button>
+      );
+    }
     if (result.kind === "workspace") {
       const pinned = pinnedWorkspaceIds.includes(result.workspace.id);
       const recent = recentWorkspaceIds.includes(result.workspace.id);
@@ -234,8 +298,8 @@ export function CommandPalette({
     <RadixDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Jump anywhere"
-      description="Find a Space, detected Agent, or standalone Terminal."
+      title="Action Palette"
+      description="Run an approved workbench action or jump to a Space, Agent, or Terminal."
       className="command-dialog"
       initialFocusRef={searchInput}
     >
@@ -245,14 +309,14 @@ export function CommandPalette({
           ref={searchInput}
           value={query}
           role="combobox"
-          aria-label="Search Spaces, Agents, and Terminals"
+          aria-label="Search actions, Spaces, Agents, and Terminals"
           aria-expanded="true"
           aria-controls="command-results"
           aria-autocomplete="list"
           aria-activedescendant={
             results[activeIndex] ? resultDomId(results[activeIndex]) : undefined
           }
-          placeholder="Search Spaces, Agents, and Terminals…"
+          placeholder="Search actions, Spaces, Agents, and Terminals…"
           onChange={(event) => {
             setQuery(event.target.value);
             setActiveIndex(0);
@@ -291,6 +355,12 @@ export function CommandPalette({
         role="listbox"
         aria-label="Search results"
       >
+        {actionResults.length > 0 && (
+          <fieldset>
+            <legend>Actions</legend>
+            {actionResults.map(resultButton)}
+          </fieldset>
+        )}
         {attentionResults.length > 0 && (
           <fieldset>
             <legend>Needs input</legend>
@@ -318,8 +388,10 @@ export function CommandPalette({
         {results.length === 0 && (
           <div className="command-empty">
             <MagnifyingGlassIcon aria-hidden="true" />
-            <strong>No matching Space or session</strong>
-            <span>Try a runtime, branch, path, Space, or Agent name.</span>
+            <strong>No matching action, Space, or session</strong>
+            <span>
+              Try an action, runtime, branch, path, Space, or Agent name.
+            </span>
           </div>
         )}
       </div>
@@ -353,14 +425,6 @@ interface NewSessionDialogProps {
     command: string;
   }) => void;
 }
-
-const RUNTIME_COMMAND: Record<RuntimeName, string> = {
-  "Claude Code": "claude",
-  Codex: "codex --full-auto",
-  OpenCode: "opencode",
-  Pi: "pi",
-  "Qwen Code": "qwen",
-};
 
 export function NewSessionDialog({
   open,
@@ -609,32 +673,80 @@ export function NewSpaceDialog({
   );
 }
 
-interface SettingsPreferences {
+export interface SettingsPreferences {
+  accessibilityMode: boolean;
+  keepAwake: boolean;
+  notificationEnabled: boolean;
+  notificationPrivacy: "full" | "private";
+  reducedMotion: boolean;
+  soundEnabled: boolean;
   terminalFontSize: number;
   theme: WorkbenchTheme;
 }
 
 interface SettingsDialogProps extends SettingsPreferences {
+  backgroundPushActive?: boolean;
+  backgroundPushError?: string;
+  backgroundPushSupported?: boolean;
+  installAvailable?: boolean;
+  installed?: boolean;
   open: boolean;
+  onInstall?: () => Promise<boolean>;
   onOpenChange: (open: boolean) => void;
   onApply: (preferences: SettingsPreferences) => void;
 }
 
 export function SettingsDialog({
+  accessibilityMode,
+  backgroundPushActive = false,
+  backgroundPushError = "",
+  backgroundPushSupported = false,
+  installAvailable = false,
+  installed = false,
+  keepAwake,
+  notificationEnabled,
+  notificationPrivacy,
   open,
+  reducedMotion,
+  soundEnabled,
   terminalFontSize,
   theme,
+  onInstall,
   onOpenChange,
   onApply,
 }: SettingsDialogProps) {
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftFontSize, setDraftFontSize] = useState(terminalFontSize);
+  const [draftAccessibility, setDraftAccessibility] =
+    useState(accessibilityMode);
+  const [draftReducedMotion, setDraftReducedMotion] = useState(reducedMotion);
+  const [draftKeepAwake, setDraftKeepAwake] = useState(keepAwake);
+  const [draftNotifications, setDraftNotifications] =
+    useState(notificationEnabled);
+  const [draftSound, setDraftSound] = useState(soundEnabled);
+  const [draftPrivacy, setDraftPrivacy] = useState(notificationPrivacy);
 
   useEffect(() => {
     if (!open) return;
     setDraftTheme(theme);
     setDraftFontSize(terminalFontSize);
-  }, [open, terminalFontSize, theme]);
+    setDraftAccessibility(accessibilityMode);
+    setDraftReducedMotion(reducedMotion);
+    setDraftKeepAwake(keepAwake);
+    setDraftNotifications(notificationEnabled);
+    setDraftSound(soundEnabled);
+    setDraftPrivacy(notificationPrivacy);
+  }, [
+    accessibilityMode,
+    keepAwake,
+    notificationEnabled,
+    notificationPrivacy,
+    open,
+    reducedMotion,
+    soundEnabled,
+    terminalFontSize,
+    theme,
+  ]);
 
   return (
     <RadixDialog
@@ -649,6 +761,12 @@ export function SettingsDialog({
         onSubmit={(event) => {
           event.preventDefault();
           onApply({
+            accessibilityMode: draftAccessibility,
+            keepAwake: draftKeepAwake,
+            notificationEnabled: draftNotifications,
+            notificationPrivacy: draftPrivacy,
+            reducedMotion: draftReducedMotion,
+            soundEnabled: draftSound,
             terminalFontSize: draftFontSize,
             theme: draftTheme,
           });
@@ -699,6 +817,126 @@ export function SettingsDialog({
             </label>
           ))}
         </fieldset>
+        <fieldset className="settings-toggle-options">
+          <legend>Attention and accessibility</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={draftNotifications}
+              onChange={(event) => setDraftNotifications(event.target.checked)}
+            />
+            <span>
+              <strong>Agent notifications</strong>
+              <small>
+                Notify on new Needs input, Failed, and Done transitions.
+              </small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={draftSound}
+              disabled={!draftNotifications}
+              onChange={(event) => setDraftSound(event.target.checked)}
+            />
+            <span>
+              <strong>Notification sound</strong>
+              <small>Play a short optional tone after a delivered alert.</small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={draftAccessibility}
+              onChange={(event) => setDraftAccessibility(event.target.checked)}
+            />
+            <span>
+              <strong>Screen-reader terminal mode</strong>
+              <small>
+                Enable xterm's accessibility tree and deliberate status
+                announcements.
+              </small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={draftReducedMotion}
+              onChange={(event) => setDraftReducedMotion(event.target.checked)}
+            />
+            <span>
+              <strong>Reduce motion</strong>
+              <small>
+                Disable terminal smooth scrolling and workbench animation.
+              </small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={draftKeepAwake}
+              onChange={(event) => setDraftKeepAwake(event.target.checked)}
+            />
+            <span>
+              <strong>Keep screen awake</strong>
+              <small>
+                Request a foreground wake lock while connected and visible.
+              </small>
+            </span>
+          </label>
+          <label>
+            <span>
+              <strong>Lock-screen detail</strong>
+              <small>Private hides Agent, Space, and prompt details.</small>
+            </span>
+            <select
+              value={draftPrivacy}
+              disabled={!draftNotifications}
+              onChange={(event) =>
+                setDraftPrivacy(
+                  event.target.value === "private" ? "private" : "full",
+                )
+              }
+            >
+              <option value="full">Full detail</option>
+              <option value="private">Private</option>
+            </select>
+          </label>
+        </fieldset>
+        <section
+          className="settings-install"
+          aria-label="Background notifications"
+        >
+          <span>
+            <strong>Background notifications</strong>
+            <small>
+              {backgroundPushActive
+                ? "Active through authenticated Web Push, including while the app is closed."
+                : backgroundPushError ||
+                  (backgroundPushSupported
+                    ? "Enable Agent notifications and grant permission to activate Web Push."
+                    : "Web Push requires browser support and a secure context.")}
+            </small>
+          </span>
+        </section>
+        <section className="settings-install" aria-label="Install app">
+          <span>
+            <strong>{installed ? "Installed app" : "Install herdr-web"}</strong>
+            <small>
+              Installation adds a standalone launcher. Herdr access still
+              requires a live connection.
+            </small>
+          </span>
+          {installAvailable && !installed && (
+            <Button
+              type="button"
+              variant="soft"
+              onClick={() => void onInstall?.()}
+            >
+              Install
+            </Button>
+          )}
+        </section>
         <div className="form-actions">
           <Button
             type="button"
@@ -723,7 +961,9 @@ interface KeybindingsDialogProps {
 }
 
 const KEYBINDINGS = [
-  ["Jump to a Space, Agent, or Terminal", "⌘ K / Ctrl K"],
+  ["Open the Action Palette", "⌘ K / Ctrl K"],
+  ["Move through Attention Inbox", "J/N next · K/P previous"],
+  ["Focus Attention Inbox reply", "R"],
   ["Move between focused tabs", "← / →"],
   ["Send an Agent message", "Enter"],
   ["Insert a message line break", "Shift Enter"],
