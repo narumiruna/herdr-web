@@ -54,6 +54,7 @@ export interface HerdrService {
   createTerminal?(input: CreateTerminalInput): Promise<unknown>;
   createWorkspace(input: CreateWorkspaceInput): Promise<unknown>;
   getState(): Promise<unknown>;
+  getSnapshotState?(): Promise<unknown>;
   invokePluginAction?(actionId: string): Promise<unknown>;
   listPluginActions?(): Promise<unknown>;
   listPluginLogs?(pluginId?: string): Promise<unknown>;
@@ -468,6 +469,10 @@ function blockedAgentOwnsPane(state: unknown, paneId: string): boolean {
   );
 }
 
+async function snapshotState(service: HerdrService): Promise<unknown> {
+  return service.getSnapshotState?.() ?? service.getState();
+}
+
 function shareEventAllowed(
   event: unknown,
   scope: ShareScope,
@@ -595,6 +600,8 @@ export function createHerdrHttpHandler({
         }
         activeEventStreams += 1;
         const controller = new AbortController();
+        let eventError: unknown;
+        let eventWrites: Promise<void> = Promise.resolve();
         let keepalive: NodeJS.Timeout | undefined;
         const shareExpiry = principal.share
           ? setTimeout(
@@ -611,29 +618,43 @@ export function createHerdrHttpHandler({
             : undefined;
         response.once("close", () => controller.abort());
         try {
-          const shareState = principal.share
-            ? await service.getState()
+          let shareState = principal.share
+            ? await snapshotState(service)
             : undefined;
+          const writeEvent = async (event: unknown) => {
+            if (response.writableEnded) return;
+            if (principal.share) {
+              if (
+                !shareEventAllowed(event, principal.share.scope, shareState)
+              ) {
+                shareState = await snapshotState(service);
+                if (
+                  !shareEventAllowed(event, principal.share.scope, shareState)
+                ) {
+                  return;
+                }
+              }
+              event = {
+                data: { shareId: principal.share.id },
+                event: "scope_updated",
+              };
+            }
+            const writable = response.write(`${JSON.stringify(event)}\n`);
+            if (!writable) controller.abort();
+          };
           await service.subscribeEvents(
             controller.signal,
             (event) => {
-              if (response.writableEnded) return;
-              if (
-                principal.share &&
-                !shareEventAllowed(event, principal.share.scope, shareState)
-              ) {
+              if (!principal.share) {
+                void writeEvent(event);
                 return;
               }
-              const projectedEvent = principal.share
-                ? {
-                    data: { shareId: principal.share.id },
-                    event: "scope_updated",
-                  }
-                : event;
-              const writable = response.write(
-                `${JSON.stringify(projectedEvent)}\n`,
-              );
-              if (!writable) controller.abort();
+              eventWrites = eventWrites
+                .then(() => writeEvent(event))
+                .catch((error) => {
+                  eventError = error;
+                  controller.abort();
+                });
             },
             () => {
               response.writeHead(200, {
@@ -650,6 +671,8 @@ export function createHerdrHttpHandler({
               keepalive.unref();
             },
           );
+          await eventWrites;
+          if (eventError) throw eventError;
           if (!response.writableEnded) response.end();
         } catch (error) {
           if (!response.headersSent) errorResponse(response, error);
@@ -948,7 +971,7 @@ export function createHerdrHttpHandler({
         await pushNotifications.upsert(
           cleanPushSubscription(body.subscription),
           cleanPushPreferences(body.preferences),
-          await service.getState(),
+          await snapshotState(service),
         );
         sendJson(response, 200, { type: "push_subscription_saved" });
         return;

@@ -151,7 +151,7 @@ const updatePushState = async () => {
   }
   pushUpdateRunning = true;
   try {
-    await pushNotifications.processState(await service.getState());
+    await pushNotifications.processState(await service.getSnapshotState());
   } catch (error) {
     console.error("herdr-web background push update failed", error);
   } finally {

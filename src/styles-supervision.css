@@ -571,11 +571,19 @@
   background: var(--panel-muted);
 }
 
+html[data-reduced-motion="true"] .status-working svg,
+html[data-reduced-motion="true"] .dialog-overlay,
+html[data-reduced-motion="true"] .dialog-content,
+html[data-reduced-motion="true"] .connection-spinner,
+html[data-reduced-motion="true"] .skeleton,
 html[data-reduced-motion="true"]
   .launch-notice[data-state="starting"]
   > span
   > svg {
   animation: none;
+}
+html[data-reduced-motion="true"] .workspace-chevron {
+  transition: none;
 }
 html[data-reduced-motion="true"] .xterm-viewport,
 html[data-reduced-motion="true"] .sidebar-viewport,

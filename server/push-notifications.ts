@@ -116,6 +116,15 @@ function isAttentionStatus(status: string): boolean {
   return status === "blocked" || status === "done" || status === "failed";
 }
 
+function retainAgentHistory<T>(
+  history: Record<string, T>,
+  agentIds: Set<string>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(history).filter(([agentId]) => agentIds.has(agentId)),
+  );
+}
+
 function pushPayload(
   agent: AgentProjection,
   preferences: PushPreferences,
@@ -239,13 +248,19 @@ export class PushNotificationService {
     const existing = store.subscriptions.find(
       (entry) => entry.subscription.endpoint === subscription.endpoint,
     );
+    const agents = projectAgents(state);
+    const agentIds = new Set(agents.map(({ id }) => id));
     const lastStatuses = Object.fromEntries(
-      projectAgents(state).map((agent) => [agent.id, agent.status]),
+      agents.map((agent) => [agent.id, agent.status]),
     );
     if (existing) {
       existing.preferences = preferences;
       existing.subscription = subscription;
-      existing.lastStatuses = { ...existing.lastStatuses, ...lastStatuses };
+      existing.lastNotifiedAt = retainAgentHistory(
+        existing.lastNotifiedAt,
+        agentIds,
+      );
+      existing.lastStatuses = lastStatuses;
     } else {
       if (store.subscriptions.length >= 32) {
         throw new RangeError(
@@ -278,9 +293,12 @@ export class PushNotificationService {
   async processState(state: unknown): Promise<void> {
     const store = this.requireStore();
     const agents = projectAgents(state);
+    const agentIds = new Set(agents.map(({ id }) => id));
     const now = this.now();
     const staleEndpoints = new Set<string>();
     for (const entry of store.subscriptions) {
+      entry.lastNotifiedAt = retainAgentHistory(entry.lastNotifiedAt, agentIds);
+      entry.lastStatuses = retainAgentHistory(entry.lastStatuses, agentIds);
       for (const agent of agents) {
         const previous = entry.lastStatuses[agent.id];
         if (

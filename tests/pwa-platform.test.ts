@@ -60,6 +60,7 @@ describe("PWA platform shell", () => {
       await readFile("public/manifest.webmanifest", "utf8"),
     ) as { display: string; icons: Array<{ sizes: string }> };
     const worker = await readFile("public/sw.js", "utf8");
+    const reducedMotion = await readFile("src/styles-supervision.css", "utf8");
 
     expect(manifest.display).toBe("standalone");
     expect(manifest.icons.map(({ sizes }) => sizes)).toEqual([
@@ -70,6 +71,18 @@ describe("PWA platform shell", () => {
     expect(worker).toContain('addEventListener("notificationclick"');
     expect(worker).toContain("never cached");
     expect(worker).not.toContain("caches.open");
+    for (const selector of [
+      ".status-working svg",
+      ".dialog-overlay",
+      ".dialog-content",
+      ".connection-spinner",
+      ".skeleton",
+      ".workspace-chevron",
+    ]) {
+      expect(reducedMotion).toContain(
+        `html[data-reduced-motion="true"] ${selector}`,
+      );
+    }
   });
 
   test("routes notification clicks to a client that confirms the target Agent", async () => {

@@ -44,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(navigator, "serviceWorker");
 });
 
 function attentionState(status: "blocked" | "done" | "idle"): HerdrState {
@@ -55,8 +56,18 @@ function attentionState(status: "blocked" | "done" | "idle"): HerdrState {
   return state;
 }
 
-function NotificationHarness({ state }: { state: HerdrState }) {
-  const center = useAttentionCenter({ onOpenAgent: vi.fn(), state });
+function NotificationHarness({
+  backgroundPushActive = false,
+  state,
+}: {
+  backgroundPushActive?: boolean;
+  state: HerdrState;
+}) {
+  const center = useAttentionCenter({
+    isBackgroundPushActive: () => backgroundPushActive,
+    onOpenAgent: vi.fn(),
+    state,
+  });
   return (
     <button
       type="button"
@@ -110,6 +121,56 @@ describe("attention supervision", () => {
     view.rerender(<NotificationHarness state={attentionState("done")} />);
     await act(() => Promise.resolve());
     expect(FakeNotification.instances).toHaveLength(1);
+  });
+
+  test("uses foreground delivery until bridge registration confirms background Push", async () => {
+    const showNotification = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn(),
+        ready: Promise.resolve({
+          pushManager: {
+            getSubscription: vi.fn().mockResolvedValue({
+              endpoint: "https://push.example.test/unsaved",
+            }),
+          },
+          showNotification,
+        }),
+        removeEventListener: vi.fn(),
+      },
+    });
+    const view = render(<NotificationHarness state={attentionState("idle")} />);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Enable" }));
+
+    view.rerender(<NotificationHarness state={attentionState("blocked")} />);
+
+    await waitFor(() => expect(showNotification).toHaveBeenCalledOnce());
+    expect(FakeNotification.instances).toHaveLength(0);
+  });
+
+  test("suppresses foreground delivery after bridge registration succeeds", async () => {
+    const view = render(
+      <NotificationHarness
+        backgroundPushActive
+        state={attentionState("idle")}
+      />,
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Enable" }));
+
+    view.rerender(
+      <NotificationHarness
+        backgroundPushActive
+        state={attentionState("blocked")}
+      />,
+    );
+    await act(() => Promise.resolve());
+
+    expect(FakeNotification.instances).toHaveLength(0);
   });
 
   test("records deduplication only after notification delivery succeeds", async () => {

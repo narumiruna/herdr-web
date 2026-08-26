@@ -185,8 +185,10 @@ async function showAgentNotification(
   agent: Agent,
   workspaceName: string,
   privacy: AttentionPreferences["notificationPrivacy"],
+  backgroundPushActive: boolean,
   onOpen: (agentId: string, paneId: string) => void,
 ): Promise<"delivered" | "push-active"> {
+  if (backgroundPushActive) return "push-active";
   const title = notificationTitle(agent, privacy);
   const url = notificationUrl(agent);
   const options: NotificationOptions = {
@@ -209,9 +211,6 @@ async function showAgentNotification(
         ])
       : undefined;
     if (registration) {
-      if (await registration.pushManager?.getSubscription()) {
-        return "push-active";
-      }
       await registration.showNotification(title, options);
       return "delivered";
     }
@@ -228,12 +227,16 @@ async function showAgentNotification(
   return "delivered";
 }
 
+const backgroundPushInactive = () => false;
+
 interface UseAttentionCenterInput {
+  isBackgroundPushActive?: () => boolean;
   onOpenAgent: (agentId: string, paneId: string) => void;
   state: HerdrState;
 }
 
 export function useAttentionCenter({
+  isBackgroundPushActive = backgroundPushInactive,
   onOpenAgent,
   state,
 }: UseAttentionCenterInput) {
@@ -375,6 +378,7 @@ export function useAttentionCenter({
         agent,
         workspace?.name ?? "Herdr",
         preferences.notificationPrivacy,
+        isBackgroundPushActive(),
         onOpenAgent,
       )
         .then((delivery) => {
@@ -395,7 +399,13 @@ export function useAttentionCenter({
         .finally(() => pendingNotifications.current.delete(key));
     }
     previousStatus.current = nextStatuses;
-  }, [onOpenAgent, preferences, state.agents, state.workspaces]);
+  }, [
+    isBackgroundPushActive,
+    onOpenAgent,
+    preferences,
+    state.agents,
+    state.workspaces,
+  ]);
 
   const patch = useCallback((update: Partial<AttentionPreferences>) => {
     setPreferences((current) => ({ ...current, ...update }));

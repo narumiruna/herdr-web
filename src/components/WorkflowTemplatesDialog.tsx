@@ -162,10 +162,12 @@ export function WorkflowTemplatesDialog({
 
   const remove = async () => {
     if (!draft || busy) return;
+    const persisted = templates.find(({ id }) => id === draft.id);
+    if (!persisted) return;
     setBusy(true);
     setError("");
     try {
-      await onDelete(draft);
+      await onDelete(persisted);
       setSelectedId("");
       setDraft(undefined);
       setOutcomes([]);

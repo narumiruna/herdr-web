@@ -248,6 +248,23 @@ export class LiveHerdrService {
     private readonly options: ServiceOptions = {},
   ) {}
 
+  private async snapshot(): Promise<SessionSnapshotResult["snapshot"]> {
+    const result = await this.client.request<SessionSnapshotResult>(
+      "session.snapshot",
+      {},
+    );
+    if (result.type !== "session_snapshot" || !result.snapshot) {
+      throw new Error("Herdr returned an invalid session snapshot");
+    }
+    return result.snapshot;
+  }
+
+  async getSnapshotState(): Promise<{
+    snapshot: SessionSnapshotResult["snapshot"];
+  }> {
+    return { snapshot: await this.snapshot() };
+  }
+
   async getState(): Promise<{
     capabilities: {
       previewsTruncated: boolean;
@@ -260,13 +277,7 @@ export class LiveHerdrService {
     reads: Record<string, PaneReadResponse["read"]>;
     snapshot: SessionSnapshotResult["snapshot"];
   }> {
-    const result = await this.client.request<SessionSnapshotResult>(
-      "session.snapshot",
-      {},
-    );
-    if (result.type !== "session_snapshot" || !result.snapshot) {
-      throw new Error("Herdr returned an invalid session snapshot");
-    }
+    const result = await this.getSnapshotState();
     await enrichSnapshotWorktreeBranches(result.snapshot);
     const protocol = Number(result.snapshot.protocol ?? 0);
     const protocolReason = terminalProtocolReason(
@@ -365,13 +376,7 @@ export class LiveHerdrService {
   ): Promise<void> {
     let ready = false;
     while (!signal.aborted) {
-      const snapshot = await this.client.request<SessionSnapshotResult>(
-        "session.snapshot",
-        {},
-      );
-      if (snapshot.type !== "session_snapshot" || !snapshot.snapshot) {
-        throw new Error("Herdr returned an invalid session snapshot");
-      }
+      const snapshot = await this.getSnapshotState();
       const agentStatusSubscriptions = (snapshot.snapshot.agents ?? [])
         .map(({ pane_id: paneId }) => paneId)
         .filter((paneId): paneId is string => Boolean(paneId))

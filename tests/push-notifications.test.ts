@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -17,14 +17,14 @@ afterEach(async () => {
   );
 });
 
-function state(status: string) {
+function state(status: string, paneId = "w1:p1") {
   return {
     snapshot: {
       agents: [
         {
           agent: "pi",
           agent_status: status,
-          pane_id: "w1:p1",
+          pane_id: paneId,
           terminal_title_stripped: "security-review",
           tokens: { summary: "Waiting for approval" },
           workspace_id: "w1",
@@ -84,6 +84,39 @@ describe("background Web Push notifications", () => {
     now += 6_000;
     await service.processState(state("done"));
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test("prunes status and cooldown history for Agents that no longer exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-push-prune-"));
+    directories.push(directory);
+    const path = join(directory, "push.json");
+    const service = new PushNotificationService(path, {
+      send: vi.fn().mockResolvedValue(undefined),
+    });
+    await service.load();
+    await service.upsert(
+      subscription,
+      {
+        cooldownMs: 5_000,
+        mutedAgentIds: [],
+        privacy: "full",
+        soundEnabled: false,
+      },
+      state("idle"),
+    );
+    await service.processState(state("blocked"));
+    await service.processState(state("idle", "w1:p2"));
+
+    const persisted = JSON.parse(await readFile(path, "utf8")) as {
+      subscriptions: Array<{
+        lastNotifiedAt: Record<string, number>;
+        lastStatuses: Record<string, string>;
+      }>;
+    };
+    expect(persisted.subscriptions[0]?.lastStatuses).toEqual({
+      "w1:p2": "idle",
+    });
+    expect(persisted.subscriptions[0]?.lastNotifiedAt).toEqual({});
   });
 
   test("honors per-Agent mute and removes stale push-service endpoints", async () => {
