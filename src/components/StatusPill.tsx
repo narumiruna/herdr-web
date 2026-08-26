@@ -1,6 +1,7 @@
 import {
   CheckCircledIcon,
   CircleIcon,
+  CrossCircledIcon,
   ExclamationTriangleIcon,
   UpdateIcon,
 } from "@radix-ui/react-icons";
@@ -9,6 +10,7 @@ import type { AgentStatus } from "../state";
 const STATUS_LABEL: Record<AgentStatus, string> = {
   blocked: "Needs input",
   done: "Done",
+  failed: "Failed",
   idle: "Idle",
   unknown: "Terminal",
   working: "Working",
@@ -29,9 +31,11 @@ export function StatusPill({ status, compact = false }: StatusPillProps) {
       ? ExclamationTriangleIcon
       : status === "done"
         ? CheckCircledIcon
-        : status === "working"
-          ? UpdateIcon
-          : CircleIcon;
+        : status === "failed"
+          ? CrossCircledIcon
+          : status === "working"
+            ? UpdateIcon
+            : CircleIcon;
 
   return (
     <span className={`status-pill status-${status}`}>

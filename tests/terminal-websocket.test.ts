@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import WebSocket from "ws";
+import type { ViewerShareStore } from "../server/share-store";
 import type { TerminalBackend } from "../server/terminal-session";
 import { TerminalTicketStore } from "../server/terminal-tickets";
 import { attachTerminalWebSocket } from "../server/terminal-websocket";
@@ -29,7 +30,7 @@ afterEach(async () => {
   );
 });
 
-async function fixture() {
+async function fixture(options: { shareStore?: ViewerShareStore } = {}) {
   const process = new FakeTerminalProcess();
   const open = vi.fn(() => process);
   const backend: TerminalBackend = { configured: true, open };
@@ -38,7 +39,12 @@ async function fixture() {
     response.writeHead(404).end();
   });
   servers.push(server);
-  const terminal = attachTerminalWebSocket({ backend, server, tickets });
+  const terminal = attachTerminalWebSocket({
+    backend,
+    server,
+    shareStore: options.shareStore,
+    tickets,
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -89,7 +95,10 @@ describe("terminal WebSocket bridge", () => {
     };
     process.stdout.write(`${JSON.stringify(message)}\n`);
 
-    expect(JSON.parse(String((await output)[0]))).toEqual(message);
+    expect(JSON.parse(String((await output)[0]))).toEqual({
+      ...message,
+      serverUnixMs: expect.any(Number),
+    });
     socket.send(JSON.stringify({ data: "echo hi\r", type: "terminal.input" }));
     await vi.waitFor(() => expect(stdin).toContain('"text":"echo hi\\r"'));
     expect(open).toHaveBeenCalledWith(
@@ -99,6 +108,38 @@ describe("terminal WebSocket bridge", () => {
 
     socket.close();
     await once(socket, "close");
+    await vi.waitFor(() => expect(terminal.sessionCount()).toBe(0));
+    terminal.close();
+  });
+
+  test("closes active scoped viewer sockets immediately on revocation", async () => {
+    let active = true;
+    let revokeListener: ((id: string) => void) | undefined;
+    const shareStore = {
+      isActive: vi.fn(() => active),
+      onRevoked: vi.fn((listener: (id: string) => void) => {
+        revokeListener = listener;
+        return () => undefined;
+      }),
+    } as unknown as ViewerShareStore;
+    const { origin, terminal, tickets } = await fixture({ shareStore });
+    const ticket = tickets.issue({
+      cols: 80,
+      mode: "observe",
+      paneId: "w5:p1",
+      rows: 24,
+      shareExpiresAt: Date.now() + 60_000,
+      shareId: "share-1",
+      takeover: false,
+    }).ticket;
+    const socket = await connect(origin, ticket);
+    const closed = once(socket, "close");
+
+    active = false;
+    revokeListener?.("share-1");
+
+    const [code] = await closed;
+    expect(code).toBe(1008);
     await vi.waitFor(() => expect(terminal.sessionCount()).toBe(0));
     terminal.close();
   });

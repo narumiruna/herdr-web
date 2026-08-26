@@ -9,6 +9,7 @@ const MIME_TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
@@ -53,13 +54,23 @@ export function createStaticHandler(rootDirectory: string) {
       const info = await stat(filePath);
       if (!info.isFile()) throw new Error("Not a file");
       const extension = extname(filePath).toLowerCase();
+      const filename = filePath.slice(filePath.lastIndexOf(sep) + 1);
+      const revalidated =
+        extension === ".html" ||
+        extension === ".webmanifest" ||
+        filename === "sw.js" ||
+        filename === "theme-init.js";
       response.writeHead(200, {
-        "cache-control":
-          extension === ".html"
-            ? "no-cache"
-            : "public, max-age=31536000, immutable",
+        "cache-control": revalidated
+          ? "no-cache"
+          : "public, max-age=31536000, immutable",
         "content-length": info.size,
+        "content-security-policy":
+          "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self'",
         "content-type": MIME_TYPES[extension] ?? "application/octet-stream",
+        "permissions-policy":
+          "clipboard-read=(self), clipboard-write=(self), notifications=(self), screen-wake-lock=(self)",
+        "referrer-policy": "no-referrer",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
       });

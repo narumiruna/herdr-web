@@ -9,6 +9,7 @@ const xterm = vi.hoisted(() => ({
     focus: ReturnType<typeof vi.fn>;
     key?: (event: KeyboardEvent) => boolean;
     options?: Record<string, unknown>;
+    selection?: string;
     reset: ReturnType<typeof vi.fn>;
     resize?: (size: { cols: number; rows: number }) => void;
     write: ReturnType<typeof vi.fn>;
@@ -40,10 +41,10 @@ vi.mock("@xterm/xterm", () => ({
     dispose() {}
     focus = this.instance.focus;
     hasSelection() {
-      return false;
+      return Boolean(this.instance.selection);
     }
     getSelection() {
-      return "";
+      return this.instance.selection ?? "";
     }
     reset = this.instance.reset;
     write = this.instance.write;
@@ -269,6 +270,56 @@ describe("InteractiveTerminal", () => {
     ]);
   });
 
+  test("measures redacted terminal diagnostics and exposes protocol, renderer, dimensions, and access", async () => {
+    const { socket } = await renderTerminal({ protocol: 20 });
+    const serverClockSkew = 300_000;
+    socket.message({ ...frame(), serverUnixMs: Date.now() + serverClockSkew });
+    await screen.findByText("Interactive");
+    await waitFor(() =>
+      expect(
+        socket.sent
+          .map((value) => JSON.parse(value))
+          .some(({ type }) => type === "terminal.ping"),
+      ).toBe(true),
+    );
+    const ping = socket.sent
+      .map((value) => JSON.parse(value))
+      .find(({ type }) => type === "terminal.ping") as { id: string };
+    socket.message({
+      id: ping.id,
+      serverUnixMs: Date.now() + serverClockSkew,
+      type: "terminal.pong",
+    });
+    socket.message({
+      ...frame("second frame"),
+      full: false,
+      seq: 2,
+      serverUnixMs: Date.now() + serverClockSkew - 8,
+    });
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Terminal diagnostics" }));
+    const dialog = screen.getByRole("dialog", { name: "Terminal diagnostics" });
+    expect(dialog).toHaveTextContent("Herdr protocol20");
+    expect(dialog).toHaveTextContent("Canvas fallback");
+    expect(dialog).toHaveTextContent("80 × 24");
+    expect(dialog).toHaveTextContent("control");
+    expect(screen.getByText("Output delivery").parentElement).toHaveTextContent(
+      /\d+ ms/,
+    );
+    expect(dialog).not.toHaveTextContent("hello");
+    expect(dialog).not.toHaveTextContent("one-use-ticket");
+  });
+
+  test("enables deliberate screen-reader and reduced-motion terminal options", async () => {
+    await renderTerminal({ accessibilityMode: true, reducedMotion: true });
+    expect(xterm.instances[0]?.options).toMatchObject({
+      screenReaderMode: true,
+      smoothScrollDuration: 0,
+    });
+  });
+
   test("changes, clamps, and resets terminal text size without browser zoom", async () => {
     const { props, rerender, socket } = await renderTerminal();
     socket.message(frame());
@@ -323,6 +374,77 @@ describe("InteractiveTerminal", () => {
     );
     expect(props.onFontSizeChange).toHaveBeenLastCalledWith(13);
     expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  test("validates macOS, Windows, and Linux terminal copy conventions without stealing interrupt", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const { socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const terminal = xterm.instances[0];
+    if (!terminal) throw new Error("Missing xterm instance");
+    terminal.selection = "copy me";
+
+    expect(
+      terminal.key?.(new KeyboardEvent("keydown", { key: "c", metaKey: true })),
+    ).toBe(false);
+    expect(
+      terminal.key?.(
+        new KeyboardEvent("keydown", {
+          ctrlKey: true,
+          key: "c",
+          shiftKey: true,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      terminal.key?.(new KeyboardEvent("keydown", { ctrlKey: true, key: "c" })),
+    ).toBe(true);
+    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(writeText).toHaveBeenCalledWith("copy me");
+  });
+
+  test("accepts an Attention Inbox quick reply through the already focused controller", async () => {
+    const { socket } = await renderTerminal();
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const result = vi.fn();
+    window.addEventListener("herdr-web:terminal-quick-reply-result", result, {
+      once: true,
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("herdr-web:terminal-action", {
+        detail: {
+          action: "quick-reply",
+          message: "Use the compatible schema",
+          paneId: "w5:p1",
+          requestId: "reply-1",
+        },
+      }),
+    );
+
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.input"),
+    ).toEqual([
+      {
+        data: "Use the compatible schema\r",
+        requestId: "reply-1",
+        type: "terminal.input",
+      },
+    ]);
+    expect(result).not.toHaveBeenCalled();
+    socket.message({
+      requestId: "reply-1",
+      type: "terminal.input-accepted",
+    });
+    expect(result).toHaveBeenCalledOnce();
   });
 
   test("provides mobile Escape, Ctrl, and Tab input without replay", async () => {
@@ -869,6 +991,15 @@ describe("InteractiveTerminal", () => {
       screen.getByRole("button", { name: "Insert image path" }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Prompt Agent" })).toBeDisabled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Terminal diagnostics" }));
+    expect(
+      screen.getByRole("dialog", { name: "Terminal diagnostics" }),
+    ).toHaveTextContent("observe");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Close dialog" }));
     xterm.instances[0]?.data?.("must-not-send");
     expect(
       socket.sent

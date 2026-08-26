@@ -2,9 +2,11 @@ import {
   BellIcon,
   CheckCircledIcon,
   Cross2Icon,
+  DashboardIcon,
   DotsHorizontalIcon,
   HamburgerMenuIcon,
   InfoCircledIcon,
+  Link2Icon,
   MagnifyingGlassIcon,
   MoonIcon,
   PlusIcon,
@@ -13,17 +15,21 @@ import {
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button, IconButton, Theme } from "@radix-ui/themes";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAttentionCenter } from "./attention-center";
 import {
   CommandPalette,
   KeybindingsDialog,
   NewSessionDialog,
   NewSpaceDialog,
+  type PaletteAction,
   SettingsDialog,
 } from "./components/AppDialogs";
+import { AttentionInbox } from "./components/AttentionInbox";
 import { ConnectionScreen } from "./components/ConnectionScreen";
 import { HerdrWebLogo } from "./components/HerdrWebLogo";
 import { IconTooltip } from "./components/IconTooltip";
+import { MissionControl } from "./components/MissionControl";
 import { RadixDialog } from "./components/RadixDialog";
 import { RuntimeManagementDialog } from "./components/RuntimeManagementDialog";
 import { SessionDetails } from "./components/SessionDetails";
@@ -39,6 +45,8 @@ import {
   EMPTY_COMPOSER_DRAFT,
   TerminalWorkspace,
 } from "./components/TerminalWorkspace";
+import { ViewerShareDialog } from "./components/ViewerShareDialog";
+import { WorkflowTemplatesDialog } from "./components/WorkflowTemplatesDialog";
 import { readProductStorage, writeProductStorage } from "./product-storage";
 import { type HerdrState, type RuntimeName, tabsForWorkspace } from "./state";
 import { parseTerminalFontSize } from "./terminal-preferences";
@@ -50,7 +58,19 @@ import {
   toggleThemeAppearance,
   type WorkbenchTheme,
 } from "./theme-preferences";
+import { useBackgroundPush } from "./use-background-push";
 import { useHerdrRuntime } from "./use-herdr-runtime";
+import { usePlatform } from "./use-platform";
+import {
+  DEFAULT_PLATFORM_PREFERENCES,
+  parsePlatformPreferences,
+} from "./workbench-preferences";
+import {
+  executeWorkflow,
+  parseWorkflowTemplates,
+  RUNTIME_COMMAND,
+  type WorkflowTemplate,
+} from "./workflow-templates";
 
 // This composition root intentionally keeps shared workbench selection, draft,
 // dialog-focus restoration, and mutation recovery in one owner; feature-heavy
@@ -78,6 +98,20 @@ export function App({
 }: AppProps) {
   const runtime = useHerdrRuntime(live, initialState);
   const { state } = runtime;
+  const [platformPreferences, setPlatformPreferences] = useState(() => {
+    if (typeof window.localStorage?.getItem !== "function") {
+      return DEFAULT_PLATFORM_PREFERENCES;
+    }
+    return parsePlatformPreferences(
+      readProductStorage(window.localStorage, "platform-preferences"),
+    );
+  });
+  const platform = usePlatform(
+    platformPreferences.keepAwake,
+    runtime.connection,
+  );
+  const reducedMotion =
+    platformPreferences.reducedMotion || platform.prefersReducedMotion;
   const [workbenchTheme, setWorkbenchTheme] = useState<WorkbenchTheme>(() => {
     if (typeof window.localStorage?.getItem !== "function") {
       return "editorial-dark";
@@ -147,10 +181,27 @@ export function App({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runtimeOpen, setRuntimeOpen] = useState(false);
   const [keybindingsOpen, setKeybindingsOpen] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const [missionControlOpen, setMissionControlOpen] = useState(false);
+  const [workflowsOpen, setWorkflowsOpen] = useState(false);
+  const [viewerSharesOpen, setViewerSharesOpen] = useState(false);
+  const [projectWorkflows, setProjectWorkflows] = useState<WorkflowTemplate[]>(
+    [],
+  );
+  const [browserWorkflows, setBrowserWorkflows] = useState<WorkflowTemplate[]>(
     () =>
-      typeof window.Notification === "function" &&
-      Notification.permission === "granted",
+      typeof window.localStorage?.getItem === "function"
+        ? parseWorkflowTemplates(
+            readProductStorage(window.localStorage, "workflow-templates"),
+          )
+        : [],
+  );
+  const [palettePluginActions, setPalettePluginActions] = useState<
+    Array<{ actionId: string; description: string; title: string }>
+  >([]);
+  const allWorkflows = useMemo(
+    () => [...browserWorkflows, ...projectWorkflows],
+    [browserWorkflows, projectWorkflows],
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -172,6 +223,10 @@ export function App({
   const runtimeReturnFocus = useRef<HTMLElement>(null);
   const keybindingsReturnFocus = useRef<HTMLElement>(null);
   const detailsReturnFocus = useRef<HTMLElement>(null);
+  const attentionReturnFocus = useRef<HTMLElement>(null);
+  const missionControlReturnFocus = useRef<HTMLElement>(null);
+  const workflowsReturnFocus = useRef<HTMLElement>(null);
+  const viewerSharesReturnFocus = useRef<HTMLElement>(null);
   const commandWasOpen = useRef(false);
   const mobileNavWasOpen = useRef(false);
   const mobileActionsWereOpen = useRef(false);
@@ -181,7 +236,38 @@ export function App({
   const runtimeWasOpen = useRef(false);
   const keybindingsWereOpen = useRef(false);
   const detailsWereOpen = useRef(false);
-  const notifiedAgentState = useRef<Record<string, string>>({});
+  const attentionWasOpen = useRef(false);
+  const missionControlWasOpen = useRef(false);
+  const workflowsWereOpen = useRef(false);
+  const viewerSharesWereOpen = useRef(false);
+  const openAgentFromSupervision = useCallback(
+    (agentId: string, paneId: string) => {
+      runtime.dispatch({ type: "agent.selected", agentId });
+      if (paneId) {
+        runtime.dispatch({ type: "pane.selected", agentId, paneId });
+      }
+      setAttentionOpen(false);
+      setMissionControlOpen(false);
+    },
+    [runtime],
+  );
+  const attention = useAttentionCenter({
+    onOpenAgent: openAgentFromSupervision,
+    state,
+  });
+  const backgroundPush = useBackgroundPush({
+    accessRole: runtime.accessRole,
+    enabled: attention.preferences.notificationEnabled,
+    preferences: {
+      cooldownMs: attention.preferences.cooldownMs,
+      mutedAgentIds: attention.preferences.mutedAgentIds,
+      privacy: attention.preferences.notificationPrivacy,
+      soundEnabled: attention.preferences.soundEnabled,
+    },
+    pushConfig: runtime.pushConfig,
+    remove: runtime.removePushSubscription,
+    save: runtime.savePushSubscription,
+  });
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
     state.workspaces[0];
@@ -202,11 +288,12 @@ export function App({
       if (session.kind !== "agent") return counts;
       if (session.status === "blocked") counts.needsInput += 1;
       else if (session.status === "done") counts.completed += 1;
+      else if (session.status === "failed") counts.failed += 1;
       else if (session.status === "working") counts.working += 1;
       else counts.unknown += 1;
       return counts;
     },
-    { completed: 0, needsInput: 0, unknown: 0, working: 0 },
+    { completed: 0, failed: 0, needsInput: 0, unknown: 0, working: 0 },
   );
 
   useEffect(() => {
@@ -315,10 +402,70 @@ export function App({
   }, [detailsOpen]);
 
   useEffect(() => {
+    if (attentionWasOpen.current && !attentionOpen) {
+      (attentionReturnFocus.current?.isConnected
+        ? attentionReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    attentionWasOpen.current = attentionOpen;
+  }, [attentionOpen]);
+
+  useEffect(() => {
+    if (missionControlWasOpen.current && !missionControlOpen) {
+      (missionControlReturnFocus.current?.isConnected
+        ? missionControlReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    missionControlWasOpen.current = missionControlOpen;
+  }, [missionControlOpen]);
+
+  useEffect(() => {
+    if (workflowsWereOpen.current && !workflowsOpen) {
+      (workflowsReturnFocus.current?.isConnected
+        ? workflowsReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    workflowsWereOpen.current = workflowsOpen;
+  }, [workflowsOpen]);
+
+  useEffect(() => {
+    if (viewerSharesWereOpen.current && !viewerSharesOpen) {
+      (viewerSharesReturnFocus.current?.isConnected
+        ? viewerSharesReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    viewerSharesWereOpen.current = viewerSharesOpen;
+  }, [viewerSharesOpen]);
+
+  useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
       writeProductStorage(window.localStorage, "agent-sort", agentSort);
     }
   }, [agentSort]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(
+        window.localStorage,
+        "platform-preferences",
+        JSON.stringify(platformPreferences),
+      );
+      writeProductStorage(
+        window.localStorage,
+        "workflow-templates",
+        JSON.stringify(browserWorkflows),
+      );
+    }
+    document.documentElement.dataset.reducedMotion = reducedMotion
+      ? "true"
+      : "false";
+    document.documentElement.dataset.accessibilityMode =
+      platformPreferences.accessibilityMode ? "screen-reader" : "standard";
+  }, [browserWorkflows, platformPreferences, reducedMotion]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -413,6 +560,51 @@ export function App({
     state.selectedWorkspaceId,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opening the palette is the load boundary.
+  useEffect(() => {
+    if (!commandOpen || runtime.accessRole !== "controller") {
+      setPalettePluginActions([]);
+      return;
+    }
+    let cancelled = false;
+    void runtime
+      .loadRuntimeManagement()
+      .then(({ actions }) => {
+        if (!cancelled) {
+          setPalettePluginActions(
+            actions.map((action) => ({
+              actionId: action.action_id,
+              description: action.description ?? `Run ${action.plugin_id}`,
+              title: action.title,
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPalettePluginActions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [commandOpen, runtime.accessRole]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opening the workflow manager is the load boundary.
+  useEffect(() => {
+    if (!workflowsOpen || !workspace?.path || !live) return;
+    let cancelled = false;
+    void runtime
+      .loadProjectWorkflows(workspace.path)
+      .then((templates) => {
+        if (!cancelled) setProjectWorkflows(templates);
+      })
+      .catch(() => {
+        if (!cancelled) setProjectWorkflows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [live, workflowsOpen, workspace?.path]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -479,50 +671,6 @@ export function App({
     }
   }, [runtime, state.agents, state.workspaces]);
 
-  useEffect(() => {
-    if (!notificationsEnabled || typeof window.Notification !== "function")
-      return;
-    if (Notification.permission !== "granted") return;
-    for (const session of state.agents) {
-      if (session.kind !== "agent") continue;
-      const previous = notifiedAgentState.current[session.id];
-      notifiedAgentState.current[session.id] = session.status;
-      if (previous === undefined || previous === session.status) continue;
-      if (session.status !== "blocked" && session.status !== "done") continue;
-      const target = state.workspaces.find(
-        ({ id }) => id === session.workspaceId,
-      );
-      const url = new URL(window.location.href);
-      url.searchParams.set("workspace", session.workspaceId);
-      url.searchParams.set("session", session.id);
-      const notification = new Notification(
-        session.status === "blocked"
-          ? `${session.label} needs input`
-          : `${session.label} completed`,
-        {
-          body: `${target?.name ?? "Herdr"} · ${session.currentStep || session.summary}`,
-          tag: `herdr-web-${session.id}-${session.status}`,
-        },
-      );
-      notification.onclick = () => {
-        window.focus();
-        window.history.pushState(
-          {},
-          "",
-          `${url.pathname}${url.search}${url.hash}`,
-        );
-        runtime.dispatch({ type: "agent.selected", agentId: session.id });
-        notification.close();
-      };
-    }
-  }, [notificationsEnabled, runtime, state.agents, state.workspaces]);
-
-  const requestNotifications = async () => {
-    if (typeof window.Notification !== "function") return;
-    const permission = await Notification.requestPermission();
-    setNotificationsEnabled(permission === "granted");
-  };
-
   if (runtime.status !== "ready") {
     return (
       <Theme
@@ -572,6 +720,27 @@ export function App({
     keybindingsReturnFocus.current =
       returnFocus ?? (document.activeElement as HTMLElement | null);
     setKeybindingsOpen(true);
+  };
+  const openAttentionDialog = (returnFocus?: HTMLElement | null) => {
+    attentionReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setAttentionOpen(true);
+  };
+  const openMissionControlDialog = (returnFocus?: HTMLElement | null) => {
+    missionControlReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setMissionControlOpen(true);
+  };
+  const openWorkflowsDialog = (returnFocus?: HTMLElement | null) => {
+    workflowsReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setWorkflowsOpen(true);
+  };
+  const openViewerSharesDialog = (returnFocus?: HTMLElement | null) => {
+    if (runtime.accessRole !== "controller") return;
+    viewerSharesReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setViewerSharesOpen(true);
   };
   const selectWorkspace = (workspaceId: string) => {
     rememberWorkspace(workspaceId);
@@ -703,6 +872,287 @@ export function App({
       });
   };
 
+  const saveWorkflow = async (template: WorkflowTemplate) => {
+    const browserSource = browserWorkflows.find(({ id }) => id === template.id);
+    const projectSource = projectWorkflows.find(({ id }) => id === template.id);
+    if (template.scope === "browser") {
+      if (projectSource?.projectKey) {
+        await runtime.deleteProjectWorkflow(
+          projectSource.id,
+          projectSource.projectKey,
+        );
+      }
+      setProjectWorkflows((current) =>
+        current.filter(({ id }) => id !== template.id),
+      );
+      setBrowserWorkflows((current) => [
+        template,
+        ...current.filter(({ id }) => id !== template.id),
+      ]);
+      return;
+    }
+    if (!workspace?.path) throw new Error("A project Space is required.");
+    const projectTemplate = { ...template, projectKey: workspace.path };
+    await runtime.saveProjectWorkflow(projectTemplate);
+    if (browserSource) {
+      setBrowserWorkflows((current) =>
+        current.filter(({ id }) => id !== template.id),
+      );
+    }
+    setProjectWorkflows((current) => [
+      projectTemplate,
+      ...current.filter(({ id }) => id !== projectTemplate.id),
+    ]);
+  };
+
+  const deleteWorkflow = async (template: WorkflowTemplate) => {
+    if (template.scope === "browser") {
+      setBrowserWorkflows((current) =>
+        current.filter(({ id }) => id !== template.id),
+      );
+      return;
+    }
+    if (!template.projectKey) {
+      throw new Error("The project workflow has no project scope.");
+    }
+    await runtime.deleteProjectWorkflow(template.id, template.projectKey);
+    setProjectWorkflows((current) =>
+      current.filter(({ id }) => id !== template.id),
+    );
+  };
+
+  const launchWorkflow = async (template: WorkflowTemplate) => {
+    if (!workspace?.id || !canStartAgent) {
+      throw new Error("A connected controller and current Space are required.");
+    }
+    return executeWorkflow(template, async (step) => {
+      await runtime.createSession({
+        command: RUNTIME_COMMAND[step.runtime],
+        ...(step.cwd ? { cwd: step.cwd } : {}),
+        ...(step.prompt ? { initialPrompt: step.prompt } : {}),
+        label: step.label,
+        runtime: step.runtime,
+        workspaceId: workspace.id,
+      });
+    });
+  };
+
+  const quickReplyFromInbox = async (
+    targetAgentId: string,
+    message: string,
+  ) => {
+    const target = state.agents.find(({ id }) => id === targetAgentId);
+    if (!target) throw new Error("The Agent is no longer available.");
+    if (target.status !== "blocked") {
+      throw new Error(
+        "Quick reply is available only while an Agent needs input.",
+      );
+    }
+    const agentPaneId = target.id;
+    const usesFocusedTerminal =
+      state.capabilities.terminalStreaming &&
+      target.id === state.selectedAgentId &&
+      target.activePaneId === agentPaneId &&
+      agent?.activePaneId === agentPaneId;
+    if (!usesFocusedTerminal) {
+      await runtime.quickReply(agentPaneId, message);
+      return;
+    }
+    const requestId = crypto.randomUUID?.() ?? `${Date.now()}`;
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener(
+          "herdr-web:terminal-quick-reply-result",
+          onResult,
+        );
+        reject(
+          new Error("The focused terminal did not accept the quick reply."),
+        );
+      }, 1_000);
+      const onResult = (event: Event) => {
+        const detail = (
+          event as CustomEvent<{ accepted?: boolean; requestId?: string }>
+        ).detail;
+        if (detail.requestId !== requestId) return;
+        window.clearTimeout(timeout);
+        window.removeEventListener(
+          "herdr-web:terminal-quick-reply-result",
+          onResult,
+        );
+        if (detail.accepted) resolve();
+        else reject(new Error("The focused terminal is not writable."));
+      };
+      window.addEventListener(
+        "herdr-web:terminal-quick-reply-result",
+        onResult,
+      );
+      window.dispatchEvent(
+        new CustomEvent("herdr-web:terminal-action", {
+          detail: {
+            action: "quick-reply",
+            message,
+            paneId: agentPaneId,
+            requestId,
+          },
+        }),
+      );
+    });
+  };
+
+  const dispatchTerminalAction = (action: string) => {
+    if (!agent) return;
+    window.dispatchEvent(
+      new CustomEvent("herdr-web:terminal-action", {
+        detail: { action, paneId: agent.activePaneId },
+      }),
+    );
+  };
+
+  const focusedTerminalStatus = document.querySelector<HTMLElement>(
+    '.terminal-pane[data-focused="true"] .interactive-terminal',
+  )?.dataset.status;
+  const canTakeTerminalControl =
+    focusedTerminalStatus === "control-conflict" ||
+    focusedTerminalStatus === "read-only";
+
+  const paletteActions: PaletteAction[] = [
+    ...(runtime.accessRole === "controller" && workspace
+      ? [
+          {
+            description: `Launch an approved runtime in ${workspace.name}.`,
+            disabled: !canStartAgent,
+            id: "new-agent",
+            keywords: "create start session",
+            label: "New Agent",
+            onRun: () => openSessionDialog(),
+          },
+          {
+            description: "Create a side-by-side terminal pane.",
+            disabled:
+              runtime.connection !== "connected" ||
+              !agent ||
+              agent.panes.length >= 2,
+            id: "split-right",
+            keywords: "pane columns",
+            label: "Split right",
+            onRun: () => {
+              if (agent)
+                void runtime.splitPane(agent.id, agent.activePaneId, "right");
+            },
+          },
+          {
+            description: "Create a stacked terminal pane.",
+            disabled:
+              runtime.connection !== "connected" ||
+              !agent ||
+              agent.panes.length >= 2,
+            id: "split-down",
+            keywords: "pane rows",
+            label: "Split down",
+            onRun: () => {
+              if (agent)
+                void runtime.splitPane(agent.id, agent.activePaneId, "down");
+            },
+          },
+          {
+            description: "Close the focused split pane after confirmation.",
+            disabled:
+              runtime.connection !== "connected" ||
+              !agent ||
+              agent.panes.length < 2,
+            id: "close-pane",
+            keywords: "delete terminal",
+            label: "Close focused pane",
+            onRun: () => {
+              if (
+                agent &&
+                window.confirm("Close the focused pane for every Herdr client?")
+              ) {
+                void runtime.closePane(agent.id, agent.activePaneId);
+              }
+            },
+          },
+          {
+            description: "Ask the terminal controller to take ownership.",
+            disabled:
+              runtime.connection !== "connected" ||
+              !agent ||
+              !state.capabilities.terminalStreaming ||
+              !canTakeTerminalControl,
+            id: "take-control",
+            keywords: "terminal controller takeover",
+            label: "Take terminal control",
+            onRun: () => {
+              if (
+                window.confirm(
+                  "Take terminal control from the current controller? Their input session will be displaced.",
+                )
+              ) {
+                dispatchTerminalAction("take-control");
+              }
+            },
+          },
+        ]
+      : []),
+    {
+      description: "Search the focused terminal scrollback.",
+      disabled: !agent || !state.capabilities.terminalStreaming,
+      id: "search-terminal",
+      keywords: "find output",
+      label: "Search terminal",
+      onRun: () => dispatchTerminalAction("search"),
+    },
+    ...(runtime.accessRole === "controller" && agent?.canPrompt !== false
+      ? [
+          {
+            description: `Open a structured Herdr prompt for ${agent?.label ?? "the Agent"}.`,
+            disabled: agent?.kind !== "agent",
+            id: "prompt-agent",
+            keywords: "message reply instruction",
+            label: "Prompt Agent",
+            onRun: () => dispatchTerminalAction("prompt"),
+          },
+        ]
+      : []),
+    {
+      description: "Toggle between the saved light and dark appearance.",
+      id: "toggle-appearance",
+      keywords: "theme light dark",
+      label: `Use ${appearance === "light" ? "dark" : "light"} appearance`,
+      onRun: () =>
+        setWorkbenchTheme((current) => toggleThemeAppearance(current)),
+    },
+    ...[11, 13, 15].map((size) => ({
+      description: `Set focused terminal text to ${size} px.`,
+      id: `terminal-size-${size}`,
+      keywords: "font compact default comfortable",
+      label: `Terminal text ${size} px`,
+      onRun: () => setTerminalFontSize(size),
+    })),
+    {
+      description: "Refresh the Herdr control-plane snapshot.",
+      id: "reload-herdr",
+      keywords: "refresh reconnect",
+      label: "Reload Herdr",
+      onRun: () => void runtime.refresh(),
+    },
+    ...palettePluginActions.map((pluginAction) => ({
+      description: pluginAction.description,
+      id: `plugin-${pluginAction.actionId}`,
+      keywords: "plugin declared action",
+      label: pluginAction.title,
+      onRun: () => {
+        if (
+          window.confirm(
+            `Run the declared Herdr plugin action “${pluginAction.title}”?`,
+          )
+        ) {
+          void runtime.invokePluginAction(pluginAction.actionId);
+        }
+      },
+    })),
+  ];
+
   const detachedSession = detachedPane
     ? state.agents.find(({ id }) => id === detachedPane.sessionId)
     : undefined;
@@ -721,6 +1171,7 @@ export function App({
 
   const terminalWorkspace = (session: NonNullable<typeof agent>) => (
     <TerminalWorkspace
+      accessibilityMode={platformPreferences.accessibilityMode}
       actionsEnabled={
         runtime.connection === "connected" &&
         runtime.accessRole === "controller"
@@ -787,6 +1238,8 @@ export function App({
       terminalReason={state.capabilities.terminalReason}
       onTerminalFontSizeChange={setTerminalFontSize}
       terminalStreaming={state.capabilities.terminalStreaming}
+      protocol={state.capabilities.protocol}
+      reducedMotion={reducedMotion}
     />
   );
 
@@ -874,7 +1327,11 @@ export function App({
               onSelectWorkspace={selectWorkspace}
               onSelectAgent={selectAgent}
               onNewSpace={openNewSpaceDialog}
+              onOpenAttention={openAttentionDialog}
+              onOpenMissionControl={openMissionControlDialog}
               onOpenSettings={openSettingsDialog}
+              onOpenShares={openViewerSharesDialog}
+              onOpenWorkflows={openWorkflowsDialog}
               onOpenKeybindings={openKeybindingsDialog}
               onOpenRuntime={openRuntimeDialog}
               onRefresh={runtime.refresh}
@@ -908,11 +1365,14 @@ export function App({
                 <div
                   className="work-status-summary"
                   role="status"
-                  aria-label={`${statusCounts.needsInput} Agents need input, ${statusCounts.working} working, ${statusCounts.completed} completed, ${statusCounts.unknown} unknown`}
+                  aria-label={`${statusCounts.needsInput} Agents need input, ${statusCounts.failed} failed, ${statusCounts.working} working, ${statusCounts.completed} completed, ${statusCounts.unknown} unknown`}
                 >
                   <span data-kind="needs-input">
                     {statusCounts.needsInput} needs input
                   </span>
+                  {statusCounts.failed > 0 && (
+                    <span data-kind="failed">{statusCounts.failed} failed</span>
+                  )}
                   <span data-kind="working">
                     {statusCounts.working} working
                   </span>
@@ -925,21 +1385,40 @@ export function App({
                     </span>
                   )}
                 </div>
-                {typeof window.Notification === "function" &&
-                  Notification.permission !== "granted" && (
-                    <IconTooltip label="Enable browser notifications">
-                      <IconButton
-                        type="button"
-                        variant="soft"
-                        color="gray"
-                        className="desktop-notifications"
-                        aria-label="Enable browser notifications"
-                        onClick={() => void requestNotifications()}
-                      >
-                        <BellIcon />
-                      </IconButton>
-                    </IconTooltip>
-                  )}
+                <IconTooltip label="Attention Inbox">
+                  <IconButton
+                    type="button"
+                    variant="soft"
+                    color="gray"
+                    className="desktop-notifications attention-inbox-trigger"
+                    aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
+                    onClick={() => openAttentionDialog()}
+                  >
+                    <BellIcon />
+                    {attention.groups.needsInput.length +
+                      attention.groups.failed.length +
+                      attention.groups.done.length >
+                      0 && (
+                      <span>
+                        {attention.groups.needsInput.length +
+                          attention.groups.failed.length +
+                          attention.groups.done.length}
+                      </span>
+                    )}
+                  </IconButton>
+                </IconTooltip>
+                <IconTooltip label="Mission Control">
+                  <IconButton
+                    type="button"
+                    variant="soft"
+                    color="gray"
+                    className="desktop-mission-control"
+                    aria-label="Open Mission Control"
+                    onClick={() => openMissionControlDialog()}
+                  >
+                    <DashboardIcon />
+                  </IconButton>
+                </IconTooltip>
                 {workspace && (
                   <Button
                     type="button"
@@ -956,11 +1435,11 @@ export function App({
                   ref={commandTrigger}
                   type="button"
                   className="command-button"
-                  aria-label="Open command palette"
+                  aria-label="Open Action Palette"
                   onClick={() => setCommandOpen(true)}
                 >
                   <MagnifyingGlassIcon />
-                  <span>Jump</span>
+                  <span>Actions</span>
                   <kbd>⌘ K</kbd>
                 </button>
                 {agent && (
@@ -1025,7 +1504,7 @@ export function App({
               </div>
             </header>
 
-            {runtime.connection === "reconnecting" && (
+            {(runtime.connection === "reconnecting" || !platform.online) && (
               <div
                 className="reconnect-banner"
                 role="status"
@@ -1033,7 +1512,11 @@ export function App({
               >
                 <span>
                   <ReloadIcon aria-hidden="true" />
-                  <strong>Connection interrupted.</strong>
+                  <strong>
+                    {platform.online
+                      ? "Connection interrupted."
+                      : "Device is offline."}
+                  </strong>
                   Showing the last update from{" "}
                   {Math.max(
                     0,
@@ -1050,6 +1533,23 @@ export function App({
                 >
                   Retry now
                 </Button>
+              </div>
+            )}
+
+            {runtime.activeShare && (
+              <div className="active-share-banner" role="status">
+                <Link2Icon aria-hidden="true" />
+                <span>
+                  <strong>Scoped read-only share</strong>
+                  {`Space ${runtime.activeShare.scope.workspaceId}`}
+                  {runtime.activeShare.scope.agentId
+                    ? ` · Agent ${runtime.activeShare.scope.agentId}`
+                    : ""}
+                  {runtime.activeShare.scope.paneId
+                    ? ` · Pane ${runtime.activeShare.scope.paneId}`
+                    : ""}
+                  {` · expires ${new Date(runtime.activeShare.expiresAt).toLocaleString()}`}
+                </span>
               </div>
             )}
 
@@ -1193,6 +1693,7 @@ export function App({
         </div>
 
         <CommandPalette
+          actions={paletteActions}
           open={commandOpen}
           onOpenChange={setCommandOpen}
           pinnedWorkspaceIds={pinnedWorkspaceIds}
@@ -1202,6 +1703,51 @@ export function App({
           onSelectAgent={selectAgent}
           onTogglePinnedWorkspace={togglePinnedWorkspace}
         />
+        <AttentionInbox
+          canReply={
+            runtime.accessRole === "controller" &&
+            runtime.connection === "connected"
+          }
+          groups={attention.groups}
+          open={attentionOpen}
+          preferences={attention.preferences}
+          state={state}
+          onMarkReviewed={attention.markReviewed}
+          onMute={attention.setMuted}
+          onOpenAgent={openAgentFromSupervision}
+          onOpenChange={setAttentionOpen}
+          onPrompt={quickReplyFromInbox}
+          onSnooze={attention.snooze}
+        />
+        <MissionControl
+          accessRole={runtime.accessRole}
+          attentionStartedAt={attention.preferences.firstSeenAt}
+          connection={runtime.connection}
+          open={missionControlOpen}
+          state={state}
+          onOpenAgent={openAgentFromSupervision}
+          onOpenChange={setMissionControlOpen}
+        />
+        <WorkflowTemplatesDialog
+          canLaunch={canStartAgent}
+          open={workflowsOpen}
+          templates={allWorkflows}
+          workspace={workspace}
+          onDelete={deleteWorkflow}
+          onLaunch={launchWorkflow}
+          onOpenChange={setWorkflowsOpen}
+          onSave={saveWorkflow}
+        />
+        {runtime.accessRole === "controller" && (
+          <ViewerShareDialog
+            open={viewerSharesOpen}
+            state={state}
+            load={runtime.listViewerShares}
+            onCreate={runtime.createViewerShare}
+            onOpenChange={setViewerSharesOpen}
+            onRevoke={runtime.revokeViewerShare}
+          />
+        )}
         {workspace && (
           <NewSessionDialog
             open={sessionOpen}
@@ -1216,13 +1762,43 @@ export function App({
           onCreate={createWorkspace}
         />
         <SettingsDialog
+          accessibilityMode={platformPreferences.accessibilityMode}
+          backgroundPushActive={backgroundPush.active}
+          backgroundPushError={backgroundPush.error}
+          backgroundPushSupported={backgroundPush.supported}
+          installAvailable={platform.installAvailable}
+          installed={platform.installed}
+          keepAwake={platformPreferences.keepAwake}
+          notificationEnabled={attention.preferences.notificationEnabled}
+          notificationPrivacy={attention.preferences.notificationPrivacy}
+          reducedMotion={platformPreferences.reducedMotion}
+          soundEnabled={attention.preferences.soundEnabled}
           theme={workbenchTheme}
           open={settingsOpen}
           terminalFontSize={terminalFontSize}
+          onInstall={platform.install}
           onOpenChange={setSettingsOpen}
           onApply={(preferences) => {
             setWorkbenchTheme(preferences.theme);
             setTerminalFontSize(preferences.terminalFontSize);
+            setPlatformPreferences({
+              accessibilityMode: preferences.accessibilityMode,
+              keepAwake: preferences.keepAwake,
+              reducedMotion: preferences.reducedMotion,
+              version: 1,
+            });
+            attention.patch({
+              notificationEnabled: preferences.notificationEnabled,
+              notificationPrivacy: preferences.notificationPrivacy,
+              soundEnabled: preferences.soundEnabled,
+            });
+            if (
+              preferences.notificationEnabled &&
+              typeof window.Notification === "function" &&
+              Notification.permission !== "granted"
+            ) {
+              void attention.requestPermission();
+            }
           }}
         />
         <RuntimeManagementDialog
@@ -1252,7 +1828,11 @@ export function App({
             onSelectWorkspace={selectWorkspace}
             onSelectAgent={selectAgent}
             onNewSpace={openNewSpaceDialog}
+            onOpenAttention={openAttentionDialog}
+            onOpenMissionControl={openMissionControlDialog}
             onOpenSettings={openSettingsDialog}
+            onOpenShares={openViewerSharesDialog}
+            onOpenWorkflows={openWorkflowsDialog}
             onOpenKeybindings={openKeybindingsDialog}
             onOpenRuntime={openRuntimeDialog}
             onRefresh={runtime.refresh}

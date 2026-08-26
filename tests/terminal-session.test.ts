@@ -76,7 +76,11 @@ describe("TerminalSession", () => {
       stdin += chunk;
     });
 
-    session.accept({ data: "echo hi\r", type: "terminal.input" });
+    session.accept({
+      data: "echo hi\r",
+      requestId: "input-1",
+      type: "terminal.input",
+    });
     session.accept({ cols: 100, rows: 30, type: "terminal.resize" });
     session.accept({ direction: "up", lines: 3, type: "terminal.scroll" });
     session.accept({ data: "x".repeat(70 * 1024), type: "terminal.input" });
@@ -91,6 +95,10 @@ describe("TerminalSession", () => {
       { cols: 100, rows: 30, type: "terminal.resize" },
       { direction: "up", lines: 3, type: "terminal.scroll" },
     ]);
+    expect(messages[0]).toEqual({
+      requestId: "input-1",
+      type: "terminal.input-accepted",
+    });
     expect(messages.at(-1)).toMatchObject({
       code: "invalid_terminal_message",
       type: "terminal.error",

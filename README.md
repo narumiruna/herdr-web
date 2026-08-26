@@ -8,7 +8,12 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 
 - Terminal-dominant desktop, tablet, and mobile layouts with one persistent navigation rail on wide screens.
 - A workspace tab bar that preserves Herdr tab order across detected Agents and standalone Terminals.
-- A global Needs input queue before workspace navigation, with per-workspace counts.
+- A global Attention Inbox with real terminal previews, Needs input, Failed, and Recently done groups, quick replies, snooze, per-Agent mute, review state, and keyboard triage.
+- Service-worker-backed Needs input, Failed, and Done notifications with optional sound, per-Agent mute, cooldown, durable deduplication, privacy controls, and exact Space, Agent, and pane deep links.
+- An Action Palette for navigation, approved pane and Agent actions, terminal search and takeover, appearance and text size, Herdr reload, and confirmed declared plugin actions.
+- Mission Control for optional cross-Space supervision with real status, terminal previews, attention age, connection role, and direct Agent navigation.
+- Browser-local and project-scoped workflow templates for ordered batches of approved Agent runtimes, initial prompts, working directories, and explicit launch barriers without autonomous Agent collaboration.
+- Short-lived, revocable, read-only viewer links scoped to one Space, Agent, or pane, with state projection and observation-ticket enforcement.
 - Interactive xterm.js terminals backed by Herdr 0.8 terminal control and observation sessions.
 - Exact terminal input, ANSI output, resize, mouse, IME, Unicode, and alternate-screen behavior without snapshot polling.
 - Structural workspace, tab, pane, layout, and Agent updates from Herdr event subscriptions.
@@ -27,6 +32,9 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - Interactive terminals retain their independent high-contrast dark palette across every theme for reliable ANSI and TUI readability.
 - JetBrains Mono terminal text with bundled Nerd Font symbols, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback.
 - Browser-saved Compact, Default, and Comfortable terminal text sizes with focused-terminal zoom shortcuts.
+- Explicit screen-reader terminal and reduced-motion modes, plus keyboard-only workbench and terminal-adjacent controls.
+- A redacted terminal diagnostics panel for measured WebSocket bridge round trip, output delivery, reconnect count, renderer, dimensions, Unicode, Herdr protocol, and actual control or observation mode.
+- An installable online-only PWA shell with authenticated Web Push for closed-app attention, notification clicks, connection visibility, and an optional foreground screen wake lock.
 - Controller and optional independent viewer tokens, same-origin WebSockets, and short-lived one-use terminal tickets.
 
 ## Radix UI
@@ -127,6 +135,9 @@ herdr-web stores new file data under one product-owned directory:
 $HOME/.herdr-web/
 ├── uploads/
 └── runtime/
+    ├── push-notifications.json
+    ├── viewer-shares.json
+    └── workflow-templates.json
 ```
 
 Set the absolute `HERDR_WEB_HOME` path to override this location.
@@ -153,7 +164,11 @@ Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surfac
 
 Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
 
-Use **Menu → Settings** to choose Editorial Light, Editorial Dark, Classic Light, or Classic Dark and adjust terminal text size.
+Use **Menu → Settings** to choose Editorial Light, Editorial Dark, Classic Light, or Classic Dark, adjust terminal text size, configure notifications, choose explicit accessibility preferences, request a foreground wake lock, or install the PWA when the browser supports installation.
+Use **Attention Inbox** to triage real Needs input, Failed, and Recently done Agent states without leaving the selected terminal.
+Use **Mission Control** for an optional cross-Space overview; it does not replace the terminal-first workbench.
+Use **Workflow templates** to save browser-local or centrally stored project-scoped launch batches whose commands remain fixed to approved runtimes.
+Use **Viewer shares** as a controller to create a one-time secret link with an exact scope and expiry, inspect issued links, and revoke active access.
 Use **Menu** for the workbench keybinding reference, the controller-only **Herdr runtime** center, and an explicit Herdr reload.
 The runtime center lists installed plugins, enables or disables them, confirms declared plugin actions before execution, shows recent command logs, and installs or uninstalls allowlisted official Agent integrations through Herdr.
 Herdr does not expose typed integration status through the socket API, so **Install / repair** is intentionally idempotent and the interface does not fabricate installed state.
@@ -180,7 +195,7 @@ Typing, paste, mouse input, terminal applications, and resize are forwarded thro
 
 The terminal waits for its bundled fonts before the authoritative fit, uses Unicode 11 widths, and prefers WebGL while automatically retaining the built-in renderer when WebGL is unavailable or loses context.
 
-Use the terminal toolbar to search output, stage image paths, or open the optional Agent prompt dialog.
+Use the terminal toolbar to search output, inspect redacted transport diagnostics, stage image or file paths, or open the optional Agent prompt dialog.
 
 A controller conflict offers explicit read-only observation or takeover instead of silently stealing control.
 
@@ -216,6 +231,8 @@ On mobile, **New**, **Menu**, Spaces, and Agents remain available in the navigat
 - Use `Cmd+C` on macOS or `Ctrl+Shift+C` elsewhere to copy a terminal selection.
 - Use `Cmd+V` on macOS or `Ctrl+V` on Windows and Linux for normal text paste or to stage a clipboard image.
 - Use `Cmd+Shift+F` or `Ctrl+Shift+F` to search terminal output.
+- Use `Cmd+K` or `Ctrl+K` to open the Action Palette.
+- In Attention Inbox, use `J` or `N` for next, `K` or `P` for previous, `R` to reply, and Enter to send and advance.
 - Use `Cmd/Ctrl` + `+` or `Cmd/Ctrl` + `-` while the terminal is focused to adjust text size, and use `Cmd/Ctrl` + `0` to restore 13 px.
 - Choose Compact, Default, or Comfortable under **Menu → Settings**; the selected size is saved only in this browser.
 - Use the image toolbar button to stage a local image.
@@ -300,19 +317,27 @@ Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/
 
 The herdr-web bridge can submit prompts, control terminal panes, manage plugins, run plugin actions, and update official integrations, so it fails closed when `HERDR_WEB_TOKEN` is empty.
 
-Set a different `HERDR_WEB_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, takeover, plugin, or integration permissions.
+Set a different `HERDR_WEB_VIEW_TOKEN` to grant global snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, takeover, plugin, integration, share-management, or workflow-management permissions.
+Controller-created viewer shares are separate random credentials stored only as hashes, expire after 5 minutes to 7 days, expose a minimized exact-scope projection, issue observe-only scope-checked terminal tickets, and invalidate pending and active share sessions on revocation or expiry.
+The one-time viewer-share URL keeps its secret in the fragment so it is not sent in the initial HTTP request, then moves it into `sessionStorage` and removes it from the address bar.
 
 The browser exchanges its bearer token for a random terminal ticket that expires after 30 seconds and can be consumed only once.
 
 Terminal WebSockets require the page's same origin and never place the bearer token in the WebSocket URL.
 
-The token in a printed URL is moved into `sessionStorage` and removed from the address bar after the page loads.
+The controller or global viewer token in a printed URL is moved into `sessionStorage` and removed from the address bar after the page loads.
 
 The Docker socket forwarder listens only on host loopback.
 
 Docker image paste requires read access to the configured `HERDR_PROJECTS_ROOT` and write access to `HERDR_WEB_HOME`, so mount only trusted directories.
 
-Treat the printed URL like a password, use this directly only on a trusted LAN, and place the app behind HTTPS and stronger access controls before exposing it to an untrusted network.
+Treat every printed or shared URL like a password, use this directly only on a trusted LAN, and place the app behind HTTPS and stronger access controls before exposing it to an untrusted network.
+The service worker never caches HTML, API responses, event streams, terminal tickets, credentials, or terminal data.
+PWA installation, Web Push, and wake lock require browser support and a secure context outside localhost.
+When a controller enables Agent notifications, the browser registers an authenticated Push subscription and the bridge sends Needs input, Failed, and Done transitions even after the page closes.
+Push endpoints, browser keys, generated VAPID keys, cooldown state, mute preferences, and no bearer tokens are stored in the mode-0600 runtime file.
+Set `HERDR_WEB_VAPID_CONTACT` to a `mailto:` or HTTPS contact when the generated VAPID identity should use an operator address.
+herdr-web remains online-only and does not cache or claim offline terminal execution.
 
 ## Verification
 
@@ -378,7 +403,17 @@ If a bump reports that its version commit succeeded but tag creation failed, cre
 
 `src/use-herdr-runtime.ts` consumes the structural event stream, separates rejected mutations from unknown outcomes, refreshes after accepted actions, and preserves the last valid snapshot during transient failures.
 
-`src/components/InteractiveTerminal.tsx` owns xterm.js, terminal WebSocket lifecycle, image-path staging, search, and the optional prompt dialog.
+`src/attention-center.ts` owns defensive browser-local attention preferences, timestamps, mute, snooze, review, notification cooldown, and deduplication.
+
+`server/share-store.ts` and `server/share-projection.ts` own hashed viewer-share credentials, expiry, revocation, exact-scope projection, and pane authorization.
+
+`server/workflow-template-store.ts` owns atomic project-scoped workflow persistence, while `src/workflow-templates.ts` owns the versioned browser schema and bounded ordered execution.
+
+`src/components/InteractiveTerminal.tsx` owns xterm.js, terminal WebSocket lifecycle, redacted diagnostics, image-path staging, search, and the optional prompt dialog.
+
+`server/push-notifications.ts` owns persisted VAPID identity, authenticated subscriptions, transition deduplication, mute and privacy enforcement, and Web Push delivery.
+
+`public/sw.js` owns PWA lifecycle, Push display, and same-origin notification clicks without an offline cache.
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 

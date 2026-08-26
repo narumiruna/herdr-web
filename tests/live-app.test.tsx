@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/App";
@@ -134,7 +134,7 @@ describe("live herdr-web app", () => {
     expect(document.title).toBe("herdr-web — agent workbench");
   });
 
-  test("keeps viewer-token sessions read-only", async () => {
+  test("keeps viewer-token sessions and Action Palette mutations read-only", async () => {
     window.history.replaceState({}, "", "/?token=view-token");
     vi.stubGlobal(
       "fetch",
@@ -150,6 +150,7 @@ describe("live herdr-web app", () => {
       ),
     );
 
+    const user = userEvent.setup();
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
@@ -162,6 +163,15 @@ describe("live herdr-web app", () => {
     ).toBeDisabled();
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    await user.keyboard("{Meta>}k{/Meta}");
+    const palette = screen.getByRole("dialog", { name: "Action Palette" });
+    await user.type(
+      within(palette).getByRole("combobox", {
+        name: "Search actions, Spaces, Agents, and Terminals",
+      }),
+      "Split right",
+    );
+    expect(within(palette).queryByText("Split right")).not.toBeInTheDocument();
   });
 
   test("shows a stable loading workbench while reading the first snapshot", () => {

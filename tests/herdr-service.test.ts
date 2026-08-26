@@ -96,6 +96,51 @@ branch refs/heads/narumi/feat/tree
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  test("loads real terminal previews for every detected streaming Agent", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        snapshot: {
+          agents: [
+            { agent_status: "working", pane_id: "w5:p1" },
+            { agent_status: "done", pane_id: "w5:p2" },
+          ],
+          panes: [{ pane_id: "w5:p1" }, { pane_id: "w5:p2" }],
+          protocol: 19,
+        },
+        type: "session_snapshot",
+      })
+      .mockImplementation(
+        async (_method: string, input: { pane_id: string }) => ({
+          read: {
+            pane_id: input.pane_id,
+            revision: 1,
+            text: `preview ${input.pane_id}`,
+          },
+          type: "pane_read",
+        }),
+      );
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { terminalStreamingConfigured: true },
+    );
+
+    await expect(service.getState()).resolves.toMatchObject({
+      previews: {
+        "w5:p1": { text: "preview w5:p1" },
+        "w5:p2": { text: "preview w5:p2" },
+      },
+      reads: {},
+    });
+    expect(request).toHaveBeenCalledWith("pane.read", {
+      format: "text",
+      lines: 12,
+      pane_id: "w5:p1",
+      source: "recent_unwrapped",
+      strip_ansi: true,
+    });
+  });
+
   test("uses Herdr 0.8.2 protocol 20 terminal sessions when the CLI matches", async () => {
     const request = vi.fn().mockResolvedValueOnce({
       snapshot: { panes: [{ pane_id: "w5:p1" }], protocol: 20 },
@@ -182,7 +227,10 @@ branch refs/heads/narumi/feat/tree
   test("subscribes only to structural control-plane events", async () => {
     const subscribe = vi.fn().mockResolvedValue(undefined);
     const request = vi.fn().mockResolvedValue({
-      snapshot: { panes: [{ pane_id: "w5:p1" }] },
+      snapshot: {
+        agents: [{ pane_id: "w5:p1" }],
+        panes: [{ pane_id: "w5:p1" }, { pane_id: "w5:p2" }],
+      },
       type: "session_snapshot",
     });
     const service = new LiveHerdrService({
@@ -213,6 +261,26 @@ branch refs/heads/narumi/feat/tree
     expect(JSON.stringify(subscribe.mock.calls[0]?.[1])).not.toContain(
       "pane.output",
     );
+    expect(JSON.stringify(subscribe.mock.calls[0]?.[1])).not.toContain(
+      '"pane_id":"w5:p2","type":"pane.agent_status_changed"',
+    );
+  });
+
+  test("reports status subscription truncation from the detected Agent list", async () => {
+    const agents = Array.from({ length: 513 }, (_, index) => ({
+      pane_id: `w5:p${index + 1}`,
+    }));
+    const request = vi.fn().mockResolvedValueOnce({
+      snapshot: { agents, panes: [] },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService({
+      request,
+    } as unknown as HerdrClient);
+
+    await expect(service.getState()).resolves.toMatchObject({
+      capabilities: { statusSubscriptionsTruncated: true },
+    });
   });
 
   test("splits a pane in Herdr's requested direction", async () => {
@@ -408,12 +476,15 @@ branch refs/heads/narumi/feat/tree
       .mockResolvedValueOnce({
         agent: { agent: "pi", interactive_ready: true, pane_id: "w5:p9" },
         type: "agent_info",
-      });
+      })
+      .mockResolvedValueOnce({ type: "agent_prompted" });
     const service = new LiveHerdrService({ request } as unknown as HerdrClient);
 
     await expect(
       service.createSession({
         command: "pi",
+        cwd: "/repo/review",
+        initialPrompt: "Review architecture.",
         label: "ready-agent",
         runtime: "Pi",
         workspaceId: "w5",
@@ -422,7 +493,13 @@ branch refs/heads/narumi/feat/tree
       agent: { agent: "pi", interactive_ready: true, pane_id: "w5:p9" },
       type: "agent_started",
     });
-    expect(request).toHaveBeenCalledTimes(5);
+    expect(request).toHaveBeenCalledTimes(6);
+    expect(request).toHaveBeenNthCalledWith(1, "tab.create", {
+      cwd: "/repo/review",
+      focus: false,
+      label: "ready-agent",
+      workspace_id: "w5",
+    });
     expect(request).toHaveBeenNthCalledWith(
       3,
       "agent.start",
@@ -435,6 +512,10 @@ branch refs/heads/narumi/feat/tree
       },
       { timeoutMs: 65_000 },
     );
+    expect(request).toHaveBeenLastCalledWith("agent.prompt", {
+      target: "w5:p9",
+      text: "Review architecture.",
+    });
   });
 
   test("starts a fresh readiness window after a slow Agent launch", async () => {

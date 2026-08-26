@@ -27,10 +27,11 @@ export type TerminalServerMessage =
       recoverable: boolean;
       type: "terminal.error";
     }
+  | { requestId: string; type: "terminal.input-accepted" }
   | { type: "terminal.flow"; writable: boolean };
 
 export type TerminalClientMessage =
-  | { data: string; type: "terminal.input" }
+  | { data: string; requestId?: string; type: "terminal.input" }
   | { cols: number; rows: number; type: "terminal.resize" }
   | { direction: "down" | "up"; lines: number; type: "terminal.scroll" }
   | { type: "terminal.release" };
@@ -208,7 +209,21 @@ function cleanClientMessage(value: unknown): TerminalClientMessage | undefined {
   const message = value as Record<string, unknown>;
   if (message.type === "terminal.input" && typeof message.data === "string") {
     if (Buffer.byteLength(message.data) > MAX_INPUT_BYTES) return undefined;
-    return { data: message.data, type: "terminal.input" };
+    if (
+      message.requestId !== undefined &&
+      (typeof message.requestId !== "string" ||
+        message.requestId.length < 1 ||
+        message.requestId.length > 64)
+    ) {
+      return undefined;
+    }
+    return {
+      data: message.data,
+      ...(typeof message.requestId === "string"
+        ? { requestId: message.requestId }
+        : {}),
+      type: "terminal.input",
+    };
   }
   if (
     message.type === "terminal.resize" &&
@@ -332,6 +347,12 @@ export class TerminalSession extends EventEmitter {
               lines: message.lines,
             };
     const writable = this.process.stdin.write(`${JSON.stringify(command)}\n`);
+    if (message.type === "terminal.input" && message.requestId) {
+      this.emitMessage({
+        requestId: message.requestId,
+        type: "terminal.input-accepted",
+      });
+    }
     if (!writable) {
       this.inputBlocked = true;
       this.emitMessage({ type: "terminal.flow", writable: false });

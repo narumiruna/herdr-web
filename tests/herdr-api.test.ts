@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  browserAccessToken,
   HerdrApiClient,
   normalizeWorkspacePath,
   workspaceLabelFromPath,
@@ -8,6 +9,7 @@ import {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("workspace paths", () => {
@@ -35,6 +37,23 @@ describe("workspace paths", () => {
 });
 
 describe("Herdr API requests", () => {
+  test("consumes viewer-share fragments without sending the secret in a request URL", () => {
+    const values = new Map<string, string>();
+    Object.defineProperty(window, "sessionStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        removeItem: (key: string) => values.delete(key),
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+    window.history.replaceState({}, "", "/#token=share_secret");
+
+    expect(browserAccessToken()).toBe("share_secret");
+    expect(window.location.href).not.toContain("share_secret");
+    expect(values.get("herdr-web-token")).toBe("share_secret");
+  });
+
   test("allows Agent creation to cover startup and readiness", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -61,6 +80,70 @@ describe("Herdr API requests", () => {
         signal: expect.any(AbortSignal),
       }),
     );
+  });
+
+  test("sends an exact one-shot terminal quick reply without changing navigation", async () => {
+    class QuickReplySocket {
+      static readonly OPEN = 1;
+      static instances: QuickReplySocket[] = [];
+      readyState = QuickReplySocket.OPEN;
+      sent: string[] = [];
+      onclose?: (event: { reason: string }) => void;
+      onerror?: () => void;
+      onmessage?: (event: { data: string }) => void;
+
+      constructor(readonly url: string | URL) {
+        QuickReplySocket.instances.push(this);
+      }
+
+      send(value: string) {
+        this.sent.push(value);
+      }
+
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", QuickReplySocket);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            expiresAt: Date.now() + 30_000,
+            path: "/api/herdr/terminal",
+            ticket: "reply-ticket",
+            type: "terminal_ticket",
+          }),
+          { headers: { "content-type": "application/json" }, status: 201 },
+        ),
+      ),
+    );
+    const api = new HerdrApiClient("secret");
+    const reply = api.quickReply("w1:p1", "Keep numeric IDs");
+    await vi.waitFor(() => expect(QuickReplySocket.instances).toHaveLength(1));
+    const socket = QuickReplySocket.instances[0];
+    if (!socket) throw new Error("Missing quick reply socket");
+    socket.onmessage?.({
+      data: JSON.stringify({ bytes: "", full: true, type: "terminal.frame" }),
+    });
+    const input = JSON.parse(socket.sent[0] ?? "{}") as { requestId: string };
+    socket.onmessage?.({
+      data: JSON.stringify({
+        requestId: input.requestId,
+        type: "terminal.input-accepted",
+      }),
+    });
+    await reply;
+
+    expect(String(socket.url)).toContain("ticket=reply-ticket");
+    expect(String(socket.url)).not.toContain("secret");
+    expect(socket.sent.map((value) => JSON.parse(value))).toEqual([
+      {
+        data: "Keep numeric IDs\r",
+        requestId: expect.any(String),
+        type: "terminal.input",
+      },
+      { type: "terminal.release" },
+    ]);
   });
 
   test("uses authenticated plugin and integration routes", async () => {

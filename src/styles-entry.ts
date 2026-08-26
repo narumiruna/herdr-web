@@ -18,5 +18,6 @@ import "./styles-workbench.css";
 import "./styles-terminal.css";
 import "./styles-terminal-responsive.css";
 import "./styles-overlays.css";
+import "./styles-supervision.css";
 import "./styles-responsive.css";
 import "./styles-classic.css";

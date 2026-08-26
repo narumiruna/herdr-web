@@ -48,6 +48,9 @@ import { InteractiveTerminal } from "./InteractiveTerminal";
 import { clampPaneRatio, PaneResizeHandle } from "./PaneResizeHandle";
 import { RadixDialog } from "./RadixDialog";
 
+// This workspace remains the single owner of pane focus, split layout,
+// fallback composition, and close confirmation so remote mutations cannot
+// race between independently mounted pane controls.
 export interface ComposerDraft {
   attachment?: File;
   attachmentError: string;
@@ -65,6 +68,7 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
 };
 
 interface TerminalWorkspaceProps {
+  accessibilityMode?: boolean;
   actionsEnabled: boolean;
   agent: Agent;
   draft: ComposerDraft;
@@ -96,6 +100,8 @@ interface TerminalWorkspaceProps {
   terminalFontSize: number;
   terminalReason: string;
   terminalStreaming: boolean;
+  protocol?: number;
+  reducedMotion?: boolean;
 }
 
 function compactPath(path: string): string {
@@ -303,6 +309,7 @@ function TerminalPaneView({
 }
 
 export function TerminalWorkspace({
+  accessibilityMode = false,
   actionsEnabled,
   agent,
   createTerminalTicket,
@@ -327,6 +334,8 @@ export function TerminalWorkspace({
   terminalFontSize,
   terminalReason,
   terminalStreaming,
+  protocol = 0,
+  reducedMotion = false,
 }: TerminalWorkspaceProps) {
   const [dragging, setDragging] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -870,6 +879,7 @@ export function TerminalWorkspace({
                   onPointerDown={() => onSelectPane(pane.id)}
                 >
                   <InteractiveTerminal
+                    accessibilityMode={accessibilityMode}
                     actionsEnabled={terminalEnabled}
                     controlEnabled={terminalControlEnabled}
                     structuredActionsEnabled={actionsEnabled}
@@ -886,6 +896,8 @@ export function TerminalWorkspace({
                     onUploadFile={onUploadFile}
                     onUploadImage={onUploadImage}
                     paneId={pane.id}
+                    protocol={protocol}
+                    reducedMotion={reducedMotion}
                     toolbarContext={terminalContext(pane)}
                     toolbarActions={terminalStructureActions(
                       pane,

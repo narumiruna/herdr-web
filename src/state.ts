@@ -1,4 +1,10 @@
-export type AgentStatus = "working" | "blocked" | "idle" | "done" | "unknown";
+export type AgentStatus =
+  | "working"
+  | "blocked"
+  | "idle"
+  | "done"
+  | "failed"
+  | "unknown";
 
 export type RuntimeName =
   | "Claude Code"
@@ -68,6 +74,7 @@ export interface Agent {
   additions: number;
   deletions: number;
   panes: TerminalPane[];
+  previewLines?: string[];
   activePaneId: string;
   paneSplit?: PaneSplit;
 }
@@ -92,6 +99,10 @@ export interface Activity {
 
 export interface HerdrState {
   capabilities: {
+    herdrVersion: string;
+    previewsTruncated: boolean;
+    protocol: number;
+    statusSubscriptionsTruncated: boolean;
     terminalReason: string;
     terminalStreaming: boolean;
   };
@@ -150,6 +161,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
   working: 4,
   idle: 3,
   done: 2,
+  failed: 6,
   unknown: 1,
 };
 
@@ -608,6 +620,10 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
 export function createDemoState(): HerdrState {
   return {
     capabilities: {
+      herdrVersion: "demo",
+      previewsTruncated: false,
+      protocol: 20,
+      statusSubscriptionsTruncated: false,
       terminalReason:
         "Interactive terminal streaming is unavailable in demo mode.",
       terminalStreaming: false,
@@ -666,6 +682,11 @@ export function createDemoState(): HerdrState {
         additions: 286,
         deletions: 41,
         activePaneId: "build-main",
+        previewLines: [
+          "● Write src/api/server/web_bridge.rs",
+          "● Running cargo test api::server::web_bridge",
+          "  ⠋ compiling herdr v0.8.0",
+        ],
         panes: [
           {
             id: "build-main",
@@ -709,6 +730,11 @@ export function createDemoState(): HerdrState {
         additions: 34,
         deletions: 12,
         activePaneId: "review-main",
+        previewLines: [
+          "◆ Decision needed",
+          "Should the browser bridge preserve numeric pane IDs?",
+          "Waiting for direction…",
+        ],
         panes: [
           {
             id: "review-main",
@@ -753,6 +779,10 @@ export function createDemoState(): HerdrState {
         additions: 192,
         deletions: 4,
         activePaneId: "tests-main",
+        previewLines: [
+          "test result: ok. 6 passed; 0 failed; finished in 1.84s",
+          "✓ Task complete",
+        ],
         panes: [
           {
             id: "tests-main",

@@ -8,7 +8,9 @@ import {
 } from "react";
 import {
   type AgentLifecycleAction,
+  type BrowserPushPreferences,
   browserAccessToken,
+  type CreatedViewerShare,
   HerdrApiClient,
   HerdrBridgeError,
   type IntegrationAction,
@@ -20,11 +22,14 @@ import {
   type PluginActionInfo,
   type PluginInfo,
   type PluginLogInfo,
+  type PushConfig,
   rememberAccessToken,
   type TerminalTicket,
   type TerminalTicketInput,
   type UploadedFile,
   type UploadedImage,
+  type ViewerShare,
+  type ViewerShareScope,
   workspaceLabelFromPath,
 } from "./herdr-api";
 import { mapLiveSnapshot } from "./live-state";
@@ -35,6 +40,7 @@ import {
   type HerdrState,
   type PaneSplitDirection,
 } from "./state";
+import type { WorkflowTemplate } from "./workflow-templates";
 
 export type ConnectionStatus = "auth" | "error" | "loading" | "ready";
 
@@ -73,6 +79,11 @@ export interface RuntimeManagementState {
 
 interface HerdrRuntime {
   accessRole: AccessRole;
+  activeShare?: {
+    expiresAt: number;
+    id: string;
+    scope: ViewerShareScope;
+  };
   actionError: string;
   clearActionError: () => void;
   agentLifecycle: (
@@ -82,12 +93,23 @@ interface HerdrRuntime {
   closePane: (agentId: string, paneId: string) => Promise<void>;
   closeTab: (agentId: string, tabId: string) => Promise<void>;
   connection: RuntimeConnection;
+  createViewerShare: (
+    scope: ViewerShareScope,
+    expiresInMinutes: number,
+  ) => Promise<CreatedViewerShare>;
   createSession: (input: NewLiveSession) => Promise<void>;
   createTerminal: (input: NewLiveTerminal) => Promise<void>;
   createWorkspace: (input: NewLiveWorkspace) => Promise<void>;
   dispatch: (action: HerdrAction) => void;
   error: string;
+  pushConfig: () => Promise<PushConfig>;
+  savePushSubscription: (
+    subscription: PushSubscriptionJSON,
+    preferences: BrowserPushPreferences,
+  ) => Promise<void>;
+  removePushSubscription: (endpoint: string) => Promise<void>;
   lastUpdatedAt: number;
+  quickReply: (paneId: string, message: string) => Promise<void>;
   promptAgent: (
     agentId: string,
     message: string,
@@ -97,6 +119,8 @@ interface HerdrRuntime {
   ) => Promise<PromptResult>;
   refresh: () => Promise<void>;
   invokePluginAction: (actionId: string) => Promise<void>;
+  listViewerShares: () => Promise<ViewerShare[]>;
+  loadProjectWorkflows: (projectKey: string) => Promise<WorkflowTemplate[]>;
   loadRuntimeManagement: () => Promise<RuntimeManagementState>;
   manageIntegration: (
     target: IntegrationTarget,
@@ -108,6 +132,9 @@ interface HerdrRuntime {
     direction: "left" | "right",
   ) => Promise<void>;
   renameTab: (agentId: string, tabId: string, label: string) => Promise<void>;
+  revokeViewerShare: (id: string) => Promise<void>;
+  saveProjectWorkflow: (template: WorkflowTemplate) => Promise<void>;
+  deleteProjectWorkflow: (id: string, projectKey: string) => Promise<void>;
   setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
   resizePanes: (agentId: string, tabId: string, ratio: number) => Promise<void>;
   setAccessToken: (token: string) => void;
@@ -147,6 +174,7 @@ export function useHerdrRuntime(
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [accessRole, setAccessRole] = useState<AccessRole>("controller");
+  const [activeShare, setActiveShare] = useState<HerdrRuntime["activeShare"]>();
   const [connection, setConnection] = useState<RuntimeConnection>("connected");
   const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
   const hasSnapshot = useRef(!live);
@@ -163,6 +191,7 @@ export function useHerdrRuntime(
       setAccessRole(
         payload.access?.role === "viewer" ? "viewer" : "controller",
       );
+      setActiveShare(payload.access?.share);
       hasSnapshot.current = true;
       setConnection("connected");
       setError("");
@@ -291,6 +320,7 @@ export function useHerdrRuntime(
 
   return {
     accessRole,
+    activeShare,
     actionError,
     clearActionError: () => setActionError(""),
     connection,
@@ -312,6 +342,10 @@ export function useHerdrRuntime(
       }
       await mutate((api) => api.closeTab(tabId));
     },
+    createViewerShare: async (scope, expiresInMinutes) => {
+      if (!client) throw new Error("A live controller connection is required");
+      return client.createViewerShare(scope, expiresInMinutes);
+    },
     createSession: async (input) => {
       if (!live) {
         dispatch({
@@ -321,7 +355,13 @@ export function useHerdrRuntime(
         });
         return;
       }
-      await mutate((api) => api.createSession(input));
+      const created = await mutate((api) => api.createSession(input));
+      if (created?.initial_prompt_error) {
+        throw new HerdrMutationError(
+          `Agent started, but its initial prompt failed: ${created.initial_prompt_error}`,
+          "rejected",
+        );
+      }
     },
     createTerminal: async (input) => {
       if (!live) {
@@ -361,6 +401,41 @@ export function useHerdrRuntime(
     dispatch,
     error,
     lastUpdatedAt,
+    quickReply: async (paneId, message) => {
+      const text = message.trim();
+      if (!text) throw new Error("A quick reply cannot be empty.");
+      if (!live) {
+        const target = state.agents.find(
+          (agent) =>
+            agent.id === paneId || agent.panes.some(({ id }) => id === paneId),
+        );
+        if (target) {
+          dispatch({
+            type: "agent.replied",
+            agentId: target.id,
+            message: text,
+          });
+        }
+        return;
+      }
+      if (!client) throw new Error("A live controller connection is required");
+      await client.quickReply(paneId, text);
+      await refresh();
+    },
+    pushConfig: async () => {
+      if (!client || !live) {
+        throw new Error("A live controller connection is required");
+      }
+      return client.pushConfig();
+    },
+    savePushSubscription: async (subscription, preferences) => {
+      if (!client || !live) return;
+      await client.savePushSubscription(subscription, preferences);
+    },
+    removePushSubscription: async (endpoint) => {
+      if (!client || !live) return;
+      await client.removePushSubscription(endpoint);
+    },
     promptAgent: async (
       agentId,
       message,
@@ -402,6 +477,14 @@ export function useHerdrRuntime(
       if (!live) return;
       await mutate((api) => api.invokePluginAction(actionId));
     },
+    listViewerShares: async () => {
+      if (!client || !live) return [];
+      return (await client.viewerShares()).shares;
+    },
+    loadProjectWorkflows: async (projectKey) => {
+      if (!client || !live) return [];
+      return (await client.workflowTemplates(projectKey)).templates;
+    },
     loadRuntimeManagement: async () => {
       if (!live || !client) return { actions: [], logs: [], plugins: [] };
       const [plugins, actions, logs] = await Promise.all([
@@ -425,6 +508,18 @@ export function useHerdrRuntime(
         return;
       }
       await mutate((api) => api.moveTab(tabId, direction));
+    },
+    revokeViewerShare: async (id) => {
+      if (!client || !live) return;
+      await client.revokeViewerShare(id);
+    },
+    saveProjectWorkflow: async (template) => {
+      if (!client || !live) return;
+      await client.saveWorkflowTemplate(template);
+    },
+    deleteProjectWorkflow: async (id, projectKey) => {
+      if (!client || !live) return;
+      await client.deleteWorkflowTemplate(id, projectKey);
     },
     renameTab: async (agentId, tabId, label) => {
       if (!live) {

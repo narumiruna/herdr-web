@@ -1,6 +1,7 @@
 import type { LiveSnapshotPayload } from "./live-state";
 import { readProductStorage, writeProductStorage } from "./product-storage";
 import type { PaneSplitDirection, RuntimeName } from "./state";
+import type { WorkflowTemplate } from "./workflow-templates";
 
 interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -25,9 +26,16 @@ export class HerdrBridgeError extends Error {
 
 export interface NewLiveSession {
   command: string;
+  cwd?: string;
+  initialPrompt?: string;
   label: string;
   runtime: RuntimeName;
   workspaceId: string;
+}
+
+export interface CreatedLiveSession {
+  initial_prompt_error?: string;
+  [key: string]: unknown;
 }
 
 export interface NewLiveTerminal {
@@ -109,6 +117,49 @@ export interface CreatedLiveWorkspace {
   workspace: { workspace_id: string };
 }
 
+export interface PushConfig {
+  publicKey: string;
+  type: "push_config";
+}
+
+export interface BrowserPushPreferences {
+  cooldownMs: number;
+  mutedAgentIds: string[];
+  privacy: "full" | "private";
+  soundEnabled: boolean;
+}
+
+export interface ViewerShareScope {
+  agentId?: string;
+  paneId?: string;
+  workspaceId: string;
+}
+
+export interface ViewerShare {
+  createdAt: number;
+  expiresAt: number;
+  id: string;
+  revokedAt?: number;
+  scope: ViewerShareScope;
+}
+
+export interface ViewerShareList {
+  shares: ViewerShare[];
+  type: "viewer_share_list";
+}
+
+export interface CreatedViewerShare {
+  share: ViewerShare;
+  token: string;
+  type: "viewer_share_created";
+  url: string;
+}
+
+export interface WorkflowTemplateList {
+  templates: WorkflowTemplate[];
+  type: "workflow_template_list";
+}
+
 export interface TerminalTicket {
   expiresAt: number;
   path: string;
@@ -119,6 +170,7 @@ export interface TerminalTicket {
 export interface TerminalTicketInput {
   cols: number;
   mode: "control" | "observe";
+  purpose?: "attention-reply";
   rows: number;
   takeover?: boolean;
 }
@@ -195,6 +247,67 @@ export class HerdrApiClient {
 
   state(): Promise<LiveSnapshotPayload> {
     return this.request("/api/herdr/state");
+  }
+
+  pushConfig(): Promise<PushConfig> {
+    return this.request("/api/herdr/push/config");
+  }
+
+  savePushSubscription(
+    subscription: PushSubscriptionJSON,
+    preferences: BrowserPushPreferences,
+  ): Promise<unknown> {
+    return this.request("/api/herdr/push/subscription", {
+      body: JSON.stringify({ preferences, subscription }),
+      method: "PUT",
+    });
+  }
+
+  removePushSubscription(endpoint: string): Promise<unknown> {
+    return this.request("/api/herdr/push/subscription", {
+      body: JSON.stringify({ endpoint }),
+      method: "DELETE",
+    });
+  }
+
+  viewerShares(): Promise<ViewerShareList> {
+    return this.request("/api/herdr/viewer-shares");
+  }
+
+  createViewerShare(
+    scope: ViewerShareScope,
+    expiresInMinutes: number,
+  ): Promise<CreatedViewerShare> {
+    return this.request("/api/herdr/viewer-shares", {
+      body: JSON.stringify({ expiresInMinutes, scope }),
+      method: "POST",
+    });
+  }
+
+  revokeViewerShare(id: string): Promise<unknown> {
+    return this.request(`/api/herdr/viewer-shares/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  workflowTemplates(projectKey: string): Promise<WorkflowTemplateList> {
+    return this.request(
+      `/api/herdr/workflow-templates?projectKey=${encodeURIComponent(projectKey)}`,
+    );
+  }
+
+  saveWorkflowTemplate(template: WorkflowTemplate): Promise<unknown> {
+    return this.request(
+      `/api/herdr/workflow-templates/${encodeURIComponent(template.id)}`,
+      { body: JSON.stringify(template), method: "PUT" },
+    );
+  }
+
+  deleteWorkflowTemplate(id: string, projectKey: string): Promise<unknown> {
+    return this.request(
+      `/api/herdr/workflow-templates/${encodeURIComponent(id)}?projectKey=${encodeURIComponent(projectKey)}`,
+      { method: "DELETE" },
+    );
   }
 
   async events(
@@ -314,6 +427,89 @@ export class HerdrApiClient {
     );
   }
 
+  async quickReply(paneId: string, message: string): Promise<void> {
+    const ticket = await this.terminalTicket(paneId, {
+      cols: 80,
+      mode: "control",
+      purpose: "attention-reply",
+      rows: 24,
+      takeover: false,
+    });
+    await new Promise<void>((resolve, reject) => {
+      const url = new URL(ticket.path, window.location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.search = new URLSearchParams({ ticket: ticket.ticket }).toString();
+      const socket = new WebSocket(url);
+      let sent = false;
+      let settled = false;
+      const requestId = crypto.randomUUID?.() ?? `${Date.now()}`;
+      const fail = (reason: string) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        socket.close();
+        reject(new Error(reason));
+      };
+      const timeout = window.setTimeout(
+        () => fail("The quick reply terminal did not acknowledge input."),
+        10_000,
+      );
+      socket.onerror = () =>
+        fail("The quick reply terminal could not connect.");
+      socket.onclose = (event) => {
+        if (!sent) fail(event.reason || "Terminal control is unavailable.");
+      };
+      socket.onmessage = (event) => {
+        let frame: {
+          message?: string;
+          reason?: string;
+          requestId?: string;
+          type?: string;
+        };
+        try {
+          frame = JSON.parse(String(event.data)) as typeof frame;
+        } catch {
+          fail("The quick reply terminal returned invalid data.");
+          return;
+        }
+        if (
+          frame.type === "terminal.closed" ||
+          frame.type === "terminal.error"
+        ) {
+          fail(
+            frame.reason ||
+              frame.message ||
+              "Terminal control is held elsewhere.",
+          );
+          return;
+        }
+        if (
+          frame.type === "terminal.input-accepted" &&
+          frame.requestId === requestId &&
+          sent
+        ) {
+          settled = true;
+          window.clearTimeout(timeout);
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "terminal.release" }));
+            socket.close(1000, "quick reply accepted");
+          }
+          resolve();
+          return;
+        }
+        if (frame.type !== "terminal.frame" || sent) return;
+        sent = true;
+        socket.send(
+          JSON.stringify({
+            data: `${message}\r`,
+            requestId,
+            type: "terminal.input",
+          }),
+        );
+      };
+    });
+  }
+
   uploadImage(paneId: string, image: File): Promise<UploadedImage> {
     return this.request(
       `/api/herdr/agents/${encodeURIComponent(paneId)}/images`,
@@ -369,7 +565,7 @@ export class HerdrApiClient {
     });
   }
 
-  createSession(input: NewLiveSession): Promise<unknown> {
+  createSession(input: NewLiveSession): Promise<CreatedLiveSession> {
     return this.request("/api/herdr/sessions", {
       body: JSON.stringify(input),
       method: "POST",
@@ -424,16 +620,20 @@ export class HerdrApiClient {
 
 export function browserAccessToken(): string {
   const url = new URL(window.location.href);
-  const queryToken = url.searchParams.get("token")?.trim();
-  if (queryToken) {
-    writeProductStorage(window.sessionStorage, "token", queryToken);
+  const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+  const supplied =
+    url.searchParams.get("token")?.trim() || fragment.get("token")?.trim();
+  if (supplied) {
+    writeProductStorage(window.sessionStorage, "token", supplied);
     url.searchParams.delete("token");
+    fragment.delete("token");
+    const hash = fragment.toString();
     window.history.replaceState(
       {},
       "",
-      `${url.pathname}${url.search}${url.hash}`,
+      `${url.pathname}${url.search}${hash ? `#${hash}` : ""}`,
     );
-    return queryToken;
+    return supplied;
   }
   return readProductStorage(window.sessionStorage, "token")?.trim() ?? "";
 }

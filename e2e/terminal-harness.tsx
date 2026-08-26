@@ -101,6 +101,7 @@ function HarnessTerminal({
 
   return (
     <InteractiveTerminal
+      accessibilityMode
       actionsEnabled
       agentId={paneId}
       agentLabel={paneId}

@@ -4,6 +4,13 @@ import { mapLiveSnapshot } from "../src/live-state";
 describe("mapLiveSnapshot", () => {
   test("maps real herdr workspaces, agents, layouts, and pane output", () => {
     const state = mapLiveSnapshot({
+      previews: {
+        "w5:p1": {
+          pane_id: "w5:p1",
+          revision: 9,
+          text: "real latest line",
+        },
+      },
       readErrors: { "w5:p2": "socket read failed" },
       reads: {
         "w5:p1": {
@@ -123,10 +130,15 @@ describe("mapLiveSnapshot", () => {
       kind: "agent",
       label: "π - herdr-web",
       paneSplit: { direction: "down", ratio: 0.65 },
+      previewLines: ["real latest line"],
       runtime: "pi",
       status: "idle",
       tabId: "w5:t1",
       tabNumber: 1,
+    });
+    expect(state.capabilities).toMatchObject({
+      herdrVersion: "0.8.0",
+      protocol: 19,
     });
     expect(state.agents[0]?.panes).toEqual([
       expect.objectContaining({

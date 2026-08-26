@@ -4,9 +4,13 @@ export type TerminalMode = "control" | "observe";
 
 export interface TerminalTicketInput {
   cols: number;
+  expiresInMs?: number;
   mode: TerminalMode;
   paneId: string;
+  purpose?: "attention-reply";
   rows: number;
+  shareExpiresAt?: number;
+  shareId?: string;
   takeover: boolean;
 }
 
@@ -38,7 +42,9 @@ export class TerminalTicketStore {
       throw new RangeError("Too many pending terminal connections");
     }
     const ticket = randomBytes(32).toString("base64url");
-    const expiresAt = this.now() + this.ttlMs;
+    const expiresAt =
+      this.now() +
+      Math.min(this.ttlMs, Math.max(1_000, input.expiresInMs ?? this.ttlMs));
     this.tickets.set(ticket, { ...input, expiresAt });
     return { expiresAt, ticket };
   }
@@ -48,6 +54,12 @@ export class TerminalTicketStore {
     this.tickets.delete(ticket);
     if (!value || value.expiresAt <= this.now()) return undefined;
     return value;
+  }
+
+  revokeShare(shareId: string): void {
+    for (const [ticket, value] of this.tickets) {
+      if (value.shareId === shareId) this.tickets.delete(ticket);
+    }
   }
 
   private removeExpired(): void {

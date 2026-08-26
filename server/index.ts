@@ -9,6 +9,8 @@ import {
   statusSocketPath,
 } from "./herdr-status.js";
 import { createHerdrHttpHandler } from "./http-app.js";
+import { PushNotificationService } from "./push-notifications.js";
+import { ViewerShareStore } from "./share-store.js";
 import { createStaticHandler } from "./static-files.js";
 import {
   LocalTerminalBackend,
@@ -16,6 +18,7 @@ import {
 } from "./terminal-session.js";
 import { TerminalTicketStore } from "./terminal-tickets.js";
 import { attachTerminalWebSocket } from "./terminal-websocket.js";
+import { WorkflowTemplateStore } from "./workflow-template-store.js";
 
 const token = process.env.HERDR_WEB_TOKEN?.trim();
 if (!token) {
@@ -87,12 +90,27 @@ const service = new LiveHerdrService(client, {
   uploadsRoot: join(dataHome, "uploads"),
 });
 const terminalTickets = new TerminalTicketStore();
+const pushNotifications = new PushNotificationService(
+  join(dataHome, "runtime", "push-notifications.json"),
+  { contact: process.env.HERDR_WEB_VAPID_CONTACT?.trim() || undefined },
+);
+await pushNotifications.load();
+const shareStore = new ViewerShareStore(
+  join(dataHome, "runtime", "viewer-shares.json"),
+);
+await shareStore.load();
+const workflowTemplates = new WorkflowTemplateStore(
+  join(dataHome, "runtime", "workflow-templates.json"),
+);
 const api = createHerdrHttpHandler({
+  pushNotifications,
   service,
+  shareStore,
   terminalConfigured: terminalBackend.configured,
   terminalTickets,
   token,
   viewToken: process.env.HERDR_WEB_VIEW_TOKEN?.trim() || undefined,
+  workflowTemplates,
 });
 const staticFiles = createStaticHandler(staticRoot);
 
@@ -116,8 +134,53 @@ const server = createServer((request, response) => {
 const terminalWebSocket = attachTerminalWebSocket({
   backend: terminalBackend,
   server,
+  shareStore,
   tickets: terminalTickets,
 });
+
+const pushAbort = new AbortController();
+let pushRefresh: NodeJS.Timeout | undefined;
+let pushRetry: NodeJS.Timeout | undefined;
+let pushUpdateRunning = false;
+let pushUpdatePending = false;
+const updatePushState = async () => {
+  if (pushAbort.signal.aborted || !pushNotifications.hasSubscriptions()) return;
+  if (pushUpdateRunning) {
+    pushUpdatePending = true;
+    return;
+  }
+  pushUpdateRunning = true;
+  try {
+    await pushNotifications.processState(await service.getState());
+  } catch (error) {
+    console.error("herdr-web background push update failed", error);
+  } finally {
+    pushUpdateRunning = false;
+    if (pushUpdatePending) {
+      pushUpdatePending = false;
+      void updatePushState();
+    }
+  }
+};
+const subscribePushEvents = async () => {
+  if (pushAbort.signal.aborted) return;
+  try {
+    await service.subscribeEvents(pushAbort.signal, () => {
+      if (pushRefresh) clearTimeout(pushRefresh);
+      pushRefresh = setTimeout(() => void updatePushState(), 100);
+    });
+  } catch (error) {
+    if (!pushAbort.signal.aborted) {
+      console.error("herdr-web background push event stream failed", error);
+    }
+  }
+  if (!pushAbort.signal.aborted) {
+    pushRetry = setTimeout(() => void subscribePushEvents(), 2_000);
+    pushRetry.unref();
+  }
+};
+void updatePushState();
+void subscribePushEvents();
 
 server.listen(port, host, () => {
   console.log(`herdr-web bridge listening on http://${host}:${port}`);
@@ -130,6 +193,9 @@ server.listen(port, host, () => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    pushAbort.abort();
+    if (pushRefresh) clearTimeout(pushRefresh);
+    if (pushRetry) clearTimeout(pushRetry);
     terminalWebSocket.close();
     server.close(() => process.exit(0));
   });
