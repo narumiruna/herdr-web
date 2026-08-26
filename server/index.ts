@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { HerdrClient } from "./herdr-client.js";
 import { LiveHerdrService } from "./herdr-service.js";
-import { readHerdrStatus, statusSocketPath } from "./herdr-status.js";
+import {
+  parseHerdrProtocol,
+  readHerdrStatus,
+  statusSocketPath,
+} from "./herdr-status.js";
 import { createHerdrHttpHandler } from "./http-app.js";
 import { createStaticHandler } from "./static-files.js";
 import {
@@ -34,6 +38,9 @@ const herdrCommand =
 const herdrStatus = usesSocketProxy
   ? undefined
   : await readHerdrStatus(herdrCommand).catch(() => undefined);
+const terminalProxyProtocol = parseHerdrProtocol(
+  process.env.HERDR_TERMINAL_CLIENT_PROTOCOL,
+);
 const discoveredSocket =
   process.env.HERDR_SOCKET_PATH?.trim() || statusSocketPath(herdrStatus);
 if (!usesSocketProxy && process.platform === "win32" && !discoveredSocket) {
@@ -73,7 +80,7 @@ const terminalBackend =
 const client = new HerdrClient(endpoint);
 const service = new LiveHerdrService(client, {
   herdrClientProtocol: usesSocketProxy
-    ? undefined
+    ? terminalProxyProtocol
     : herdrStatus?.client?.protocol,
   projectsRoot,
   terminalStreamingConfigured: terminalBackend.configured,

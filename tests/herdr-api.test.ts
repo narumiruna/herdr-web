@@ -5,7 +5,10 @@ import {
   workspaceLabelFromPath,
 } from "../src/herdr-api";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("workspace paths", () => {
   test("preserves separators for the Herdr host to interpret", () => {
@@ -31,7 +34,35 @@ describe("workspace paths", () => {
   });
 });
 
-describe("runtime management API", () => {
+describe("Herdr API requests", () => {
+  test("allows Agent creation to outlive the bridge timeout", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ type: "agent_started" }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HerdrApiClient("secret");
+
+    await api.createSession({
+      command: "pi",
+      label: "slow-agent",
+      runtime: "Pi",
+      workspaceId: "w1",
+    });
+
+    expect(timeout).toHaveBeenCalledWith(70_000);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/herdr/sessions",
+      expect.objectContaining({
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
   test("uses authenticated plugin and integration routes", async () => {
     const fetchMock = vi.fn().mockImplementation(
       async () =>

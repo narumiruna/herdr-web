@@ -6,6 +6,8 @@ interface ApiErrorBody {
   error?: { code?: string; message?: string };
 }
 
+const AGENT_CREATION_TIMEOUT_MS = 70_000;
+
 export class HerdrBridgeError extends Error {
   readonly code: string;
   readonly status: number;
@@ -360,6 +362,7 @@ export class HerdrApiClient {
     return this.request("/api/herdr/sessions", {
       body: JSON.stringify(input),
       method: "POST",
+      signal: AbortSignal.timeout(AGENT_CREATION_TIMEOUT_MS),
     });
   }
 

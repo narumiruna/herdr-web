@@ -52,6 +52,14 @@ export function statusSocketPath(status: HerdrStatus | undefined): string {
     : "";
 }
 
+export function parseHerdrProtocol(
+  value: string | undefined,
+): number | undefined {
+  if (!value?.trim()) return undefined;
+  const protocol = Number(value);
+  return Number.isInteger(protocol) && protocol > 0 ? protocol : undefined;
+}
+
 export function terminalProtocolReason(
   serverProtocol: number,
   clientProtocol?: number,

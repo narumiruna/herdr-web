@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  parseHerdrProtocol,
   parseHerdrStatus,
   statusSocketPath,
   terminalProtocolReason,
@@ -21,6 +22,13 @@ describe("Herdr status compatibility", () => {
 
     expect(status.client?.protocol).toBe(20);
     expect(statusSocketPath(status)).toBe("\\\\.\\pipe\\herdr");
+  });
+
+  test("validates a protocol propagated by the host terminal proxy", () => {
+    expect(parseHerdrProtocol("20")).toBe(20);
+    expect(parseHerdrProtocol(" 19 ")).toBe(19);
+    expect(parseHerdrProtocol(undefined)).toBeUndefined();
+    expect(parseHerdrProtocol("20beta")).toBeUndefined();
   });
 
   test("accepts terminal protocols 19 and 20 when the CLI matches", () => {
