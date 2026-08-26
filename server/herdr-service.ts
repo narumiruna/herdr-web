@@ -118,6 +118,8 @@ const STRUCTURAL_SUBSCRIPTIONS = [
   "layout.updated",
 ].map((type) => ({ type }));
 
+const PLUGIN_ACTION_TIMEOUT_MS = 300_000;
+
 const RUNTIMES: Record<
   string,
   { args: string[]; command: string; kind: string }
@@ -418,10 +420,14 @@ export class LiveHerdrService {
   }
 
   invokePluginAction(actionId: string): Promise<unknown> {
-    return this.client.request("plugin.action.invoke", {
-      action_id: actionId,
-      context: { invocation_source: "herdr-web" },
-    });
+    return this.client.request(
+      "plugin.action.invoke",
+      {
+        action_id: actionId,
+        context: { invocation_source: "herdr-web" },
+      },
+      { timeoutMs: PLUGIN_ACTION_TIMEOUT_MS },
+    );
   }
 
   manageIntegration(
@@ -497,9 +503,9 @@ export class LiveHerdrService {
   ): Promise<unknown> {
     const runtime = RUNTIMES[input.runtime];
     if (!runtime) throw new TypeError("Unsupported agent runtime or command");
-    const deadline = Date.now() + 60_000;
+    const startDeadline = Date.now() + 60_000;
     let started: unknown;
-    while (Date.now() < deadline) {
+    while (Date.now() < startDeadline) {
       try {
         started = await this.client.request(
           "agent.start",
@@ -525,7 +531,8 @@ export class LiveHerdrService {
     }
     if (!started)
       throw new Error("The new terminal did not reach a shell prompt");
-    while (Date.now() < deadline) {
+    const readinessDeadline = Date.now() + 60_000;
+    while (Date.now() < readinessDeadline) {
       const info = await this.client.request<{
         agent?: { agent?: string | null; interactive_ready?: boolean };
       }>("agent.get", { target: paneId });

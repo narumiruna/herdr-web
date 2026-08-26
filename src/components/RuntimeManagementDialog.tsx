@@ -274,8 +274,14 @@ export function RuntimeManagementDialog({
                   <time dateTime={new Date(log.started_unix_ms).toISOString()}>
                     {new Date(log.started_unix_ms).toLocaleString()}
                   </time>
-                  {(log.error || log.stderr || log.stdout) && (
-                    <pre>{log.error || log.stderr || log.stdout}</pre>
+                  {(["error", "stderr", "stdout"] as const).map((stream) =>
+                    log[stream] ? (
+                      <pre key={stream}>
+                        <strong>{stream}</strong>
+                        {"\n"}
+                        {log[stream]}
+                      </pre>
+                    ) : null,
                   )}
                 </article>
               ))}

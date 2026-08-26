@@ -15,11 +15,13 @@ const management = {
   logs: [
     {
       action_id: "example.board.refresh",
+      error: "launch failed",
       log_id: "log-1",
       plugin_id: "example.board",
       started_unix_ms: 1_780_000_000_000,
       status: "succeeded",
-      stdout: "done",
+      stderr: "warning output",
+      stdout: "success output",
     },
   ],
   plugins: [
@@ -56,6 +58,13 @@ describe("RuntimeManagementDialog", () => {
     );
 
     expect(await screen.findByText("Example board")).toBeVisible();
+    const pluginLog = screen
+      .getByText("example.board.refresh")
+      .closest("article") as HTMLElement;
+    expect(pluginLog).toHaveTextContent("launch failed");
+    expect(pluginLog).toHaveTextContent("warning output");
+    expect(pluginLog).toHaveTextContent("success output");
+
     await user.click(screen.getByRole("button", { name: "Disable" }));
     await waitFor(() =>
       expect(setEnabled).toHaveBeenCalledWith("example.board", false),

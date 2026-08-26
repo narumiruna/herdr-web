@@ -64,6 +64,7 @@ describe("Herdr API requests", () => {
   });
 
   test("uses authenticated plugin and integration routes", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     const fetchMock = vi.fn().mockImplementation(
       async () =>
         new Response(JSON.stringify({ type: "ok" }), {
@@ -102,5 +103,6 @@ describe("Herdr API requests", () => {
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.headers).toMatchObject({ authorization: "Bearer secret" });
     }
+    expect(timeout).toHaveBeenCalledWith(305_000);
   });
 });

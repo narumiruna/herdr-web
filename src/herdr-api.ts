@@ -7,6 +7,7 @@ interface ApiErrorBody {
 }
 
 const AGENT_CREATION_TIMEOUT_MS = 70_000;
+const PLUGIN_ACTION_TIMEOUT_MS = 305_000;
 
 export class HerdrBridgeError extends Error {
   readonly code: string;
@@ -272,7 +273,11 @@ export class HerdrApiClient {
   invokePluginAction(actionId: string): Promise<unknown> {
     return this.request(
       `/api/herdr/plugin-actions/${encodeURIComponent(actionId)}/invoke`,
-      { body: "{}", method: "POST" },
+      {
+        body: "{}",
+        method: "POST",
+        signal: AbortSignal.timeout(PLUGIN_ACTION_TIMEOUT_MS),
+      },
     );
   }
 

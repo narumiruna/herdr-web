@@ -259,7 +259,7 @@ describe("mapLiveSnapshot", () => {
     expect(state.selectedAgentId).toBe("w5:p3");
   });
 
-  test("disables semantic prompts while an Agent is blocked", () => {
+  test("gates blocked semantic prompts only for protocol 20", () => {
     const pane = {
       agent: "qwen",
       agent_status: "blocked",
@@ -268,7 +268,7 @@ describe("mapLiveSnapshot", () => {
       tab_id: "w1:t1",
       workspace_id: "w1",
     };
-    const state = mapLiveSnapshot({
+    const payload = {
       reads: {},
       snapshot: {
         agents: [pane],
@@ -309,10 +309,20 @@ describe("mapLiveSnapshot", () => {
           },
         ],
       },
-    });
+    };
 
-    expect(state.agents[0]).toMatchObject({
+    expect(mapLiveSnapshot(payload).agents[0]).toMatchObject({
       canPrompt: false,
+      runtime: "qwen",
+      status: "blocked",
+    });
+    expect(
+      mapLiveSnapshot({
+        ...payload,
+        snapshot: { ...payload.snapshot, protocol: 19, version: "0.8.0" },
+      }).agents[0],
+    ).toMatchObject({
+      canPrompt: true,
       runtime: "qwen",
       status: "blocked",
     });

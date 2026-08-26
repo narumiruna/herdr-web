@@ -160,6 +160,7 @@ function mapAgent(
   readErrors: Record<string, string>,
   layouts: LiveLayout[],
   kind: Agent["kind"],
+  protocol: number,
   tab: LiveTab | undefined,
 ): Agent {
   const status = statusOf(pane.agent_status);
@@ -175,7 +176,10 @@ function mapAgent(
         ? layout.focused_pane_id
         : pane.pane_id,
     additions: 0,
-    canPrompt: kind === "agent" && Boolean(pane.agent) && status !== "blocked",
+    canPrompt:
+      kind === "agent" &&
+      Boolean(pane.agent) &&
+      (status !== "blocked" || protocol < 20),
     contextPercent:
       Number.parseInt(pane.tokens?.context_percent ?? "0", 10) || 0,
     currentStep: currentStep(pane, status),
@@ -261,6 +265,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
       readErrors,
       snapshot.layouts,
       "agent",
+      snapshot.protocol,
       snapshot.tabs.find(({ tab_id: tabId }) => tabId === pane.tab_id),
     ),
   );
@@ -284,6 +289,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
               readErrors,
               snapshot.layouts,
               "terminal",
+              snapshot.protocol,
               tab,
             ),
           ]

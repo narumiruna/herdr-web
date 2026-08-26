@@ -437,6 +437,50 @@ branch refs/heads/narumi/feat/tree
     );
   });
 
+  test("starts a fresh readiness window after a slow Agent launch", async () => {
+    let now = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const request = vi.fn(async (method: string) => {
+      if (method === "tab.create") {
+        return {
+          root_pane: { pane_id: "w5:pslow" },
+          tab: { tab_id: "w5:tslow" },
+          type: "tab_created",
+        };
+      }
+      if (method === "agent.start") {
+        now = 60_001;
+        return { type: "agent_started" };
+      }
+      if (method === "agent.get") {
+        return {
+          agent: { agent: "pi", interactive_ready: true },
+          type: "agent_info",
+        };
+      }
+      throw new Error(`Unexpected method ${method}`);
+    });
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+
+    try {
+      await expect(
+        service.createSession({
+          command: "pi",
+          label: "slow-agent",
+          runtime: "Pi",
+          workspaceId: "w5",
+        }),
+      ).resolves.toMatchObject({
+        agent: { agent: "pi", interactive_ready: true },
+      });
+      expect(request).toHaveBeenCalledWith("agent.get", {
+        target: "w5:pslow",
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   test("launches Qwen Code through Herdr's ready Agent workflow", async () => {
     const request = vi
       .fn()
@@ -489,6 +533,7 @@ branch refs/heads/narumi/feat/tree
           action_id: "example.board.refresh",
           context: { invocation_source: "herdr-web" },
         },
+        { timeoutMs: 300_000 },
       ],
       ["integration.install", { target: "qwen" }],
     ]);
