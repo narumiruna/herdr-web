@@ -240,6 +240,11 @@ export function App({
   const missionControlWasOpen = useRef(false);
   const workflowsWereOpen = useRef(false);
   const viewerSharesWereOpen = useRef(false);
+  const backgroundPushActive = useRef(false);
+  const isBackgroundPushActive = useCallback(
+    () => backgroundPushActive.current,
+    [],
+  );
   const openAgentFromSupervision = useCallback(
     (agentId: string, paneId: string) => {
       runtime.dispatch({ type: "agent.selected", agentId });
@@ -252,6 +257,7 @@ export function App({
     [runtime],
   );
   const attention = useAttentionCenter({
+    isBackgroundPushActive,
     onOpenAgent: openAgentFromSupervision,
     state,
   });
@@ -268,6 +274,7 @@ export function App({
     remove: runtime.removePushSubscription,
     save: runtime.savePushSubscription,
   });
+  backgroundPushActive.current = backgroundPush.active;
   const workspace =
     state.workspaces.find(({ id }) => id === state.selectedWorkspaceId) ??
     state.workspaces[0];

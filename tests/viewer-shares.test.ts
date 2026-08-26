@@ -97,7 +97,7 @@ async function startShareApi(store: ViewerShareStore) {
     closePane: vi.fn(),
     createSession: vi.fn(),
     createWorkspace: vi.fn(),
-    getState: vi.fn().mockResolvedValue(state),
+    getState: vi.fn().mockImplementation(async () => structuredClone(state)),
     promptAgent: vi.fn(),
     setSplitRatio: vi.fn(),
     splitPane: vi.fn(),
@@ -117,7 +117,12 @@ async function startShareApi(store: ViewerShareStore) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Missing port");
-  return { base: `http://127.0.0.1:${address.port}`, service, tickets };
+  return {
+    base: `http://127.0.0.1:${address.port}`,
+    service,
+    sourceState: state,
+    tickets,
+  };
 }
 
 describe("scoped viewer shares", () => {
@@ -175,7 +180,7 @@ describe("scoped viewer shares", () => {
     directories.push(directory);
     const store = new ViewerShareStore(join(directory, "shares.json"));
     await store.load();
-    const { base, service, tickets } = await startShareApi(store);
+    const { base, service, sourceState, tickets } = await startShareApi(store);
     const controllerHeaders = {
       authorization: "Bearer controller-secret",
       "content-type": "application/json",
@@ -183,7 +188,7 @@ describe("scoped viewer shares", () => {
     const createdResponse = await fetch(`${base}/api/herdr/viewer-shares`, {
       body: JSON.stringify({
         expiresInMinutes: 15,
-        scope: { agentId: "p1", paneId: "p1", workspaceId: "w1" },
+        scope: { agentId: "p1", workspaceId: "w1" },
       }),
       headers: controllerHeaders,
       method: "POST",
@@ -210,6 +215,16 @@ describe("scoped viewer shares", () => {
 
     service.subscribeEvents = vi.fn(async (_signal, onEvent, onReady) => {
       onReady?.();
+      const createdPane = {
+        ...sourceState.snapshot.panes[0],
+        pane_id: "p1c",
+      };
+      sourceState.snapshot.panes.push(createdPane);
+      sourceState.snapshot.layouts[0]?.panes.push({
+        focused: false,
+        pane_id: "p1c",
+      });
+      onEvent({ data: { pane_id: "p1c" }, event: "pane_created" });
       onEvent({
         data: { pane_id: "p2", workspace_id: "w2" },
         event: "pane_updated",
@@ -225,7 +240,7 @@ describe("scoped viewer shares", () => {
       headers: shareHeaders,
     });
     const eventText = await events.text();
-    expect(eventText.match(/scope_updated/g)).toHaveLength(2);
+    expect(eventText.match(/scope_updated/g)).toHaveLength(3);
     expect(eventText).not.toContain("p2");
     expect(eventText).not.toContain("w2");
 

@@ -9,7 +9,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import { ViewerShareDialog } from "../src/components/ViewerShareDialog";
+import { WorkflowTemplatesDialog } from "../src/components/WorkflowTemplatesDialog";
 import { createDemoState } from "../src/state";
+import type { WorkflowTemplate } from "../src/workflow-templates";
 
 function renderApp() {
   const user = userEvent.setup();
@@ -575,6 +577,48 @@ describe("herdr-web terminal-first workbench", () => {
         name: "Workflow launch results",
       }),
     ).toHaveTextContent("agent-1Started");
+  });
+
+  test("deletes the persisted workflow instead of an unsaved storage edit", async () => {
+    const workspace = createDemoState().workspaces[0];
+    if (!workspace) throw new Error("Missing demo workspace");
+    const projectTemplate: WorkflowTemplate = {
+      id: "review-pr",
+      name: "Review PR",
+      projectKey: workspace.path,
+      scope: "project",
+      steps: [
+        {
+          cwd: "",
+          id: "review",
+          label: "review",
+          order: 0,
+          prompt: "",
+          runtime: "Pi",
+          waitForPrevious: false,
+        },
+      ],
+      version: 1,
+    };
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <WorkflowTemplatesDialog
+        canLaunch
+        open
+        templates={[projectTemplate]}
+        workspace={workspace}
+        onDelete={onDelete}
+        onLaunch={vi.fn().mockResolvedValue([])}
+        onOpenChange={vi.fn()}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText("Storage"), "browser");
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(onDelete).toHaveBeenCalledWith(projectTemplate);
   });
 
   test("creates pane-only viewer shares for standalone Terminals", async () => {

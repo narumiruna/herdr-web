@@ -141,6 +141,27 @@ branch refs/heads/narumi/feat/tree
     });
   });
 
+  test("returns a lightweight snapshot without reading terminal previews", async () => {
+    const request = vi.fn().mockResolvedValueOnce({
+      snapshot: {
+        agents: [{ agent_status: "working", pane_id: "w5:p1" }],
+        panes: [{ pane_id: "w5:p1" }],
+        protocol: 20,
+      },
+      type: "session_snapshot",
+    });
+    const service = new LiveHerdrService(
+      { request } as unknown as HerdrClient,
+      { herdrClientProtocol: 20, terminalStreamingConfigured: true },
+    );
+
+    await expect(service.getSnapshotState()).resolves.toMatchObject({
+      snapshot: { agents: [{ pane_id: "w5:p1" }] },
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith("session.snapshot", {});
+  });
+
   test("uses Herdr 0.8.2 protocol 20 terminal sessions when the CLI matches", async () => {
     const request = vi.fn().mockResolvedValueOnce({
       snapshot: { panes: [{ pane_id: "w5:p1" }], protocol: 20 },
