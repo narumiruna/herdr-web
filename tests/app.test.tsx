@@ -68,6 +68,14 @@ describe("herdr-web terminal-first workbench", () => {
     ).toBeVisible();
   });
 
+  test("keeps browser attention and the selected context in the document title", () => {
+    renderApp();
+
+    expect(document.title).toMatch(/^\(\d+\) /);
+    expect(document.title).toContain("api-review");
+    expect(document.title).toContain("herdr-web");
+  });
+
   test("shows each workspace session in a keyboard-accessible tab bar", async () => {
     const user = renderApp();
     const tabList = screen.getByRole("tablist", { name: "herdr tabs" });
@@ -95,6 +103,7 @@ describe("herdr-web terminal-first workbench", () => {
     expect(
       screen.getByRole("dialog", { name: "Start a new Agent" }),
     ).toBeVisible();
+    expect(screen.getByRole("radio", { name: /Qwen Code/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(trigger).toHaveFocus());
   });
@@ -489,7 +498,7 @@ describe("herdr-web terminal-first workbench", () => {
 
     await user.click(screen.getByRole("button", { name: "New agent" }));
     expect(screen.getByLabelText("Agent name")).toHaveFocus();
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    expect(screen.getAllByRole("radio")).toHaveLength(5);
     await user.type(screen.getByLabelText("Agent name"), "security-audit");
     await user.click(screen.getByRole("radio", { name: /Codex/i }));
     expect(

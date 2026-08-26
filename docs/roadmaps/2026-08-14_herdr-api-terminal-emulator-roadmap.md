@@ -15,13 +15,14 @@ herdr-web uses the Herdr API as its control plane and a terminal emulator as its
 
 ## Current State
 
-- herdr-web targets Herdr 0.8.0 protocol 19 through an authenticated Node bridge.
+- herdr-web supports Herdr 0.8.0 protocol 19 through Herdr 0.8.2 protocol 20 using an authenticated Node bridge and explicit CLI/server protocol compatibility checks.
 - Herdr 0.8 provides `terminal session control` and `observe` streams with canonical full frames, ordered deltas, input, resize, scroll, release, takeover, and controller-conflict behavior.
 - The browser now renders supported panes through xterm.js and bridges each visible terminal to one Herdr terminal-session process over a same-origin WebSocket.
 - Unsupported or unconfigured terminal sessions retain the bounded `pane.read` DOM renderer and Agent composer as an explicit compatibility fallback.
 - Structural Herdr subscriptions replace continuous full-state polling when available, with a 30-second consistency refresh and temporary polling fallback after stream failure.
 - Optional viewer tokens receive snapshots, structural events, and enforced observation sessions but cannot mutate panes, Agents, uploads, settings, or control ownership.
-- Local and Docker workflows support terminal sessions, with Docker using a separately authenticated host-side process proxy.
+- Local, native Windows, and Docker workflows support terminal sessions, with Windows discovering Herdr's named pipe through JSON status metadata and Docker using a separately authenticated host-side process proxy.
+- The controller-only runtime center manages Herdr plugins, declared actions, recent plugin logs, and allowlisted official Agent integration installs or removals without editing Herdr-owned files.
 - Herdr exposes `server.reload_config` but no typed configuration read or revision-checked atomic patch API.
 - Existing in-memory drafts and session-stored access tokens required no persistent-data migration.
 
@@ -82,7 +83,7 @@ herdr-web uses the Herdr API as its control plane and a terminal emulator as its
 ### Phase 4: Expand the Herdr-native control plane
 
 - [x] Structural Herdr events and pane-scoped Agent-status subscriptions update the control plane without remounting terminals or depending on continuous 1.5-second polling. Evidence: `LiveHerdrService.subscribeEvents` and live `tab_created` verification.
-- [x] Structured prompt, image, split, close, Agent launch, and control-handoff actions expose pending, rejected, unknown, cancellation, and recovery states appropriate to each mutation.
+- [x] Structured prompt, image, split, close, Agent launch, plugin, integration, and control-handoff actions expose pending, rejected, unknown, cancellation, confirmation, and recovery states appropriate to each mutation.
 - [ ] Herdr exposes typed configuration reads, validation, preview, revision-checked atomic patches, and actionable errors while preserving unknown fields and the previous valid configuration on failure.
 - [ ] herdr-web presents only web-relevant Herdr settings first, with meaningful defaults and concrete change previews rather than directly reading or rewriting `config.toml`.
 - [x] Independent viewer and controller tokens constrain terminal input, image upload, destructive pane actions, Agent launch, and future settings mutations. Evidence: `tests/herdr-http.test.ts` and read-only terminal-session tests.
@@ -161,7 +162,7 @@ herdr-web uses the Herdr API as its control plane and a terminal emulator as its
 ## Decisions and Changes
 
 - herdr-web remains a Herdr-native workbench rather than becoming a branded generic web terminal.
-- Herdr 0.8's terminal-session stream satisfies the initial synchronization and control contract, so xterm.js is now the default for configured protocol-19 panes.
+- Herdr 0.8's terminal-session stream satisfies the initial synchronization and control contract, so xterm.js is now the default for compatible protocol 19 and 20 panes.
 - The Herdr API is the control plane, while the terminal attachment stream is the data plane.
 - The fixed Agent composer is not part of the long-term primary terminal surface.
 - `agent.prompt` remains an optional structured action rather than being removed from the product.

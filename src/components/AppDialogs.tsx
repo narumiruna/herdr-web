@@ -359,6 +359,7 @@ const RUNTIME_COMMAND: Record<RuntimeName, string> = {
   Codex: "codex --full-auto",
   OpenCode: "opencode",
   Pi: "pi",
+  "Qwen Code": "qwen",
 };
 
 export function NewSessionDialog({

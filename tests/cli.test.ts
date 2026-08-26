@@ -8,14 +8,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, delimiter, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const projectRoot = process.cwd();
 const cliPath = resolve(projectRoot, "scripts/herdr-web.mjs");
 
 interface Invocation {
-  command: "herdr" | "just";
+  command: "herdr" | "npm";
   args: string[];
   cwd: string;
 }
@@ -40,10 +40,10 @@ if (command === "herdr" && args[0] === "api" && args[1] === "snapshot") {
   process.stdout.write(process.env.HERDR_SNAPSHOT ?? "{}");
   process.exit(Number(process.env.HERDR_SNAPSHOT_EXIT ?? "0"));
 }
-process.exit(Number(process.env[command === "herdr" ? "HERDR_ACTION_EXIT" : "JUST_EXIT"] ?? "0"));
+process.exit(Number(process.env[command === "herdr" ? "HERDR_ACTION_EXIT" : "NPM_EXIT"] ?? "0"));
 `;
 
-  for (const command of ["herdr", "just"]) {
+  for (const command of ["herdr", "npm"]) {
     const commandPath = resolve(binDirectory, command);
     await writeFile(commandPath, commandSource);
     await chmod(commandPath, 0o755);
@@ -69,7 +69,7 @@ async function runCli(
       CALL_LOG: logPath,
       HERDR_SNAPSHOT: JSON.stringify(snapshot),
       NO_COLOR: "1",
-      PATH: `${binDirectory}:${process.env.PATH}`,
+      PATH: `${binDirectory}${delimiter}${process.env.PATH}`,
       ...env,
     },
   });
@@ -111,7 +111,7 @@ describe("herdr-web CLI", () => {
         ],
         cwd: result.root,
       },
-      { command: "just", args: ["run"], cwd: projectRoot },
+      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
     ]);
   });
 
@@ -143,7 +143,7 @@ describe("herdr-web CLI", () => {
 
     expect(result.status).toBe(0);
     expect(result.invocations).toEqual([
-      { command: "just", args: ["run"], cwd: projectRoot },
+      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
     ]);
   });
 
@@ -166,17 +166,17 @@ describe("herdr-web CLI", () => {
         ],
         cwd: result.root,
       },
-      { command: "just", args: ["run"], cwd: projectRoot },
+      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
     ]);
   });
 
   it("reports bare startup failures without invoking Herdr", async () => {
-    const result = await runCli([], { env: { JUST_EXIT: "9" } });
+    const result = await runCli([], { env: { NPM_EXIT: "9" } });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("just run exited with status 9");
+    expect(result.stderr).toContain("development server exited with status 9");
     expect(result.invocations).toEqual([
-      { command: "just", args: ["run"], cwd: projectRoot },
+      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
     ]);
   });
 

@@ -17,7 +17,9 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - Remote image paste, drag/drop, and file selection with host-readable Agent attachment paths.
 - Herdr-aligned **Split right** and **Split down** pane actions, mouse and keyboard split resizing, and confirmed pane closing.
 - A mouse and keyboard resizable desktop navigation rail with a browser-saved width.
-- New Claude Code, Codex, Pi, and OpenCode Agents with visible, fixed approved commands.
+- New Claude Code, Codex, OpenCode, Pi, and Qwen Code Agents with visible, fixed approved commands.
+- A controller-only Herdr runtime center for plugin state, declared actions, recent logs, and official integration install or uninstall operations.
+- Browser tab titles that surface global Needs input counts and the selected Space and Agent.
 - A keyboard-navigable `⌘K` or `Ctrl+K` palette for jumping between workspaces, Agents, and Terminals.
 - On-demand session details without synthetic activity or unsupported runtime metadata.
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
@@ -40,7 +42,7 @@ The front end intentionally uses every requested Radix family.
 
 - Node.js 22 or newer.
 - Herdr 0.8 or newer installed and running with `herdr terminal session control` and `observe` support.
-- `just` for the recommended startup commands.
+- `just` for the optional convenience and Docker commands.
 - Docker when using the container workflow.
 
 Check the local herdr server before starting the web app:
@@ -76,13 +78,15 @@ herdr-web .
 herdr-web /path/to/project
 ```
 
-With a directory, the command resolves it, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the same authenticated web workflow as `just run`.
+With a directory, the command resolves it, focuses an existing Herdr workspace that already contains it or creates a new workspace, and then starts the authenticated web workflow directly through Node.js.
 
 Without a directory, the command starts that web workflow without focusing or creating a workspace.
 
 Run `herdr-web --help` for usage and press `Ctrl+C` to stop the development web processes.
 
-The command requires `just`, while directory-opening mode also invokes `herdr`; a linked development command additionally depends on this checkout and its installed npm dependencies.
+The command does not require `just`.
+Directory-opening mode also invokes `herdr`, while a linked development command depends on this checkout and its installed npm dependencies.
+On Windows, the bridge discovers Herdr's named pipe from `herdr status --json` unless `HERDR_SOCKET_PATH` is set explicitly.
 
 ## Run locally
 
@@ -131,7 +135,7 @@ Uploads from earlier versions remain in their original project directories and a
 
 Herdr continues to own `$HOME/.config/herdr/`, its socket, API, and `HERDR_*` variables; herdr-web does not change them.
 
-Without `just`, set a token explicitly before running the development processes:
+Without `just`, set a token explicitly before running the development processes manually:
 
 ```sh
 HERDR_WEB_TOKEN=my-long-random-token npm run dev
@@ -150,7 +154,9 @@ Use **Grouped** to keep Agents in Space and tab order, or **Priority** to surfac
 Use **New** below Spaces to preview and create a persistent Herdr workspace for a host directory.
 
 Use **Menu → Settings** to choose Editorial Light, Editorial Dark, Classic Light, or Classic Dark and adjust terminal text size.
-Use **Menu** for the workbench keybinding reference and an explicit Herdr reload.
+Use **Menu** for the workbench keybinding reference, the controller-only **Herdr runtime** center, and an explicit Herdr reload.
+The runtime center lists installed plugins, enables or disables them, confirms declared plugin actions before execution, shows recent command logs, and installs or uninstalls allowlisted official Agent integrations through Herdr.
+Herdr does not expose typed integration status through the socket API, so **Install / repair** is intentionally idempotent and the interface does not fabricate installed state.
 
 Returning to a Space restores its last selected tab, while choosing a Needs input or Agents item opens that exact Agent.
 
@@ -182,7 +188,7 @@ Standalone Terminals support the same interactive session when Herdr terminal st
 
 If terminal streaming is unavailable, herdr-web keeps the bounded snapshot view and Agent composer as an explicit compatibility fallback.
 
-Use **New agent** to review and launch one of the four approved runtime presets.
+Use **New agent** to review and launch one of the five approved runtime presets, including Qwen Code.
 
 Agent launch continues as a visible background action so closing its setup dialog never pretends to cancel server work.
 
@@ -292,9 +298,9 @@ Its `/healthz` endpoint checks the web process, while authenticated `/api/herdr/
 
 ## Security
 
-The herdr-web bridge can submit prompts and control terminal panes, so it fails closed when `HERDR_WEB_TOKEN` is empty.
+The herdr-web bridge can submit prompts, control terminal panes, manage plugins, run plugin actions, and update official integrations, so it fails closed when `HERDR_WEB_TOKEN` is empty.
 
-Set a different `HERDR_WEB_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, or takeover permissions.
+Set a different `HERDR_WEB_VIEW_TOKEN` to grant snapshot, event-stream, and read-only terminal observation without prompt, upload, pane, session, takeover, plugin, or integration permissions.
 
 The browser exchanges its bearer token for a random terminal ticket that expires after 30 seconds and can be consumed only once.
 
@@ -329,7 +335,8 @@ npx playwright install chromium
 
 GitHub Actions runs `.github/workflows/ci.yml` for pull requests, pushes to `main`, and manual dispatches.
 
-CI runs formatting and lint checks, all unit and integration tests, both production builds, and Chromium browser tests.
+CI runs formatting and lint checks, all unit and integration tests, both production builds, and Chromium browser tests on Linux.
+A Windows job also builds the application and verifies native npm startup, named-pipe metadata, and Windows path contracts.
 
 Add a repository Actions secret named `PAT_TOKEN` before running release automation.
 
@@ -367,7 +374,7 @@ If a bump reports that its version commit succeeded but tag creation failed, cre
 
 `server/http-app.ts` validates controller or viewer authentication, request sizes, resource IDs, and action payloads before invoking Herdr.
 
-`src/live-state.ts` maps protocol-19 snapshots into the workbench model in `src/state.ts`, grouping split panes under their detected Agent while retaining shell-only tabs as standalone Terminals.
+`src/live-state.ts` maps Herdr protocol 19 and 20 snapshots into the workbench model in `src/state.ts`, grouping split panes under their detected Agent while retaining shell-only tabs as standalone Terminals.
 
 `src/use-herdr-runtime.ts` consumes the structural event stream, separates rejected mutations from unknown outcomes, refreshes after accepted actions, and preserves the last valid snapshot during transient failures.
 
@@ -375,8 +382,9 @@ If a bump reports that its version commit succeeded but tag creation failed, cre
 
 The deterministic demo state remains available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests.
 
-herdr-web does not edit Herdr configuration files directly.
+herdr-web does not edit Herdr configuration files, plugin registries, or Agent integration files directly.
 
+Plugin and integration mutations use Herdr's public API.
 Use Herdr's own configuration commands until it exposes typed configuration reads and atomic patches through its public API.
 
 The interface does not fabricate lifecycle history or settings that Herdr does not expose.

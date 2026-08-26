@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineCommand, renderUsage, runMain } from "citty";
+import { startWorkbench } from "./start-workbench.mjs";
 
 function fail(message) {
   process.stderr.write(`herdr-web: ${message}\n`);
@@ -78,27 +79,13 @@ async function rejectUnsupportedInvocation(rawArgs, command) {
 async function startWeb() {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   try {
-    await new Promise((resolveChild, rejectChild) => {
-      const child = spawn("just", ["run"], {
-        cwd: projectRoot,
-        env: process.env,
-        stdio: "inherit",
-      });
-      child.once("error", rejectChild);
-      child.once("exit", (code, signal) => {
-        if (signal) {
-          rejectChild(new Error(`just run stopped by ${signal}`));
-          return;
-        }
-        if (code !== 0) {
-          rejectChild(new Error(`just run exited with status ${code ?? 1}`));
-          return;
-        }
-        resolveChild();
-      });
-    });
+    await startWorkbench({ projectRoot });
   } catch (error) {
-    fail(error instanceof Error ? error.message : "Could not start just run");
+    fail(
+      error instanceof Error
+        ? error.message
+        : "Could not start the development server",
+    );
   }
 }
 

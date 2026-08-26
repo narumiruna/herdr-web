@@ -7,6 +7,10 @@ interface HerdrClientOptions {
   timeoutMs?: number;
 }
 
+interface HerdrRequestOptions {
+  timeoutMs?: number;
+}
+
 export type HerdrEndpoint = string | { host: string; port: number };
 
 interface HerdrErrorBody {
@@ -45,8 +49,13 @@ export class HerdrClient {
     this.timeoutMs = options.timeoutMs ?? 5_000;
   }
 
-  request<T = unknown>(method: string, params: unknown): Promise<T> {
+  request<T = unknown>(
+    method: string,
+    params: unknown,
+    options: HerdrRequestOptions = {},
+  ): Promise<T> {
     const id = `herdr-web:${randomUUID()}`;
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
     return new Promise<T>((resolve, reject) => {
       const socket =
         typeof this.endpoint === "string"
@@ -63,8 +72,8 @@ export class HerdrClient {
         else resolve(result as T);
       };
       const timeout = setTimeout(() => {
-        finish(new Error(`Herdr request timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+        finish(new Error(`Herdr request timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       socket.setEncoding("utf8");
       socket.once("error", (error) => finish(error));

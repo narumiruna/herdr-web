@@ -25,6 +25,7 @@ import { ConnectionScreen } from "./components/ConnectionScreen";
 import { HerdrWebLogo } from "./components/HerdrWebLogo";
 import { IconTooltip } from "./components/IconTooltip";
 import { RadixDialog } from "./components/RadixDialog";
+import { RuntimeManagementDialog } from "./components/RuntimeManagementDialog";
 import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
 import { type AgentSortMode, Sidebar } from "./components/Sidebar";
@@ -51,6 +52,9 @@ import {
 } from "./theme-preferences";
 import { useHerdrRuntime } from "./use-herdr-runtime";
 
+// This composition root intentionally keeps shared workbench selection, draft,
+// dialog-focus restoration, and mutation recovery in one owner; feature-heavy
+// dialog and terminal implementations remain split into dedicated components.
 interface AppProps {
   initialState?: HerdrState;
   live?: boolean;
@@ -141,6 +145,7 @@ export function App({
   const [sessionOpen, setSessionOpen] = useState(false);
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [runtimeOpen, setRuntimeOpen] = useState(false);
   const [keybindingsOpen, setKeybindingsOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () =>
@@ -164,6 +169,7 @@ export function App({
   const sessionReturnFocus = useRef<HTMLElement>(null);
   const newSpaceReturnFocus = useRef<HTMLElement>(null);
   const settingsReturnFocus = useRef<HTMLElement>(null);
+  const runtimeReturnFocus = useRef<HTMLElement>(null);
   const keybindingsReturnFocus = useRef<HTMLElement>(null);
   const detailsReturnFocus = useRef<HTMLElement>(null);
   const commandWasOpen = useRef(false);
@@ -172,6 +178,7 @@ export function App({
   const sessionWasOpen = useRef(false);
   const newSpaceWasOpen = useRef(false);
   const settingsWasOpen = useRef(false);
+  const runtimeWasOpen = useRef(false);
   const keybindingsWereOpen = useRef(false);
   const detailsWereOpen = useRef(false);
   const notifiedAgentState = useRef<Record<string, string>>({});
@@ -201,6 +208,21 @@ export function App({
     },
     { completed: 0, needsInput: 0, unknown: 0, working: 0 },
   );
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    if (runtime.status !== "ready") {
+      document.title = "herdr-web — agent workbench";
+    } else {
+      const context = [agent?.label, workspace?.name]
+        .filter(Boolean)
+        .join(" · ");
+      document.title = `${statusCounts.needsInput ? `(${statusCounts.needsInput}) ` : ""}${context || "Workbench"} — herdr-web`;
+    }
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [agent?.label, runtime.status, statusCounts.needsInput, workspace?.name]);
 
   const updateDraft = useCallback(
     (agentId: string, update: Partial<ComposerDraft>) => {
@@ -265,6 +287,16 @@ export function App({
     }
     settingsWasOpen.current = settingsOpen;
   }, [settingsOpen]);
+
+  useEffect(() => {
+    if (runtimeWasOpen.current && !runtimeOpen) {
+      (runtimeReturnFocus.current?.isConnected
+        ? runtimeReturnFocus.current
+        : mobileNavTrigger.current
+      )?.focus();
+    }
+    runtimeWasOpen.current = runtimeOpen;
+  }, [runtimeOpen]);
 
   useEffect(() => {
     if (keybindingsWereOpen.current && !keybindingsOpen) {
@@ -529,6 +561,12 @@ export function App({
     settingsReturnFocus.current =
       returnFocus ?? (document.activeElement as HTMLElement | null);
     setSettingsOpen(true);
+  };
+  const openRuntimeDialog = (returnFocus?: HTMLElement | null) => {
+    if (runtime.accessRole !== "controller") return;
+    runtimeReturnFocus.current =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
+    setRuntimeOpen(true);
   };
   const openKeybindingsDialog = (returnFocus?: HTMLElement | null) => {
     keybindingsReturnFocus.current =
@@ -838,6 +876,7 @@ export function App({
               onNewSpace={openNewSpaceDialog}
               onOpenSettings={openSettingsDialog}
               onOpenKeybindings={openKeybindingsDialog}
+              onOpenRuntime={openRuntimeDialog}
               onRefresh={runtime.refresh}
             />
           </div>
@@ -1186,6 +1225,14 @@ export function App({
             setTerminalFontSize(preferences.terminalFontSize);
           }}
         />
+        <RuntimeManagementDialog
+          open={runtimeOpen}
+          onOpenChange={setRuntimeOpen}
+          load={runtime.loadRuntimeManagement}
+          onInvokePluginAction={runtime.invokePluginAction}
+          onManageIntegration={runtime.manageIntegration}
+          onSetPluginEnabled={runtime.setPluginEnabled}
+        />
         <KeybindingsDialog
           open={keybindingsOpen}
           onOpenChange={setKeybindingsOpen}
@@ -1207,6 +1254,7 @@ export function App({
             onNewSpace={openNewSpaceDialog}
             onOpenSettings={openSettingsDialog}
             onOpenKeybindings={openKeybindingsDialog}
+            onOpenRuntime={openRuntimeDialog}
             onRefresh={runtime.refresh}
             onDismiss={() => setMobileNavOpen(false)}
           />

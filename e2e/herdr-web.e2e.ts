@@ -272,7 +272,7 @@ test("desktop workbench gives the terminal priority", async ({
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.goto("/");
 
-  await expect(page).toHaveTitle("herdr-web — agent workbench");
+  await expect(page).toHaveTitle("(1) api-review · herdr — herdr-web");
   await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(

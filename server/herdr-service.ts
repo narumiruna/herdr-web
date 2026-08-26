@@ -7,6 +7,7 @@ import {
   writePaneFile,
 } from "./file-upload.js";
 import { HerdrApiError, type HerdrClient } from "./herdr-client.js";
+import { terminalProtocolReason } from "./herdr-status.js";
 import {
   type ImageUploadInput,
   type UploadedImage,
@@ -57,6 +58,7 @@ export interface CreateTerminalInput {
 }
 
 export type AgentLifecycleAction = "archive" | "clear" | "restart" | "stop";
+export type IntegrationAction = "install" | "uninstall";
 
 interface PaneInfoResponse {
   type: "pane_info";
@@ -67,6 +69,7 @@ interface PaneInfoResponse {
 }
 
 interface ServiceOptions {
+  herdrClientProtocol?: number;
   projectsRoot?: string;
   terminalStreamingConfigured?: boolean;
   uploadsRoot?: string;
@@ -115,6 +118,8 @@ const STRUCTURAL_SUBSCRIPTIONS = [
   "layout.updated",
 ].map((type) => ({ type }));
 
+const RUNTIME_MUTATION_TIMEOUT_MS = 300_000;
+
 const RUNTIMES: Record<
   string,
   { args: string[]; command: string; kind: string }
@@ -127,6 +132,7 @@ const RUNTIMES: Record<
   },
   OpenCode: { args: [], command: "opencode", kind: "opencode" },
   Pi: { args: [], command: "pi", kind: "pi" },
+  "Qwen Code": { args: [], command: "qwen", kind: "qwen" },
 };
 
 export function parseGitWorktreeBranches(output: string): Map<string, string> {
@@ -229,13 +235,16 @@ export class LiveHerdrService {
     }
     await enrichSnapshotWorktreeBranches(result.snapshot);
     const protocol = Number(result.snapshot.protocol ?? 0);
+    const protocolReason = terminalProtocolReason(
+      protocol,
+      this.options.herdrClientProtocol,
+    );
     const terminalStreaming =
-      this.options.terminalStreamingConfigured === true && protocol >= 19;
+      this.options.terminalStreamingConfigured === true && !protocolReason;
     const terminalReason = terminalStreaming
       ? ""
-      : protocol < 19
-        ? `Herdr protocol ${protocol || "unknown"} does not provide terminal sessions; Herdr 0.8 or newer is required.`
-        : "This herdr-web bridge is not configured for Herdr terminal sessions.";
+      : protocolReason ||
+        "This herdr-web bridge is not configured for Herdr terminal sessions.";
     const allPaneIds = (result.snapshot.panes ?? [])
       .map(({ pane_id: paneId }) => paneId)
       .filter((paneId): paneId is string => Boolean(paneId));
@@ -389,6 +398,49 @@ export class LiveHerdrService {
     return this.client.request("agent.prompt", { target, text });
   }
 
+  listPlugins(): Promise<unknown> {
+    return this.client.request("plugin.list", {});
+  }
+
+  listPluginActions(): Promise<unknown> {
+    return this.client.request("plugin.action.list", {});
+  }
+
+  listPluginLogs(pluginId?: string): Promise<unknown> {
+    return this.client.request("plugin.log.list", {
+      limit: 50,
+      ...(pluginId ? { plugin_id: pluginId } : {}),
+    });
+  }
+
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<unknown> {
+    return this.client.request(enabled ? "plugin.enable" : "plugin.disable", {
+      plugin_id: pluginId,
+    });
+  }
+
+  invokePluginAction(actionId: string): Promise<unknown> {
+    return this.client.request(
+      "plugin.action.invoke",
+      {
+        action_id: actionId,
+        context: { invocation_source: "herdr-web" },
+      },
+      { timeoutMs: RUNTIME_MUTATION_TIMEOUT_MS },
+    );
+  }
+
+  manageIntegration(
+    target: string,
+    action: IntegrationAction,
+  ): Promise<unknown> {
+    return this.client.request(
+      `integration.${action}`,
+      { target },
+      { timeoutMs: RUNTIME_MUTATION_TIMEOUT_MS },
+    );
+  }
+
   splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown> {
     return this.client.request("pane.split", {
       direction,
@@ -455,17 +507,21 @@ export class LiveHerdrService {
   ): Promise<unknown> {
     const runtime = RUNTIMES[input.runtime];
     if (!runtime) throw new TypeError("Unsupported agent runtime or command");
-    const deadline = Date.now() + 60_000;
+    const startDeadline = Date.now() + 60_000;
     let started: unknown;
-    while (Date.now() < deadline) {
+    while (Date.now() < startDeadline) {
       try {
-        started = await this.client.request("agent.start", {
-          args: runtime.args,
-          kind: runtime.kind,
-          name: input.label,
-          pane_id: paneId,
-          timeout_ms: 60_000,
-        });
+        started = await this.client.request(
+          "agent.start",
+          {
+            args: runtime.args,
+            kind: runtime.kind,
+            name: input.label,
+            pane_id: paneId,
+            timeout_ms: 60_000,
+          },
+          { timeoutMs: 65_000 },
+        );
         break;
       } catch (error) {
         if (
@@ -479,7 +535,8 @@ export class LiveHerdrService {
     }
     if (!started)
       throw new Error("The new terminal did not reach a shell prompt");
-    while (Date.now() < deadline) {
+    const readinessDeadline = Date.now() + 60_000;
+    while (Date.now() < readinessDeadline) {
       const info = await this.client.request<{
         agent?: { agent?: string | null; interactive_ready?: boolean };
       }>("agent.get", { target: paneId });

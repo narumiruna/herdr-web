@@ -6,6 +6,11 @@ interface ApiErrorBody {
   error?: { code?: string; message?: string };
 }
 
+// Cover tab creation, pane-busy retries, a final Agent start request,
+// readiness polling, cleanup, and transport overhead.
+const AGENT_CREATION_TIMEOUT_MS = 205_000;
+const RUNTIME_MUTATION_TIMEOUT_MS = 305_000;
+
 export class HerdrBridgeError extends Error {
   readonly code: string;
   readonly status: number;
@@ -31,6 +36,68 @@ export interface NewLiveTerminal {
 }
 
 export type AgentLifecycleAction = "archive" | "clear" | "restart" | "stop";
+export type IntegrationAction = "install" | "uninstall";
+export type IntegrationTarget =
+  | "antigravity_cli"
+  | "claude"
+  | "codex"
+  | "copilot"
+  | "cursor"
+  | "devin"
+  | "droid"
+  | "grok"
+  | "hermes"
+  | "kilo"
+  | "kimi"
+  | "mastracode"
+  | "omp"
+  | "opencode"
+  | "pi"
+  | "qodercli"
+  | "qwen";
+
+export interface PluginInfo {
+  description?: string | null;
+  enabled: boolean;
+  name: string;
+  plugin_id: string;
+  version: string;
+  warnings?: string[];
+}
+
+export interface PluginActionInfo {
+  action_id: string;
+  description?: string | null;
+  plugin_id: string;
+  title: string;
+}
+
+export interface PluginLogInfo {
+  action_id?: string | null;
+  error?: string | null;
+  exit_code?: number | null;
+  log_id: string;
+  plugin_id: string;
+  started_unix_ms: number;
+  status: string;
+  stderr?: string | null;
+  stdout?: string | null;
+}
+
+export interface PluginListResult {
+  plugins: PluginInfo[];
+  type: "plugin_list";
+}
+
+export interface PluginActionListResult {
+  actions: PluginActionInfo[];
+  type: "plugin_action_list";
+}
+
+export interface PluginLogListResult {
+  logs: PluginLogInfo[];
+  type: "plugin_log_list";
+}
 
 export interface NewLiveWorkspace {
   cwd: string;
@@ -185,6 +252,51 @@ export class HerdrApiClient {
     if (!signal.aborted) throw new Error("Herdr event stream disconnected");
   }
 
+  plugins(): Promise<PluginListResult> {
+    return this.request("/api/herdr/plugins");
+  }
+
+  pluginActions(): Promise<PluginActionListResult> {
+    return this.request("/api/herdr/plugin-actions");
+  }
+
+  pluginLogs(pluginId?: string): Promise<PluginLogListResult> {
+    const query = pluginId ? `?pluginId=${encodeURIComponent(pluginId)}` : "";
+    return this.request(`/api/herdr/plugin-logs${query}`);
+  }
+
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<unknown> {
+    return this.request(`/api/herdr/plugins/${encodeURIComponent(pluginId)}`, {
+      body: JSON.stringify({ enabled }),
+      method: "PATCH",
+    });
+  }
+
+  invokePluginAction(actionId: string): Promise<unknown> {
+    return this.request(
+      `/api/herdr/plugin-actions/${encodeURIComponent(actionId)}/invoke`,
+      {
+        body: "{}",
+        method: "POST",
+        signal: AbortSignal.timeout(RUNTIME_MUTATION_TIMEOUT_MS),
+      },
+    );
+  }
+
+  manageIntegration(
+    target: IntegrationTarget,
+    action: IntegrationAction,
+  ): Promise<unknown> {
+    return this.request(
+      `/api/herdr/integrations/${encodeURIComponent(target)}`,
+      {
+        body: JSON.stringify({ action }),
+        method: "POST",
+        signal: AbortSignal.timeout(RUNTIME_MUTATION_TIMEOUT_MS),
+      },
+    );
+  }
+
   promptAgent(paneId: string, message: string): Promise<unknown> {
     return this.request(
       `/api/herdr/agents/${encodeURIComponent(paneId)}/prompt`,
@@ -261,6 +373,7 @@ export class HerdrApiClient {
     return this.request("/api/herdr/sessions", {
       body: JSON.stringify(input),
       method: "POST",
+      signal: AbortSignal.timeout(AGENT_CREATION_TIMEOUT_MS),
     });
   }
 

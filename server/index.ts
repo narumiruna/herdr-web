@@ -3,6 +3,11 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { HerdrClient } from "./herdr-client.js";
 import { LiveHerdrService } from "./herdr-service.js";
+import {
+  parseHerdrProtocol,
+  readHerdrStatus,
+  statusSocketPath,
+} from "./herdr-status.js";
 import { createHerdrHttpHandler } from "./http-app.js";
 import { createStaticHandler } from "./static-files.js";
 import {
@@ -25,17 +30,33 @@ const port = Number.parseInt(
   process.env.BRIDGE_PORT ?? process.env.PORT ?? "8787",
   10,
 );
-const socketPath =
-  process.env.HERDR_SOCKET_PATH ??
-  join(homedir(), ".config", "herdr", "herdr.sock");
 const tcpPort = Number.parseInt(process.env.HERDR_TCP_PORT ?? "", 10);
-const endpoint =
-  Number.isInteger(tcpPort) && tcpPort > 0 && tcpPort <= 65_535
-    ? {
-        host: process.env.HERDR_TCP_HOST ?? "host.docker.internal",
-        port: tcpPort,
-      }
-    : socketPath;
+const usesSocketProxy =
+  Number.isInteger(tcpPort) && tcpPort > 0 && tcpPort <= 65_535;
+const herdrCommand =
+  process.env.HERDR_BINARY ?? process.env.HERDR_BIN_PATH ?? "herdr";
+const herdrStatus = usesSocketProxy
+  ? undefined
+  : await readHerdrStatus(herdrCommand).catch(() => undefined);
+const terminalProxyProtocol = parseHerdrProtocol(
+  process.env.HERDR_TERMINAL_CLIENT_PROTOCOL,
+);
+const discoveredSocket =
+  process.env.HERDR_SOCKET_PATH?.trim() || statusSocketPath(herdrStatus);
+if (!usesSocketProxy && process.platform === "win32" && !discoveredSocket) {
+  console.error(
+    "Cannot discover the Herdr named pipe; ensure `herdr status --json` works or set HERDR_SOCKET_PATH.",
+  );
+  process.exit(1);
+}
+const socketPath =
+  discoveredSocket || join(homedir(), ".config", "herdr", "herdr.sock");
+const endpoint = usesSocketProxy
+  ? {
+      host: process.env.HERDR_TCP_HOST ?? "host.docker.internal",
+      port: tcpPort,
+    }
+  : socketPath;
 const staticRoot = resolve(process.env.HERDR_WEB_STATIC_ROOT ?? "dist");
 const configuredDataHome = process.env.HERDR_WEB_HOME?.trim();
 if (configuredDataHome && !isAbsolute(configuredDataHome)) {
@@ -55,11 +76,12 @@ const terminalBackend =
         port: terminalProxyPort,
         token: process.env.HERDR_TERMINAL_PROXY_TOKEN?.trim() ?? "",
       })
-    : new LocalTerminalBackend({
-        command: process.env.HERDR_BINARY ?? "herdr",
-      });
+    : new LocalTerminalBackend({ command: herdrCommand });
 const client = new HerdrClient(endpoint);
 const service = new LiveHerdrService(client, {
+  herdrClientProtocol: usesSocketProxy
+    ? terminalProxyProtocol
+    : herdrStatus?.client?.protocol,
   projectsRoot,
   terminalStreamingConfigured: terminalBackend.configured,
   uploadsRoot: join(dataHome, "uploads"),

@@ -55,9 +55,25 @@ function fakeService(): HerdrService {
       workspace: { workspace_id: "w6" },
     }),
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
+    invokePluginAction: vi
+      .fn()
+      .mockResolvedValue({ type: "plugin_action_invoked" }),
+    listPluginActions: vi
+      .fn()
+      .mockResolvedValue({ actions: [], type: "plugin_action_list" }),
+    listPluginLogs: vi
+      .fn()
+      .mockResolvedValue({ logs: [], type: "plugin_log_list" }),
+    listPlugins: vi
+      .fn()
+      .mockResolvedValue({ plugins: [], type: "plugin_list" }),
+    manageIntegration: vi
+      .fn()
+      .mockResolvedValue({ type: "integration_installed" }),
     moveTab: vi.fn().mockResolvedValue({ type: "tab_moved" }),
     promptAgent: vi.fn().mockResolvedValue({ type: "agent_prompted" }),
     renameTab: vi.fn().mockResolvedValue({ type: "tab_renamed" }),
+    setPluginEnabled: vi.fn().mockResolvedValue({ type: "plugin_disabled" }),
     setSplitRatio: vi.fn().mockResolvedValue({
       type: "layout_split_ratio_set",
     }),
@@ -118,6 +134,9 @@ describe("herdr HTTP bridge", () => {
     );
     expect(resize.status).toBe(403);
     expect(service.setSplitRatio).not.toHaveBeenCalled();
+    const plugins = await fetch(`${baseUrl}/api/herdr/plugins`, { headers });
+    expect(plugins.status).toBe(403);
+    expect(service.listPlugins).not.toHaveBeenCalled();
     const control = await fetch(
       `${baseUrl}/api/herdr/panes/w5:p1/terminal-ticket`,
       {
@@ -136,6 +155,67 @@ describe("herdr HTTP bridge", () => {
       },
     );
     expect(observe.status).toBe(201);
+  });
+
+  test("routes controller-only plugin and integration management", async () => {
+    const service = fakeService();
+    const baseUrl = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+
+    expect(
+      await fetch(`${baseUrl}/api/herdr/plugins`, { headers }),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(`${baseUrl}/api/herdr/plugin-actions`, { headers }),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(`${baseUrl}/api/herdr/plugin-logs?pluginId=example.board`, {
+        headers,
+      }),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(`${baseUrl}/api/herdr/plugins/example.board`, {
+        body: JSON.stringify({ enabled: false }),
+        headers,
+        method: "PATCH",
+      }),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(
+        `${baseUrl}/api/herdr/plugin-actions/example.board.refresh/invoke`,
+        { body: "{}", headers, method: "POST" },
+      ),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(`${baseUrl}/api/herdr/integrations/qwen`, {
+        body: JSON.stringify({ action: "install" }),
+        headers,
+        method: "POST",
+      }),
+    ).toHaveProperty("status", 200);
+
+    expect(service.listPluginLogs).toHaveBeenCalledWith("example.board");
+    expect(service.setPluginEnabled).toHaveBeenCalledWith(
+      "example.board",
+      false,
+    );
+    expect(service.invokePluginAction).toHaveBeenCalledWith(
+      "example.board.refresh",
+    );
+    expect(service.manageIntegration).toHaveBeenCalledWith("qwen", "install");
+
+    const unsupported = await fetch(
+      `${baseUrl}/api/herdr/integrations/not-real`,
+      {
+        body: JSON.stringify({ action: "install" }),
+        headers,
+        method: "POST",
+      },
+    );
+    expect(unsupported.status).toBe(400);
   });
 
   test("streams authenticated structural Herdr events as NDJSON", async () => {

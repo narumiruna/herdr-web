@@ -1,8 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  HerdrApiClient,
   normalizeWorkspacePath,
   workspaceLabelFromPath,
 } from "../src/herdr-api";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("workspace paths", () => {
   test("preserves separators for the Herdr host to interpret", () => {
@@ -25,5 +31,81 @@ describe("workspace paths", () => {
     expect(workspaceLabelFromPath("\\\\server\\share\\project\\")).toBe(
       "project",
     );
+  });
+});
+
+describe("Herdr API requests", () => {
+  test("allows Agent creation to cover startup and readiness", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ type: "agent_started" }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HerdrApiClient("secret");
+
+    await api.createSession({
+      command: "pi",
+      label: "slow-agent",
+      runtime: "Pi",
+      workspaceId: "w1",
+    });
+
+    expect(timeout).toHaveBeenCalledWith(205_000);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/herdr/sessions",
+      expect.objectContaining({
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  test("uses authenticated plugin and integration routes", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ type: "ok" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HerdrApiClient("secret");
+
+    await api.setPluginEnabled("example.board", true);
+    await api.invokePluginAction("example.board.refresh");
+    await api.manageIntegration("qwen", "install");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/herdr/plugins/example.board",
+      expect.objectContaining({
+        body: JSON.stringify({ enabled: true }),
+        method: "PATCH",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/herdr/plugin-actions/example.board.refresh/invoke",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/herdr/integrations/qwen",
+      expect.objectContaining({
+        body: JSON.stringify({ action: "install" }),
+        method: "POST",
+      }),
+    );
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.headers).toMatchObject({ authorization: "Bearer secret" });
+    }
+    expect(timeout).toHaveBeenCalledTimes(3);
+    expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 305_000);
+    expect(timeout).toHaveBeenNthCalledWith(3, 305_000);
   });
 });

@@ -6,7 +6,10 @@ import { createServer } from "node:net";
 
 const port = Number.parseInt(process.argv[2] ?? "", 10);
 const token = process.env.HERDR_TERMINAL_PROXY_TOKEN?.trim() ?? "";
-const command = process.env.HERDR_BINARY?.trim() || "herdr";
+const command =
+  process.env.HERDR_BINARY?.trim() ||
+  process.env.HERDR_BIN_PATH?.trim() ||
+  "herdr";
 const MAX_CONNECTIONS = 16;
 const MAX_LINE_BYTES = 70 * 1024;
 const MAX_DIMENSION = 1_000;

@@ -87,7 +87,51 @@ describe("live herdr-web app", () => {
       screen.getByRole("heading", { name: "Enter the access token" }),
     ).toBeVisible();
     expect(screen.getByLabelText("herdr-web access token")).toBeVisible();
+    expect(document.title).toBe("herdr-web — agent workbench");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("removes session context from the title after authentication expires", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    let stateRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/events")) {
+          return new Promise<Response>(() => undefined);
+        }
+        if (url.endsWith("/state")) {
+          stateRequests += 1;
+          if (stateRequests === 1) {
+            return new Response(JSON.stringify(payload), {
+              headers: { "content-type": "application/json" },
+              status: 200,
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              error: { code: "unauthorized", message: "Token expired" },
+            }),
+            { headers: { "content-type": "application/json" }, status: 401 },
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    expect(document.title).toContain("π - live-test · live-test");
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Reload Herdr" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Enter the access token" }),
+    ).toBeVisible();
+    expect(document.title).toBe("herdr-web — agent workbench");
   });
 
   test("keeps viewer-token sessions read-only", async () => {
@@ -614,14 +658,14 @@ describe("live herdr-web app", () => {
     ).toHaveLength(1);
   });
 
-  test("keeps a failed prompt draft and offers inline retry", async () => {
+  test("explains a raced agent_blocked rejection and keeps the draft", async () => {
     window.history.replaceState({}, "", "/?token=test-token");
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/prompt")) {
         return new Response(
           JSON.stringify({
-            error: { code: "agent_busy", message: "Agent is busy" },
+            error: { code: "agent_blocked", message: "Agent is blocked" },
           }),
           {
             headers: { "content-type": "application/json" },
@@ -647,7 +691,7 @@ describe("live herdr-web app", () => {
 
     expect(
       await screen.findByRole("alert", { name: "Message failed" }),
-    ).toHaveTextContent("Agent is busy");
+    ).toHaveTextContent("Respond in the terminal");
     expect(message).toHaveValue("keep this draft");
     expect(screen.getByRole("button", { name: "Retry message" })).toBeVisible();
   });

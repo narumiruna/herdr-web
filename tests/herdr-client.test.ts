@@ -12,7 +12,9 @@ afterEach(async () => {
 });
 
 async function fakeHerdr(
-  respond: (request: Record<string, unknown>) => Record<string, unknown>,
+  respond: (
+    request: Record<string, unknown>,
+  ) => Record<string, unknown> | undefined,
   afterRespond?: (socket: Socket, request: Record<string, unknown>) => void,
 ): Promise<{ socketPath: string; requests: Array<Record<string, unknown>> }> {
   const directory = await mkdtemp(join(tmpdir(), "herdr-web-test-"));
@@ -31,7 +33,8 @@ async function fakeHerdr(
         buffer = buffer.slice(newline + 1);
         const request = JSON.parse(line) as Record<string, unknown>;
         requests.push(request);
-        socket.write(`${JSON.stringify(respond(request))}\n`);
+        const response = respond(request);
+        if (response) socket.write(`${JSON.stringify(response)}\n`);
         afterRespond?.(socket, request);
         newline = buffer.indexOf("\n");
       }
@@ -64,6 +67,26 @@ describe("HerdrClient", () => {
     });
     expect(fake.requests).toHaveLength(1);
     expect(fake.requests[0]).toMatchObject({ method: "ping", params: {} });
+  });
+
+  test("supports a longer timeout for one slow request", async () => {
+    const fake = await fakeHerdr(
+      () => undefined,
+      (socket, request) => {
+        setTimeout(
+          () =>
+            socket.write(
+              `${JSON.stringify({ id: request.id, result: { type: "ok" } })}\n`,
+            ),
+          30,
+        );
+      },
+    );
+    const client = new HerdrClient(fake.socketPath, { timeoutMs: 5 });
+
+    await expect(
+      client.request("agent.start", {}, { timeoutMs: 100 }),
+    ).resolves.toEqual({ type: "ok" });
   });
 
   test("streams fragmented Unicode subscription events until cancellation", async () => {

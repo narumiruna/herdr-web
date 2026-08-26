@@ -79,6 +79,10 @@ up:
     export HERDR_PROJECTS_ROOT="${HERDR_PROJECTS_ROOT:-$HOME}"
     export HERDR_WEB_HOST_UID="${HERDR_WEB_HOST_UID:-$(id -u)}"
     export HERDR_WEB_HOST_GID="${HERDR_WEB_HOST_GID:-$(id -g)}"
+    if [ -z "${HERDR_TERMINAL_CLIENT_PROTOCOL:-}" ]; then
+        herdr_command="${HERDR_BINARY:-${HERDR_BIN_PATH:-herdr}}"
+        export HERDR_TERMINAL_CLIENT_PROTOCOL="$("$herdr_command" status --json | node -e 'let input = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { input += chunk; }); process.stdin.on("end", () => { const protocol = JSON.parse(input)?.client?.protocol; if (!Number.isInteger(protocol) || protocol < 1) process.exit(1); process.stdout.write(String(protocol)); });')"
+    fi
     test -d "$HERDR_PROJECTS_ROOT" || { echo "project root not found: $HERDR_PROJECTS_ROOT" >&2; exit 1; }
     socket_path="${HERDR_HOST_SOCKET_PATH:-${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}}"
     test -S "$socket_path" || { echo "herdr socket not found: $socket_path" >&2; exit 1; }
