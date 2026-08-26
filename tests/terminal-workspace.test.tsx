@@ -42,6 +42,7 @@ interface HarnessProps {
   onRetryOutput?: () => void;
   onSelectPane?: (paneId: string) => void;
   onSplitPane?: (direction: PaneSplitDirection) => void | Promise<void>;
+  terminalControlEnabled?: boolean;
   terminalStreaming?: boolean;
 }
 
@@ -53,6 +54,7 @@ function Harness({
   onRetryOutput = () => undefined,
   onSelectPane = () => undefined,
   onSplitPane = () => undefined,
+  terminalControlEnabled = true,
   terminalStreaming = false,
 }: HarnessProps) {
   const [drafts, setDrafts] = useState<Record<string, ComposerDraft>>({});
@@ -105,7 +107,7 @@ function Harness({
             size: 1,
             type: "image_uploaded",
           })}
-          terminalControlEnabled
+          terminalControlEnabled={terminalControlEnabled}
           terminalEnabled
           terminalFontSize={13}
           terminalReason="This bridge is configured for snapshots only."
@@ -153,6 +155,16 @@ describe("TerminalWorkspace decision states", () => {
     const interactiveAgent = { ...fallbackAgent, canPrompt: false };
     rerender(<Harness agent={interactiveAgent} terminalStreaming />);
     expect(banner()).toHaveTextContent("Answer in the terminal");
+
+    rerender(
+      <Harness
+        agent={interactiveAgent}
+        terminalControlEnabled={false}
+        terminalStreaming
+      />,
+    );
+    expect(banner()).toHaveTextContent("Open a native Herdr client");
+    expect(banner()).toHaveTextContent("This browser terminal is read-only");
 
     rerender(<Harness agent={interactiveAgent} />);
     expect(banner()).toHaveTextContent("Open a native Herdr client");

@@ -260,10 +260,9 @@ export function useHerdrRuntime(
     ): Promise<T | undefined> => {
       if (!live || !client) return undefined;
       setActionError("");
+      let result: T;
       try {
-        const result = await action(client);
-        await refresh();
-        return result;
+        result = await action(client);
       } catch (requestError) {
         const message =
           requestError instanceof HerdrBridgeError &&
@@ -285,6 +284,10 @@ export function useHerdrRuntime(
         );
         throw error;
       }
+      // A confirmed mutation must remain successful when its follow-up snapshot
+      // cannot be refreshed. `refresh` records connection failures itself.
+      await refresh().catch(() => undefined);
+      return result;
     },
     [client, live, refresh],
   );

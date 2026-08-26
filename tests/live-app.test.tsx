@@ -71,6 +71,7 @@ const payload = {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
@@ -162,6 +163,103 @@ describe("live herdr-web app", () => {
     ).toBeDisabled();
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  });
+
+  test("preserves plugin-action success when the workspace refresh fails", async () => {
+    window.history.replaceState({}, "", "/?token=test-token");
+    let invoked = false;
+    let stateRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/events")) {
+        return new Promise<Response>(() => undefined);
+      }
+      if (url.endsWith("/state")) {
+        stateRequests += 1;
+        if (stateRequests > 1) throw new TypeError("Refresh failed");
+        return new Response(JSON.stringify(payload), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+      if (url.endsWith("/plugin-actions/example.board.refresh/invoke")) {
+        invoked = true;
+        return new Response(JSON.stringify({ type: "plugin_action_invoked" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+      if (url.endsWith("/plugin-actions")) {
+        return new Response(
+          JSON.stringify({
+            actions: [
+              {
+                action_id: "example.board.refresh",
+                plugin_id: "example.board",
+                title: "Refresh board",
+              },
+            ],
+            type: "plugin_action_list",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.endsWith("/plugin-logs")) {
+        return new Response(
+          JSON.stringify({
+            logs: invoked
+              ? [
+                  {
+                    action_id: "example.board.refresh",
+                    log_id: "log-1",
+                    plugin_id: "example.board",
+                    started_unix_ms: 1_780_000_000_000,
+                    status: "succeeded",
+                    stdout: "action completed",
+                  },
+                ]
+              : [],
+            type: "plugin_log_list",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.endsWith("/plugins")) {
+        return new Response(
+          JSON.stringify({ plugins: [], type: "plugin_list" }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+
+    render(<App live />);
+
+    await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Herdr runtime" }));
+    await user.click(await screen.findByRole("button", { name: "Run" }));
+
+    expect(await screen.findByText("action completed")).toBeVisible();
+    expect(
+      screen.queryByText(
+        "The result could not be confirmed. Check Herdr before trying again.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("status", {
+        hidden: true,
+        name: "Connection interrupted",
+      }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/plugin-actions/example.board.refresh/invoke"),
+      ),
+    ).toHaveLength(1);
   });
 
   test("shows a stable loading workbench while reading the first snapshot", () => {

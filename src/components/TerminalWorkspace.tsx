@@ -347,17 +347,20 @@ export function TerminalWorkspace({
   const messageInput = useRef<HTMLTextAreaElement>(null);
   const cancelCloseButton = useRef<HTMLButtonElement>(null);
   const canPrompt = agent.kind === "agent" && agent.canPrompt !== false;
+  const hasTerminalInput = terminalStreaming && terminalControlEnabled;
   const usesFallbackComposer = !terminalStreaming && canPrompt;
-  const blockedInputTitle = terminalStreaming
+  const blockedInputTitle = hasTerminalInput
     ? "Answer in the terminal"
     : usesFallbackComposer
       ? "Answer with the composer"
       : "Open a native Herdr client";
-  const blockedInputGuidance = terminalStreaming
+  const blockedInputGuidance = hasTerminalInput
     ? "This Agent is waiting for approval or an answer before it can accept another prompt."
     : usesFallbackComposer
       ? "Use the composer below to answer this Agent."
-      : "Browser input is unavailable for this snapshot-only session.";
+      : terminalStreaming
+        ? "This browser terminal is read-only; use a controller session or native Herdr client."
+        : "Browser input is unavailable for this snapshot-only session.";
   const canSend =
     actionsEnabled && Boolean(draft.message.trim() || draft.attachment);
   const activePane =
