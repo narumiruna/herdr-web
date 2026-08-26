@@ -7,14 +7,14 @@ Resolve every review item on pull request 19 and verify the resulting behavior w
 ## Context
 
 - Target: `https://github.com/narumiruna/herdr-web/pull/19`.
-- Head branch: `narumi/feat/herdr-0-8-2-alignment` at `199879d490dc2f6bb8d5ac7e47b21d7e7ab053d4` before this review pass.
-- The working tree was clean before checkout and editing.
-- The pull request description, three commits, 40-file diff, Linux and Windows checks, submitted reviews, eight inline threads, and empty issue conversation were inspected.
+- Head branch: `narumi/feat/herdr-0-8-2-alignment` at `770f8b3cf8bcc119e1ad8594569386ac55235553` before this review pass.
+- The working tree was clean before editing.
+- The pull request description, four commits, 41-file diff, Linux and Windows checks, submitted reviews, twelve inline threads, and empty issue conversation were inspected.
 
 ## Review Ledger
 
 - [x] `3856190858` — Outdated or superseded.
-  The original 15-second browser timeout was increased to 70 seconds in `696adb3`, but the later separate readiness window made that value insufficient and `3858973630` supersedes this item with the complete timing requirement.
+  The original 15-second browser timeout was increased in `696adb3`, and later timing feedback `3858973630` and `3859459309` supersedes its incomplete timeout calculation.
 - [x] `3856190862` — Already addressed by the current code.
   `justfile`, `compose.yaml`, `server/index.ts`, and `scripts/terminal-session-proxy.mjs` propagate and compare the host terminal CLI protocol for socket-proxy deployments, with coverage in `tests/herdr-status.test.ts` and `tests/herdr-service.test.ts`.
 - [x] `3858852234` — Already addressed by the current code.
@@ -25,21 +25,35 @@ Resolve every review item on pull request 19 and verify the resulting behavior w
   `RuntimeManagementDialog` renders `error`, `stderr`, and `stdout` independently, and its component test verifies all three values.
 - [x] `3858852257` — Already addressed by the current code.
   Protocol 20 blocks semantic prompts for blocked Agents while protocol 19 preserves the fallback composer, covered by `tests/live-state.test.ts`.
-- [x] `3858973630` — Already addressed by the current code.
-  `src/herdr-api.ts` now gives Agent creation 140 seconds to cover tab creation, the 65-second startup request, the separate readiness window, and transport overhead, and the focused API and service tests pass.
+- [x] `3858973630` — Outdated or superseded.
+  The 140-second browser timeout addressed startup plus readiness but omitted the preceding 60-second busy-retry window, so `3859459309` supersedes it with the complete timing requirement.
 - [x] `3858973636` — Already addressed by the current code.
-  `RuntimeManagementDialog` now retains mutation state while hidden, and its regression test closes and reopens during an unresolved plugin action before verifying Run remains disabled and no duplicate invocation occurs.
+  `RuntimeManagementDialog` retains mutation state while hidden, and its regression test closes and reopens during an unresolved plugin action before verifying Run remains disabled and no duplicate invocation occurs.
+- [x] `3859459309` — Already addressed by the current code.
+  `src/herdr-api.ts` gives Agent creation 205 seconds for tab creation, the 60-second busy-retry admission window, a final 65-second `agent.start`, readiness polling, cleanup, and transport overhead, with the exact browser signal covered in `tests/herdr-api.test.ts`.
+- [x] `3859459312` — Already addressed by the current code.
+  `TerminalWorkspace` uses the actual fallback-composer capability to choose between “Answer with the composer” and “Answer in the terminal,” and `tests/terminal-workspace.test.tsx` verifies both paths.
+- [x] `3859459318` — Already addressed by the current code.
+  Integration uninstall now requires a host-file removal confirmation, and `tests/runtime-management-dialog.test.tsx` verifies cancellation prevents the API mutation before also covering confirmation acceptance.
+- [x] `3859459325` — Already addressed by the current code.
+  Runtime reloads use monotonically increasing request IDs, invalidate loads on close, and ignore stale success, error, and loading completions; the dialog regression test resolves an older pre-action load after the post-action load and verifies the newer state remains visible.
 
 ## Plan
 
-- [x] Update `src/herdr-api.ts` and `tests/herdr-api.test.ts` so the browser waits through the complete Agent startup and readiness budget; `npx vitest run tests/herdr-api.test.ts tests/herdr-service.test.ts` passed 24 tests.
-- [x] Update `src/components/RuntimeManagementDialog.tsx` and `tests/runtime-management-dialog.test.tsx` so closing the dialog cannot re-enable an in-flight action; the focused component run passed 2 tests.
-- [x] Scan the pull request diff for the same timeout and pending-state failure patterns; the shared pending fix covers plugin and integration mutations, and integration install/uninstall now receives the same 300-second server and 305-second browser budgets as plugin actions.
-- [x] Run `npm run ci`, `npm run test:e2e`, and `git diff --check`; CI passed 185 tests plus package inspection, builds, and font checks, and Playwright passed 31 tests.
-- [x] Re-read all eight review threads and classify every ledger item with final evidence; six earlier threads remain addressed or superseded, and the two latest concerns now have focused regression coverage.
+- [x] Update `src/herdr-api.ts` and `tests/herdr-api.test.ts` so Agent creation covers the complete server-side worst-case timing budget; the focused API, service, workspace, and dialog run passed 42 tests.
+- [x] Update `src/components/TerminalWorkspace.tsx` and its component tests so blocked fallback users receive composer-specific guidance; the focused workspace regression passed.
+- [x] Update `src/components/RuntimeManagementDialog.tsx` and its tests so uninstall requires confirmation and only the newest reload may update state; both focused dialog regressions passed.
+- [x] Scan the full pull request diff for the same timeout, destructive-action, capability-guidance, and stale-request patterns; long runtime mutations already have paired server and browser budgets, other destructive workbench operations already confirm, and no second unordered runtime loader or blocked banner exists.
+- [x] Run `npm run ci`, `npm run test:e2e`, and `git diff --check`; CI passed 188 tests plus package, build, and font checks, Playwright passed 31 tests, and the diff check passed.
+- [x] Re-read all twelve review threads, inspect the final diff, and give every ledger item a final evidence-backed outcome.
+- [x] Reply to and resolve the four open threads only after their focused and repository checks pass; replies `3859622024`, `3859622161`, `3859622286`, and `3859622429` contain commit and test evidence, and all twelve threads are resolved.
+- [x] Stage only intended implementation files, create a signed Conventional Commit, and push the branch; signed commit `8cc061cd708a52f762d42ac5c051371796c604f7` is on the pull request branch.
 
 ## Completion Checklist
 
 - [x] Every actionable review item has code and regression-test evidence.
 - [x] Every non-actionable review item has a supported ledger outcome.
 - [x] Required local checks pass without concealed failures.
+- [x] Required pull request checks pass for the fix commit in Actions run `32929907520` on Linux and Windows.
+- [x] The signed fix commit is pushed and all addressed threads are resolved.
+- [x] The completed plan is archived under `docs/plans/archived/`.
