@@ -60,19 +60,19 @@ Resolve every feedback item in review `5028261040` and preserve evidence for eve
 - [x] Run focused tests for the runtime and terminal workspace changes; 32 focused tests passed.
 - [x] Run `npm run ci`, `npm run test:e2e`, and `git diff --check`; CI passed 190 tests plus package, build, and font checks, Playwright passed 31 tests, and the diff check passed.
 - [x] Re-read all sixteen threads and inspect the final diff so every ledger item has an evidence-backed outcome; fourteen previous dispositions remain supported and both target-review issues have direct code and regression evidence.
-- [ ] Stage only intended files, create signed Conventional Commits, and push `narumi/feat/herdr-0-8-2-alignment` without rewriting history.
-- [ ] Reply to and resolve the two open threads only after the fixes and local checks pass.
-- [ ] Refresh pull request 19 once after pushing and record its head, checks, thread state, and merged-state limitation.
+- [x] Stage only intended files, create signed Conventional Commits, and push `narumi/feat/herdr-0-8-2-alignment` without rewriting history; GitHub verifies signed implementation commit `90955b01c8a28e5aff14f27abce467d9e99701c1` on the restored branch.
+- [x] Reply to and resolve the two open threads only after the fixes and local checks pass; replies `3861288961` and `3861288966` contain commit and test evidence, and all sixteen threads are resolved.
+- [x] Refresh pull request 19 once after pushing and record its head, checks, thread state, and merged-state limitation; GitHub reports the merged pull request remains immutable at head `004ed383`, all sixteen threads are resolved, and its historical Linux and Windows checks passed, while restored branch tip `90955b0` has no check runs because closed pull requests do not trigger the workflow.
 
 ## Risks
 
-- A commit pushed after merge remains only on the pull request head branch and is not part of `main` or merge commit `d3b4e628`.
-- The closed pull request does not trigger new pull-request checks, so required validation must use local repository checks unless a separate integration path is requested.
+- Accepted limitation: commit `90955b0` remains only on the restored pull request head branch and is not part of `main` or merge commit `d3b4e628`; landing it requires a separate follow-up pull request or another user-approved integration path.
+- Accepted validation disposition: the closed pull request did not trigger new pull-request checks, so the implementation is supported by 32 focused tests, two successful `npm run ci` runs with 190 tests each, 31 Playwright tests, and `git diff --check`.
 
 ## Completion Checklist
 
 - [x] Every actionable review item has implementation and regression-test evidence.
 - [x] Every non-actionable review item has a supported ledger outcome.
 - [x] Required local checks pass without concealed failures.
-- [ ] Signed commits are pushed and both target-review threads are resolved.
-- [ ] The completed plan is archived under `docs/plans/archived/`.
+- [x] The signed implementation commit is pushed and both target-review threads are resolved.
+- [x] The completed plan is archived under `docs/plans/archived/`.
