@@ -347,6 +347,7 @@ export function TerminalWorkspace({
   const messageInput = useRef<HTMLTextAreaElement>(null);
   const cancelCloseButton = useRef<HTMLButtonElement>(null);
   const canPrompt = agent.kind === "agent" && agent.canPrompt !== false;
+  const usesFallbackComposer = !terminalStreaming && canPrompt;
   const canSend =
     actionsEnabled && Boolean(draft.message.trim() || draft.attachment);
   const activePane =
@@ -778,10 +779,16 @@ export function TerminalWorkspace({
         <section className="attention-banner" aria-label="Agent needs input">
           <ExclamationTriangleIcon aria-hidden="true" />
           <div>
-            <strong>Answer in the terminal</strong>
+            <strong>
+              {usesFallbackComposer
+                ? "Answer with the composer"
+                : "Answer in the terminal"}
+            </strong>
             <span>
               {agent.currentStep ||
-                "This Agent is waiting for approval or an answer before it can accept another prompt."}
+                (usesFallbackComposer
+                  ? "Use the composer below to answer this Agent."
+                  : "This Agent is waiting for approval or an answer before it can accept another prompt.")}
             </span>
           </div>
         </section>

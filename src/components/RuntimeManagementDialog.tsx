@@ -60,6 +60,7 @@ export function RuntimeManagementDialog({
   onSetPluginEnabled,
 }: RuntimeManagementDialogProps) {
   const loadRef = useRef(load);
+  const latestLoadId = useRef(0);
   const [state, setState] = useState(EMPTY_MANAGEMENT);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState("");
@@ -71,23 +72,29 @@ export function RuntimeManagementDialog({
   }, [load]);
 
   const reload = useCallback(async () => {
+    const loadId = ++latestLoadId.current;
     setLoading(true);
     setError("");
     try {
-      setState(await loadRef.current());
+      const nextState = await loadRef.current();
+      if (loadId === latestLoadId.current) setState(nextState);
     } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Herdr runtime controls could not be loaded.",
-      );
+      if (loadId === latestLoadId.current) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Herdr runtime controls could not be loaded.",
+        );
+      }
     } finally {
-      setLoading(false);
+      if (loadId === latestLoadId.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (!open) {
+      latestLoadId.current += 1;
+      setLoading(false);
       setError("");
       setNotice("");
       return;
@@ -119,6 +126,14 @@ export function RuntimeManagementDialog({
     target: IntegrationTarget,
     action: IntegrationAction,
   ) => {
+    if (
+      action === "uninstall" &&
+      !window.confirm(
+        `Uninstall the ${label} integration? This removes Herdr-managed integration files from the host.`,
+      )
+    ) {
+      return;
+    }
     const key = `integration:${target}:${action}`;
     await mutate(key, async () => {
       await onManageIntegration(target, action);

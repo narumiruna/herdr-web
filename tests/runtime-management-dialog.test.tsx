@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { RuntimeManagementDialog } from "../src/components/RuntimeManagementDialog";
@@ -84,6 +84,84 @@ describe("RuntimeManagementDialog", () => {
     await waitFor(() =>
       expect(manageIntegration).toHaveBeenCalledWith("qwen", "install"),
     );
+  });
+
+  test("requires confirmation before uninstalling an integration", async () => {
+    const load = vi.fn().mockResolvedValue(management);
+    const manageIntegration = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+
+    render(
+      <RuntimeManagementDialog
+        open
+        onOpenChange={vi.fn()}
+        load={load}
+        onInvokePluginAction={vi.fn()}
+        onManageIntegration={manageIntegration}
+        onSetPluginEnabled={vi.fn()}
+      />,
+    );
+
+    const qwen = (await screen.findByText("Qwen Code")).closest(
+      "article",
+    ) as HTMLElement;
+    const uninstall = within(qwen).getByRole("button", { name: "Uninstall" });
+    await user.click(uninstall);
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Uninstall the Qwen Code integration?"),
+    );
+    expect(manageIntegration).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    await user.click(uninstall);
+    await waitFor(() =>
+      expect(manageIntegration).toHaveBeenCalledWith("qwen", "uninstall"),
+    );
+  });
+
+  test("ignores an older reload after a post-mutation reload completes", async () => {
+    let resolveStaleLoad!: (value: typeof management) => void;
+    const staleLoad = new Promise<typeof management>((resolve) => {
+      resolveStaleLoad = resolve;
+    });
+    const refreshed = {
+      ...management,
+      plugins: [{ ...management.plugins[0], name: "Updated board" }],
+    };
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(management)
+      .mockReturnValueOnce(staleLoad)
+      .mockResolvedValueOnce(refreshed);
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+
+    render(
+      <RuntimeManagementDialog
+        open
+        onOpenChange={vi.fn()}
+        load={load}
+        onInvokePluginAction={invoke}
+        onManageIntegration={vi.fn()}
+        onSetPluginEnabled={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Example board")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(await screen.findByText("Updated board")).toBeVisible();
+
+    await act(async () => {
+      resolveStaleLoad(management);
+      await staleLoad;
+    });
+
+    expect(screen.getByText("Updated board")).toBeVisible();
+    expect(screen.queryByText("Example board")).not.toBeInTheDocument();
   });
 
   test("keeps an in-flight plugin action pending across dialog visibility changes", async () => {

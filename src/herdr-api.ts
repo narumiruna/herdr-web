@@ -6,7 +6,9 @@ interface ApiErrorBody {
   error?: { code?: string; message?: string };
 }
 
-const AGENT_CREATION_TIMEOUT_MS = 140_000;
+// Cover tab creation, pane-busy retries, a final Agent start request,
+// readiness polling, cleanup, and transport overhead.
+const AGENT_CREATION_TIMEOUT_MS = 205_000;
 const RUNTIME_MUTATION_TIMEOUT_MS = 305_000;
 
 export class HerdrBridgeError extends Error {

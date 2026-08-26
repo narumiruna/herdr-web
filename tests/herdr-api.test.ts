@@ -53,7 +53,7 @@ describe("Herdr API requests", () => {
       workspaceId: "w1",
     });
 
-    expect(timeout).toHaveBeenCalledWith(140_000);
+    expect(timeout).toHaveBeenCalledWith(205_000);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/herdr/sessions",
       expect.objectContaining({

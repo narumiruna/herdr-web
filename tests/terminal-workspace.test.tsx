@@ -136,6 +136,28 @@ describe("TerminalWorkspace decision states", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("directs blocked snapshot fallback users to the composer", () => {
+    const fallbackAgent = demoAgent();
+    fallbackAgent.status = "blocked";
+    fallbackAgent.canPrompt = true;
+    fallbackAgent.currentStep = "";
+    const { rerender } = render(<Harness agent={fallbackAgent} />);
+
+    expect(
+      screen.getByRole("region", { name: "Agent needs input" }),
+    ).toHaveTextContent("Answer with the composer");
+    expect(
+      screen.getByRole("form", { name: "Message composer" }),
+    ).toBeVisible();
+
+    const interactiveAgent = { ...fallbackAgent, canPrompt: false };
+    rerender(<Harness agent={interactiveAgent} terminalStreaming />);
+
+    expect(
+      screen.getByRole("region", { name: "Agent needs input" }),
+    ).toHaveTextContent("Answer in the terminal");
+  });
+
   test("does not submit Enter while an input method editor is composing", async () => {
     const onMessage = vi.fn(async () => ({}));
     render(<Harness onMessage={onMessage} />);
