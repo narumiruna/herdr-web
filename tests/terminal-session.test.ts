@@ -81,7 +81,13 @@ describe("TerminalSession", () => {
       requestId: "input-1",
       type: "terminal.input",
     });
-    session.accept({ cols: 100, rows: 30, type: "terminal.resize" });
+    session.accept({
+      cell_height_px: 16,
+      cell_width_px: 8,
+      cols: 100,
+      rows: 30,
+      type: "terminal.resize",
+    });
     session.accept({ direction: "up", lines: 3, type: "terminal.scroll" });
     session.accept({ data: "x".repeat(70 * 1024), type: "terminal.input" });
 
@@ -92,7 +98,13 @@ describe("TerminalSession", () => {
         .map((line) => JSON.parse(line)),
     ).toEqual([
       { text: "echo hi\r", type: "terminal.input" },
-      { cols: 100, rows: 30, type: "terminal.resize" },
+      {
+        cell_height_px: 16,
+        cell_width_px: 8,
+        cols: 100,
+        rows: 30,
+        type: "terminal.resize",
+      },
       { direction: "up", lines: 3, type: "terminal.scroll" },
     ]);
     expect(messages[0]).toEqual({
@@ -103,6 +115,62 @@ describe("TerminalSession", () => {
       code: "invalid_terminal_message",
       type: "terminal.error",
     });
+  });
+
+  test("defaults omitted cell metrics and rejects invalid pixel dimensions", () => {
+    const process = new FakeTerminalProcess();
+    const session = new TerminalSession(process);
+    const messages = collect(session);
+    let stdin = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      stdin += chunk;
+    });
+
+    session.accept({ cols: 80, rows: 24, type: "terminal.resize" });
+    session.accept({
+      cell_height_px: 16,
+      cell_width_px: -1,
+      cols: 80,
+      rows: 24,
+      type: "terminal.resize",
+    });
+    session.accept({
+      cell_height_px: 16.5,
+      cell_width_px: 8,
+      cols: 80,
+      rows: 24,
+      type: "terminal.resize",
+    });
+    session.accept({
+      cell_height_px: 10_001,
+      cell_width_px: 8,
+      cols: 80,
+      rows: 24,
+      type: "terminal.resize",
+    });
+
+    expect(
+      stdin
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      {
+        cell_height_px: 0,
+        cell_width_px: 0,
+        cols: 80,
+        rows: 24,
+        type: "terminal.resize",
+      },
+    ]);
+    expect(
+      messages.filter(
+        (message) =>
+          message.type === "terminal.error" &&
+          message.code === "invalid_terminal_message",
+      ),
+    ).toHaveLength(3);
   });
 
   test("rejects mutations in observer sessions", () => {

@@ -9,6 +9,7 @@ const MAX_LINE_BYTES = Math.ceil((MAX_FRAME_BYTES * 4) / 3) + 4_096;
 const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_STDERR_BYTES = 8 * 1024;
 const MAX_DIMENSION = 1_000;
+const MAX_CELL_DIMENSION_PX = 10_000;
 
 export type TerminalServerMessage =
   | {
@@ -32,7 +33,13 @@ export type TerminalServerMessage =
 
 export type TerminalClientMessage =
   | { data: string; requestId?: string; type: "terminal.input" }
-  | { cols: number; rows: number; type: "terminal.resize" }
+  | {
+      cell_height_px?: number;
+      cell_width_px?: number;
+      cols: number;
+      rows: number;
+      type: "terminal.resize";
+    }
   | { direction: "down" | "up"; lines: number; type: "terminal.scroll" }
   | { type: "terminal.release" };
 
@@ -150,6 +157,10 @@ function positiveInteger(value: unknown, max: number): value is number {
   return Number.isInteger(value) && Number(value) > 0 && Number(value) <= max;
 }
 
+function nonNegativeInteger(value: unknown, max: number): value is number {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= max;
+}
+
 function parseServerMessage(value: unknown): TerminalServerMessage | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
@@ -225,12 +236,18 @@ function cleanClientMessage(value: unknown): TerminalClientMessage | undefined {
       type: "terminal.input",
     };
   }
+  const cellWidthPx = message.cell_width_px ?? 0;
+  const cellHeightPx = message.cell_height_px ?? 0;
   if (
     message.type === "terminal.resize" &&
     positiveInteger(message.cols, MAX_DIMENSION) &&
-    positiveInteger(message.rows, MAX_DIMENSION)
+    positiveInteger(message.rows, MAX_DIMENSION) &&
+    nonNegativeInteger(cellWidthPx, MAX_CELL_DIMENSION_PX) &&
+    nonNegativeInteger(cellHeightPx, MAX_CELL_DIMENSION_PX)
   ) {
     return {
+      cell_height_px: cellHeightPx,
+      cell_width_px: cellWidthPx,
       cols: message.cols as number,
       rows: message.rows as number,
       type: "terminal.resize",
@@ -340,7 +357,13 @@ export class TerminalSession extends EventEmitter {
       message.type === "terminal.input"
         ? { type: "terminal.input", text: message.data }
         : message.type === "terminal.resize"
-          ? { type: "terminal.resize", cols: message.cols, rows: message.rows }
+          ? {
+              type: "terminal.resize",
+              cell_width_px: message.cell_width_px,
+              cell_height_px: message.cell_height_px,
+              cols: message.cols,
+              rows: message.rows,
+            }
           : {
               type: "terminal.scroll",
               direction: message.direction,
