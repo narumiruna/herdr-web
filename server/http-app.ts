@@ -20,6 +20,7 @@ import {
   MAX_IMAGE_BYTES,
   type UploadedImage,
   validateImage,
+  validateImageUploadId,
 } from "./image-upload.js";
 import type {
   BrowserPushSubscription,
@@ -1201,9 +1202,11 @@ export function createHerdrHttpHandler({
           ?.split(";", 1)[0]
           ?.trim()
           .toLowerCase();
+        const uploadId = request.headers["x-herdr-upload-id"]?.toString();
         const input: ImageUploadInput = {
           data: await readBody(request, MAX_IMAGE_BYTES),
           mediaType: mediaType ?? "",
+          ...(uploadId ? { uploadId: validateImageUploadId(uploadId) } : {}),
         };
         validateImage(input);
         sendJson(

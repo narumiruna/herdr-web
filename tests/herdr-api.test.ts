@@ -7,6 +7,7 @@ import {
 } from "../src/herdr-api";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState({}, "", "/");
@@ -80,6 +81,65 @@ describe("Herdr API requests", () => {
         signal: expect.any(AbortSignal),
       }),
     );
+  });
+
+  test("retries transient image failures with one stable upload id and a longer timeout", async () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network connection lost"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            mediaType: "image/png",
+            path: "/uploads/recovered.png",
+            size: 11,
+            type: "image_uploaded",
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HerdrApiClient("secret");
+    const image = new File(["image"], "retry.png", { type: "image/png" });
+
+    const upload = api.uploadImage("w1:p1", image);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(upload).resolves.toMatchObject({
+      path: "/uploads/recovered.png",
+    });
+
+    expect(timeout).toHaveBeenCalledTimes(2);
+    expect(timeout).toHaveBeenNthCalledWith(1, 120_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 120_000);
+    const uploadIds = fetchMock.mock.calls.map(
+      ([, init]) => init.headers["x-herdr-upload-id"],
+    );
+    expect(uploadIds[0]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    expect(uploadIds[1]).toBe(uploadIds[0]);
+  });
+
+  test("does not retry permanent image upload rejections", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "invalid_request", message: "Invalid image" },
+        }),
+        { headers: { "content-type": "application/json" }, status: 400 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HerdrApiClient("secret");
+
+    await expect(
+      api.uploadImage(
+        "w1:p1",
+        new File(["bad"], "bad.png", { type: "image/png" }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   test("sends an exact one-shot terminal quick reply without changing navigation", async () => {

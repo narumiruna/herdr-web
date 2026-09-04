@@ -12,6 +12,7 @@ import {
   type ImageUploadInput,
   type UploadedImage,
   validateImage,
+  validateImageUploadId,
   writePaneImage,
 } from "./image-upload.js";
 
@@ -443,6 +444,7 @@ export class LiveHerdrService {
     input: ImageUploadInput,
   ): Promise<UploadedImage> {
     validateImage(input);
+    if (input.uploadId) validateImageUploadId(input.uploadId);
     return writePaneImage(
       await this.paneCwd(paneId),
       input,
