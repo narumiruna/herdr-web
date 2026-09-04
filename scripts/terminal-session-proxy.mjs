@@ -13,6 +13,7 @@ const command =
 const MAX_CONNECTIONS = 16;
 const MAX_LINE_BYTES = 70 * 1024;
 const MAX_DIMENSION = 1_000;
+const MAX_CELL_DIMENSION_PX = 10_000;
 const TARGET = /^[A-Za-z0-9:_-]{1,128}$/;
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535 || !token) {
@@ -30,6 +31,12 @@ function sameSecret(supplied) {
 
 function validDimension(value) {
   return Number.isInteger(value) && value >= 1 && value <= MAX_DIMENSION;
+}
+
+function validCellDimension(value) {
+  return (
+    Number.isInteger(value) && value >= 0 && value <= MAX_CELL_DIMENSION_PX
+  );
 }
 
 function parseStart(line) {
@@ -70,7 +77,12 @@ function validCommand(line) {
     );
   }
   if (value.type === "terminal.resize") {
-    return validDimension(value.cols) && validDimension(value.rows);
+    return (
+      validDimension(value.cols) &&
+      validDimension(value.rows) &&
+      validCellDimension(value.cell_width_px ?? 0) &&
+      validCellDimension(value.cell_height_px ?? 0)
+    );
   }
   if (value.type === "terminal.scroll") {
     return (

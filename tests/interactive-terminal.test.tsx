@@ -6,6 +6,7 @@ import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
 const xterm = vi.hoisted(() => ({
   instances: [] as Array<{
     data?: (value: string) => void;
+    element?: HTMLElement;
     focus: ReturnType<typeof vi.fn>;
     key?: (event: KeyboardEvent) => boolean;
     options?: Record<string, unknown>;
@@ -37,7 +38,16 @@ vi.mock("@xterm/xterm", () => ({
       xterm.instances.push(this.instance);
     }
     loadAddon() {}
-    open() {}
+    open(element: HTMLElement) {
+      this.element = element;
+      this.instance.element = element;
+      const screen = document.createElement("div");
+      screen.className = "xterm-screen";
+      screen.getBoundingClientRect = () =>
+        ({ height: 384, width: 640 }) as DOMRect;
+      element.append(screen);
+    }
+    element?: HTMLElement;
     dispose() {}
     focus = this.instance.focus;
     hasSelection() {
@@ -53,7 +63,11 @@ vi.mock("@xterm/xterm", () => ({
       return { dispose() {} };
     }
     onResize(callback: (size: { cols: number; rows: number }) => void) {
-      this.instance.resize = callback;
+      this.instance.resize = (size) => {
+        this.cols = size.cols;
+        this.rows = size.rows;
+        callback(size);
+      };
       return { dispose() {} };
     }
     paste(value: string) {
@@ -253,21 +267,128 @@ describe("InteractiveTerminal", () => {
     expect(xterm.instances[0]?.write).toHaveBeenCalledOnce();
 
     xterm.instances[0]?.data?.("echo hi\r");
-    xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
+    xterm.instances[0]?.resize?.({ cols: 90, rows: 28 });
     xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
     expect(
       socket.sent
         .map((value) => JSON.parse(value))
         .filter(({ type }) => type === "terminal.input"),
     ).toEqual([{ data: "echo hi\r", type: "terminal.input" }]);
+    await waitFor(() =>
+      expect(
+        socket.sent
+          .map((value) => JSON.parse(value))
+          .filter(({ type }) => type === "terminal.resize"),
+      ).toEqual([
+        {
+          cell_height_px: 16,
+          cell_width_px: 8,
+          cols: 80,
+          rows: 24,
+          type: "terminal.resize",
+        },
+        {
+          cell_height_px: 13,
+          cell_width_px: 6,
+          cols: 100,
+          rows: 30,
+          type: "terminal.resize",
+        },
+      ]),
+    );
+  });
+
+  test("retains the latest controlled resize before the first frame and through backpressure", async () => {
+    const { socket } = await renderTerminal();
+
+    xterm.instances[0]?.resize?.({ cols: 90, rows: 28 });
+    xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
+    await waitFor(() =>
+      expect(
+        socket.sent
+          .map((value) => JSON.parse(value))
+          .filter(({ type }) => type === "terminal.resize")
+          .at(-1),
+      ).toMatchObject({ cols: 100, rows: 30 }),
+    );
+
+    socket.message(frame());
+    socket.message({ type: "terminal.flow", writable: false });
+    const resizeCount = socket.sent
+      .map((value) => JSON.parse(value))
+      .filter(({ type }) => type === "terminal.resize").length;
+    xterm.instances[0]?.resize?.({ cols: 110, rows: 32 });
+    xterm.instances[0]?.resize?.({ cols: 120, rows: 36 });
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
     expect(
       socket.sent
         .map((value) => JSON.parse(value))
         .filter(({ type }) => type === "terminal.resize"),
-    ).toEqual([
-      { cols: 80, rows: 24, type: "terminal.resize" },
-      { cols: 100, rows: 30, type: "terminal.resize" },
-    ]);
+    ).toHaveLength(resizeCount);
+
+    socket.message({ type: "terminal.flow", writable: true });
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.resize")
+        .at(-1),
+    ).toMatchObject({ cols: 120, rows: 36 });
+  });
+
+  test("uses observe mode while unfocused and transfers ownership on focus changes", async () => {
+    const { createTicket, props, rerender, socket } = await renderTerminal({
+      focused: false,
+    });
+    expect(createTicket).toHaveBeenLastCalledWith(
+      "w5:p1",
+      expect.objectContaining({ mode: "observe" }),
+    );
+    socket.message(frame());
+    expect(await screen.findByText("Watching")).toBeVisible();
+
+    rerender(<InteractiveTerminal {...props} focused />);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    expect(createTicket).toHaveBeenLastCalledWith(
+      "w5:p1",
+      expect.objectContaining({ mode: "control" }),
+    );
+    expect(socket.sent.map((value) => JSON.parse(value))).toContainEqual({
+      type: "terminal.release",
+    });
+    const controlSocket = FakeWebSocket.instances[1];
+    if (!controlSocket) throw new Error("Missing focused control socket");
+    controlSocket.message(frame("focused"));
+    expect(await screen.findByText("Interactive")).toBeVisible();
+
+    rerender(<InteractiveTerminal {...props} focused={false} />);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(3));
+    expect(createTicket).toHaveBeenLastCalledWith(
+      "w5:p1",
+      expect.objectContaining({ mode: "observe" }),
+    );
+    expect(controlSocket.sent.map((value) => JSON.parse(value))).toContainEqual(
+      { type: "terminal.release" },
+    );
+  });
+
+  test("reconnects an observer with its latest viewport instead of sending a resize", async () => {
+    const { createTicket, socket } = await renderTerminal({ focused: false });
+    socket.message(frame());
+    expect(await screen.findByText("Watching")).toBeVisible();
+
+    xterm.instances[0]?.resize?.({ cols: 100, rows: 30 });
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    expect(createTicket).toHaveBeenLastCalledWith("w5:p1", {
+      cols: 100,
+      mode: "observe",
+      rows: 30,
+      takeover: false,
+    });
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter(({ type }) => type === "terminal.resize"),
+    ).toHaveLength(0);
   });
 
   test("measures redacted terminal diagnostics and exposes protocol, renderer, dimensions, and access", async () => {
@@ -638,9 +759,8 @@ describe("InteractiveTerminal", () => {
     );
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
     for (const socket of FakeWebSocket.instances) socket.message(frame());
-    await waitFor(() =>
-      expect(screen.getAllByText("Interactive")).toHaveLength(2),
-    );
+    expect(await screen.findByText("Watching")).toBeVisible();
+    expect(await screen.findByText("Interactive")).toBeVisible();
 
     fireEvent.paste(window, {
       clipboardData: { files: [file], items: [], types: ["Files"] },
