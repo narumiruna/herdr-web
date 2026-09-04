@@ -20,7 +20,7 @@ The current terminal client can acquire control while hidden, discard resize eve
 - [x] Add debounced latest-size delivery and observer reconnects in `src/components/InteractiveTerminal.tsx`; component tests verify pre-frame, backpressure, and read-only resize regressions.
 - [x] Preserve measured cell pixel dimensions through `server/terminal-session.ts` and `scripts/terminal-session-proxy.mjs`; session tests verify validation, compatibility defaults, and forwarding.
 - [x] Run focused terminal tests, the full test suite, static checks, terminal E2E tests, and the production build (`npm run ci`; `npx playwright test e2e/terminal-rendering.e2e.ts`).
-- [ ] Commit the verified changes, push `narumi/fix/terminal-resize-ownership`, and open a pull request.
+- [x] Commit the verified changes, push `narumi/fix/terminal-resize-ownership`, and open pull request #22.
 
 ## Risks
 
@@ -35,4 +35,4 @@ The current terminal client can acquire control while hidden, discard resize eve
 - [x] Read-only viewport changes create an updated observer session without sending control commands.
 - [x] Resize updates are debounced and include validated cell pixel dimensions.
 - [x] All required validation commands pass.
-- [ ] Pull request is open with the implementation and test evidence summarized.
+- [x] Pull request #22 is open with the implementation and test evidence summarized.
