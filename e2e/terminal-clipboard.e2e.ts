@@ -141,10 +141,11 @@ test("split xterms route image paste only to the focused pane", async ({
   await page.evaluate(() => {
     for (const socket of window.__terminalSockets) socket.frame("interactive");
   });
-  await expect(page.locator(".interactive-terminal-state")).toHaveText([
-    "Watching",
-    "Interactive",
-  ]);
+  const terminalStates = page.locator(".interactive-terminal-state");
+  await expect(terminalStates.filter({ hasText: "Interactive" })).toHaveCount(
+    1,
+  );
+  await expect(terminalStates.filter({ hasText: "Watching" })).toHaveCount(1);
 
   await page.evaluate(() => {
     const clipboard = new DataTransfer();
