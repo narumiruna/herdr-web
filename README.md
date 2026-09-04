@@ -251,9 +251,11 @@ The staged-image dialog performs no upload until **Upload and insert path** or i
 
 The bridge verifies each image signature, enforces an 8 MiB per-image limit, and writes a random file under `$HOME/.herdr-web/uploads/` by default.
 
-herdr-web uploads a batch sequentially and inserts all shell-escaped absolute paths in one terminal input only after every image succeeds, without pressing Enter.
+herdr-web uploads up to three images concurrently and inserts all shell-escaped absolute paths in the original order only after every image succeeds, without pressing Enter.
 
-If part of a batch fails, successful paths remain visible and **Retry failed uploads** uploads only unfinished images.
+Each image request allows 120 seconds and retries transient network or server failures up to twice with the same upload ID. A recovered retry reuses one host path instead of creating a duplicate file, while permanent errors fail immediately.
+
+If part of a batch still fails, successful paths remain visible and **Retry failed uploads** uploads only unfinished images.
 
 Cancelling after a partial failure does not remove files that already reached the Herdr host, so remove those files manually when they are no longer needed.
 

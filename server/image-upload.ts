@@ -1,5 +1,12 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import {
+  link,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 
@@ -8,6 +15,7 @@ export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export interface ImageUploadInput {
   data: Buffer;
   mediaType: string;
+  uploadId?: string;
 }
 
 export interface UploadedImage {
@@ -16,6 +24,8 @@ export interface UploadedImage {
   size: number;
   type: "image_uploaded";
 }
+
+const IMAGE_UPLOAD_ID = /^[A-Za-z0-9_-]{16,128}$/;
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/gif": "gif",
@@ -47,6 +57,13 @@ function matchesSignature(mediaType: string, data: Buffer): boolean {
     default:
       return false;
   }
+}
+
+export function validateImageUploadId(value: string): string {
+  if (!IMAGE_UPLOAD_ID.test(value)) {
+    throw new TypeError("Invalid image upload id");
+  }
+  return value;
 }
 
 export function validateImage({ data, mediaType }: ImageUploadInput): string {
@@ -98,9 +115,33 @@ export async function writePaneImage(
   await mkdir(uploadsRoot, { mode: 0o700, recursive: true });
   const uploadDirectory = await realpath(uploadsRoot);
 
-  const filename = `image-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
+  const uploadId = input.uploadId
+    ? validateImageUploadId(input.uploadId)
+    : undefined;
+  const digest = createHash("sha256").update(input.data).digest("hex");
+  const filename = uploadId
+    ? `image-${uploadId}-${digest.slice(0, 16)}.${extension}`
+    : `image-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const path = join(uploadDirectory, filename);
-  await writeFile(path, input.data, { flag: "wx", mode: 0o600 });
+  if (uploadId) {
+    const temporaryPath = `${path}.${randomBytes(8).toString("hex")}.tmp`;
+    await writeFile(temporaryPath, input.data, { flag: "wx", mode: 0o600 });
+    try {
+      try {
+        await link(temporaryPath, path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
+    const existing = await readFile(path);
+    if (!existing.equals(input.data)) {
+      throw new TypeError("Image upload id conflicts with stored content");
+    }
+  } else {
+    await writeFile(path, input.data, { flag: "wx", mode: 0o600 });
+  }
   return {
     mediaType: input.mediaType,
     path,

@@ -648,6 +648,7 @@ describe("herdr HTTP bridge", () => {
       headers: {
         authorization: "Bearer test-secret",
         "content-type": "image/png",
+        "x-herdr-upload-id": "upload-request-0001",
       },
       method: "POST",
     });
@@ -656,6 +657,7 @@ describe("herdr HTTP bridge", () => {
     expect(service.uploadImage).toHaveBeenCalledWith("w5:p1", {
       data: expect.any(Buffer),
       mediaType: "image/png",
+      uploadId: "upload-request-0001",
     });
     const upload = vi.mocked(service.uploadImage).mock.calls[0]?.[1];
     expect(upload?.data).toEqual(Buffer.from(png));

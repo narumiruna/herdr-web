@@ -10,6 +10,8 @@ import {
   updateTerminalImage,
 } from "./terminal-images";
 
+const MAX_CONCURRENT_UPLOADS = 3;
+
 interface UseTerminalImagesOptions {
   onInsert: (paths: string[]) => boolean;
   onUpload: (paneId: string, image: File) => Promise<UploadedImage>;
@@ -116,45 +118,54 @@ export function useTerminalImages({
     operation.current = true;
     setBusy(true);
     try {
-      while (mounted.current && batchRef.current.id === batchId) {
-        const item = batchRef.current.items.find(
-          ({ status }) => status === "staged",
-        );
-        if (!item) break;
-        commit((current) =>
-          updateTerminalImage(current, batchId, item.id, {
-            error: "",
-            status: "uploading",
-          }),
-        );
-        try {
-          const uploaded = await onUpload(paneId, item.file);
-          if (!uploaded.path) {
-            throw new Error(
-              "The Herdr bridge did not return an uploaded image path.",
-            );
-          }
-          if (!mounted.current || batchRef.current.id !== batchId) return;
+      const uploadNext = async () => {
+        while (mounted.current && batchRef.current.id === batchId) {
+          const item = batchRef.current.items.find(
+            ({ status }) => status === "staged",
+          );
+          if (!item) return;
           commit((current) =>
             updateTerminalImage(current, batchId, item.id, {
               error: "",
-              path: uploaded.path,
-              status: "uploaded",
+              status: "uploading",
             }),
           );
-        } catch (uploadError) {
-          if (!mounted.current || batchRef.current.id !== batchId) return;
-          commit((current) =>
-            updateTerminalImage(current, batchId, item.id, {
-              error:
-                uploadError instanceof Error
-                  ? uploadError.message
-                  : "Image upload failed.",
-              status: "failed",
-            }),
-          );
+          try {
+            const uploaded = await onUpload(paneId, item.file);
+            if (!uploaded.path) {
+              throw new Error(
+                "The Herdr bridge did not return an uploaded image path.",
+              );
+            }
+            if (!mounted.current || batchRef.current.id !== batchId) return;
+            commit((current) =>
+              updateTerminalImage(current, batchId, item.id, {
+                error: "",
+                path: uploaded.path,
+                status: "uploaded",
+              }),
+            );
+          } catch (uploadError) {
+            if (!mounted.current || batchRef.current.id !== batchId) return;
+            commit((current) =>
+              updateTerminalImage(current, batchId, item.id, {
+                error:
+                  uploadError instanceof Error
+                    ? uploadError.message
+                    : "Image upload failed.",
+                status: "failed",
+              }),
+            );
+          }
         }
-      }
+      };
+      const workerCount = Math.min(
+        MAX_CONCURRENT_UPLOADS,
+        prepared.items.filter(({ status }) => status === "staged").length,
+      );
+      await Promise.all(
+        Array.from({ length: workerCount }, () => uploadNext()),
+      );
       const completed = batchRef.current;
       if (
         completed.id !== batchId ||

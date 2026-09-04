@@ -10,6 +10,8 @@ interface ApiErrorBody {
 // Cover tab creation, pane-busy retries, a final Agent start request,
 // readiness polling, cleanup, and transport overhead.
 const AGENT_CREATION_TIMEOUT_MS = 205_000;
+const IMAGE_UPLOAD_TIMEOUT_MS = 120_000;
+const IMAGE_UPLOAD_RETRY_DELAYS_MS = [250, 750] as const;
 const RUNTIME_MUTATION_TIMEOUT_MS = 305_000;
 
 export class HerdrBridgeError extends Error {
@@ -210,7 +212,36 @@ export const SUPPORTED_IMAGE_TYPES = [
   "image/webp",
 ] as const;
 
+function createUploadId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function retryableUploadError(error: unknown): boolean {
+  if (error instanceof HerdrBridgeError) {
+    return (
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError"))
+  );
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 export class HerdrApiClient {
+  private readonly imageUploadIds = new WeakMap<File, string>();
+
   constructor(private readonly token: string) {}
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -510,15 +541,29 @@ export class HerdrApiClient {
     });
   }
 
-  uploadImage(paneId: string, image: File): Promise<UploadedImage> {
-    return this.request(
-      `/api/herdr/agents/${encodeURIComponent(paneId)}/images`,
-      {
-        body: image,
-        headers: { "content-type": image.type },
-        method: "POST",
-      },
-    );
+  async uploadImage(paneId: string, image: File): Promise<UploadedImage> {
+    const uploadId = this.imageUploadIds.get(image) ?? createUploadId();
+    this.imageUploadIds.set(image, uploadId);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.request(
+          `/api/herdr/agents/${encodeURIComponent(paneId)}/images`,
+          {
+            body: image,
+            headers: {
+              "content-type": image.type,
+              "x-herdr-upload-id": uploadId,
+            },
+            method: "POST",
+            signal: AbortSignal.timeout(IMAGE_UPLOAD_TIMEOUT_MS),
+          },
+        );
+      } catch (error) {
+        const delay = IMAGE_UPLOAD_RETRY_DELAYS_MS[attempt];
+        if (delay === undefined || !retryableUploadError(error)) throw error;
+        await wait(delay);
+      }
+    }
   }
 
   uploadFile(paneId: string, file: File): Promise<UploadedFile> {

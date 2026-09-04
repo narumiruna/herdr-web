@@ -1,6 +1,6 @@
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { HerdrApiError, type HerdrClient } from "../server/herdr-client";
 import {
@@ -351,11 +351,15 @@ branch refs/heads/narumi/feat/tree
     );
 
     try {
-      const result = await service.uploadImage("w5:p1", {
+      const input = {
         data: png,
         mediaType: "image/png",
-      });
+        uploadId: "upload-request-0001",
+      };
+      const result = await service.uploadImage("w5:p1", input);
+      const repeated = await service.uploadImage("w5:p1", input);
 
+      expect(request).toHaveBeenCalledTimes(2);
       expect(request).toHaveBeenCalledWith("pane.get", { pane_id: "w5:p1" });
       expect(result).toMatchObject({
         mediaType: "image/png",
@@ -363,6 +367,8 @@ branch refs/heads/narumi/feat/tree
         type: "image_uploaded",
       });
       expect(result.path).toContain(uploadsRoot);
+      expect(repeated.path).toBe(result.path);
+      expect(await readdir(uploadsRoot)).toEqual([basename(result.path)]);
       await expect(readFile(result.path)).resolves.toEqual(png);
       expect((await stat(uploadsRoot)).mode & 0o777).toBe(0o700);
       expect((await stat(result.path)).mode & 0o777).toBe(0o600);

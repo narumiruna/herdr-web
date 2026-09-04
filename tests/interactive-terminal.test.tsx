@@ -934,6 +934,62 @@ describe("InteractiveTerminal", () => {
     ]);
   });
 
+  test("uploads image batches with bounded concurrency and preserves insertion order", async () => {
+    let active = 0;
+    let peak = 0;
+    const releases = new Map<string, () => void>();
+    const onUploadImage = vi.fn(async (_paneId: string, file: File) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => releases.set(file.name, resolve));
+      active -= 1;
+      return {
+        mediaType: file.type,
+        path: `/repo/${file.name}`,
+        size: file.size,
+        type: "image_uploaded" as const,
+      };
+    });
+    const { socket } = await renderTerminal({ onUploadImage });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const files = ["first.png", "second.png", "third.png", "fourth.png"].map(
+      (name) => new File([name], name, { type: "image/png" }),
+    );
+    fireEvent.paste(window, {
+      clipboardData: { files, items: [], types: ["Files"] },
+    });
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Upload 4 images and insert paths",
+      }),
+    );
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledTimes(3));
+    expect(peak).toBe(3);
+
+    releases.get("second.png")?.();
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledTimes(4));
+    expect(peak).toBe(3);
+    releases.get("first.png")?.();
+    releases.get("third.png")?.();
+    releases.get("fourth.png")?.();
+
+    await waitFor(() =>
+      expect(
+        socket.sent
+          .map((value) => JSON.parse(value))
+          .filter(({ type }) => type === "terminal.input"),
+      ).toEqual([
+        {
+          data: " '/repo/first.png' '/repo/second.png' '/repo/third.png' '/repo/fourth.png' ",
+          type: "terminal.input",
+        },
+      ]),
+    );
+  });
+
   test("stages every supported image from one clipboard event in order", async () => {
     const { socket } = await renderTerminal();
     socket.message(frame());
