@@ -283,17 +283,24 @@ describe("xterm renderer lifecycle", () => {
 });
 
 describe("terminal font readiness", () => {
-  test("loads both bundled terminal fonts", async () => {
+  test("loads normal and italic terminal weights with text and Nerd glyphs", async () => {
     const load = vi.fn().mockResolvedValue([]);
 
     await waitForTerminalFonts({ load } as unknown as FontFaceSet, 13, 20);
 
-    expect(load).toHaveBeenNthCalledWith(1, '13px "JetBrains Mono"', "Ag");
-    expect(load).toHaveBeenNthCalledWith(
-      2,
-      '13px "Symbols Nerd Font Mono"',
-      "\ue0b0",
-    );
+    expect(load).toHaveBeenCalledTimes(4);
+    for (const [index, style] of [
+      "400",
+      "600",
+      "italic 400",
+      "italic 600",
+    ].entries()) {
+      expect(load).toHaveBeenNthCalledWith(
+        index + 1,
+        `${style} 13px "JetBrainsMono Nerd Font Mono"`,
+        "Ag\ue0b0\uf489\u{f02a2}",
+      );
+    }
   });
 
   test("returns after font rejection or the bounded timeout", async () => {

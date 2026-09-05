@@ -141,10 +141,14 @@ export async function waitForTerminalFonts(
   });
   try {
     await Promise.race([
-      Promise.all([
-        fonts.load(`${fontSize}px "JetBrains Mono"`, "Ag"),
-        fonts.load(`${fontSize}px "Symbols Nerd Font Mono"`, "\ue0b0"),
-      ]).then(() => undefined),
+      Promise.all(
+        ["400", "600", "italic 400", "italic 600"].map((style) =>
+          fonts.load(
+            `${style} ${fontSize}px "JetBrainsMono Nerd Font Mono"`,
+            "Ag\ue0b0\uf489\u{f02a2}",
+          ),
+        ),
+      ).then(() => undefined),
       fallback,
     ]);
   } catch {

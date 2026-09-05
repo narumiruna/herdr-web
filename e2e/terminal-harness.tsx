@@ -1,5 +1,3 @@
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/600.css";
 import "../src/styles-entry";
 import { Theme } from "@radix-ui/themes";
 import { useState } from "react";

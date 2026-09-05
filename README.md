@@ -30,7 +30,7 @@ It keeps herdr's core job visible: find the Agent that needs input, control its 
 - Last-valid-snapshot recovery with snapshot age, safe disabled actions, and per-pane read recovery.
 - Four saved themes: Editorial Light and Dark use warm paper and subdued sumi tones, while Classic Light and Dark preserve the original Sand and Amber workbench.
 - Interactive terminals retain their independent high-contrast dark palette across every theme for reliable ANSI and TUI readability.
-- JetBrains Mono terminal text with bundled Nerd Font symbols, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback.
+- Bundled JetBrainsMono Nerd Font Mono (Nerd Fonts v3.5.1) for terminal text and icons, Unicode 11 cell widths, optional WebGL acceleration, and a safe built-in renderer fallback. Font source and licenses: [`public/fonts/README.md`](public/fonts/README.md).
 - Browser-saved Compact, Default, and Comfortable terminal text sizes with focused-terminal zoom shortcuts.
 - Explicit screen-reader terminal and reduced-motion modes, plus keyboard-only workbench and terminal-adjacent controls.
 - A redacted terminal diagnostics panel for measured WebSocket bridge round trip, output delivery, reconnect count, renderer, dimensions, Unicode, Herdr protocol, and actual control or observation mode.

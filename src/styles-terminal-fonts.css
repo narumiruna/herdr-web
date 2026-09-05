@@ -1,0 +1,36 @@
+/* Full Nerd Fonts v3.5.1 Mono glyphs; provenance and license: public/fonts/. */
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/fonts/jetbrains-mono-nerd-font-mono-v3.5.1-regular.woff2")
+    format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/fonts/jetbrains-mono-nerd-font-mono-v3.5.1-semibold.woff2")
+    format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/fonts/jetbrains-mono-nerd-font-mono-v3.5.1-italic.woff2")
+    format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/fonts/jetbrains-mono-nerd-font-mono-v3.5.1-semibolditalic.woff2")
+    format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 600;
+}

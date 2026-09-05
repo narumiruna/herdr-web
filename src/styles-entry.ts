@@ -10,6 +10,7 @@ import "@radix-ui/colors/red-dark.css";
 import "@radix-ui/colors/sand.css";
 import "@radix-ui/colors/sand-dark.css";
 import "@xterm/xterm/css/xterm.css";
+import "./styles-terminal-fonts.css";
 import "./styles-foundation.css";
 import "./styles-navigation.css";
 import "./styles.css";

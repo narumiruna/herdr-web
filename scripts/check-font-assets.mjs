@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,4 +49,59 @@ if (totalBytes > budgetBytes) {
 
 console.log(
   `Zen Old Mincho browser assets: ${files.length} files, ${totalBytes} bytes.`,
+);
+
+const terminalStyles = ["regular", "semibold", "italic", "semibolditalic"];
+let terminalBytes = 0;
+for (const style of terminalStyles) {
+  const name = `jetbrains-mono-nerd-font-mono-v3.5.1-${style}.woff2`;
+  const source = await readFile(
+    new URL(`../public/fonts/${name}`, import.meta.url),
+  );
+  const built = await readFile(
+    new URL(`../dist/fonts/${name}`, import.meta.url),
+  );
+  if (built.toString("ascii", 0, 4) !== "wOF2" || !built.equals(source)) {
+    throw new Error(`Missing or altered terminal WOFF2 asset: ${name}`);
+  }
+  terminalBytes += built.length;
+}
+if (terminalBytes > 5 * 1024 * 1024) {
+  throw new Error(
+    `Terminal font assets exceed the 5 MiB budget: ${terminalBytes}`,
+  );
+}
+for (const name of [
+  "JETBRAINS-MONO-OFL.txt",
+  "JETBRAINS-MONO-NERD-FONTS-README.md",
+  "NERD-FONTS-LICENSE.txt",
+  "README.md",
+]) {
+  const source = await readFile(
+    new URL(`../public/fonts/${name}`, import.meta.url),
+  );
+  const built = await readFile(
+    new URL(`../dist/fonts/${name}`, import.meta.url),
+  );
+  if (!built.equals(source))
+    throw new Error(`Altered font documentation: ${name}`);
+}
+const legacyAssets = [
+  ...(await readdir(assetsDirectory)),
+  ...(await readdir(new URL("../dist/fonts/", import.meta.url))),
+].filter(
+  (file) =>
+    file.startsWith("jetbrains-mono-") &&
+    !file.includes("nerd-font-mono-v3.5.1-"),
+);
+if (
+  legacyAssets.length ||
+  (await readdir(new URL("../dist/fonts/", import.meta.url))).includes(
+    "symbols-nerd-font-mono.woff2",
+  )
+) {
+  throw new Error("Legacy terminal fonts must not be bundled.");
+}
+console.log(
+  `Terminal Nerd Font assets: ${terminalStyles.length} files, ${terminalBytes} bytes.`,
 );
