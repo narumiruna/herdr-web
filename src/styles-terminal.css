@@ -26,7 +26,7 @@
   border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-panel);
   color: var(--terminal-muted);
-  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 10px;
 }
 .interactive-terminal-state,
@@ -82,7 +82,7 @@
   border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-panel);
   color: var(--terminal-muted);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 10px;
 }
 .terminal-selection-toolbar button {
@@ -108,7 +108,7 @@
   border-bottom: 1px solid var(--red-8);
   background: var(--red-3);
   color: var(--red-12);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 10px;
 }
 .terminal-paste-sink {
@@ -148,7 +148,7 @@
   border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-elevated);
   color: var(--terminal-muted);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 10px;
 }
 .terminal-search label {
@@ -201,7 +201,7 @@
   gap: 8px;
   background: color-mix(in srgb, var(--terminal) 82%, transparent);
   color: var(--terminal-muted);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 11px;
 }
 .terminal-state-action {
@@ -329,7 +329,7 @@
   outline: 0;
   background: var(--panel);
   color: var(--ink);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   line-height: 1.5;
 }
 .terminal-prompt-form textarea:focus-visible {
@@ -429,7 +429,7 @@
 .composer-error,
 .composer-progress,
 .composer-disabled-note {
-  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
 }
 .composer-attachment-copy strong {
   overflow: hidden;
@@ -476,7 +476,7 @@
 }
 .composer-success {
   color: var(--grass-12);
-  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 11px;
 }
 .message-composer textarea {
@@ -489,7 +489,7 @@
   outline: 0;
   background: transparent;
   color: var(--terminal-text);
-  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 11px;
   line-height: 24px;
 }
@@ -511,7 +511,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--terminal-muted);
-  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", monospace;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace;
   font-size: 10px;
 }
 .terminal-readonly {

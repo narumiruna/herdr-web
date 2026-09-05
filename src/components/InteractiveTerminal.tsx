@@ -672,7 +672,7 @@ export function InteractiveTerminal({
       cursorInactiveStyle: "outline",
       cursorStyle: "block",
       customGlyphs: true,
-      fontFamily: '"JetBrains Mono", "Symbols Nerd Font Mono", monospace',
+      fontFamily: '"JetBrainsMono Nerd Font Mono", monospace',
       fontSize: clampTerminalFontSize(fontSizeRef.current),
       fontWeight: "400",
       fontWeightBold: "600",

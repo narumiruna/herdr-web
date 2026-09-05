@@ -159,15 +159,19 @@ for (const deviceScaleFactor of [1, 2]) {
       }
       await expect
         .poll(() =>
-          page.evaluate(() => ({
-            jetbrains: document.fonts.check('13px "JetBrains Mono"', "Ag"),
-            nerd: document.fonts.check(
-              '13px "Symbols Nerd Font Mono"',
-              "\ue0b0",
-            ),
-          })),
+          page.evaluate(() =>
+            Array.from(document.fonts)
+              .filter((font) => font.family === "JetBrainsMono Nerd Font Mono")
+              .map((font) => `${font.style} ${font.weight} ${font.status}`)
+              .sort(),
+          ),
         )
-        .toEqual({ jetbrains: true, nerd: true });
+        .toEqual([
+          "italic 400 loaded",
+          "italic 600 loaded",
+          "normal 400 loaded",
+          "normal 600 loaded",
+        ]);
 
       await page.evaluate(() =>
         window.__terminalSockets[0]?.renderingFixture(),

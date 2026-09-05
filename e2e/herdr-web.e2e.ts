@@ -869,16 +869,13 @@ test("split down stacks panes using Herdr's direction", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
-test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
-  page,
-}) => {
+test("terminal uses bundled JetBrainsMono Nerd Font Mono", async ({ page }) => {
   await page.goto("/");
   const fontFamily = await page
     .locator(".terminal-lines")
     .evaluate((element) => getComputedStyle(element).fontFamily);
 
-  expect(fontFamily).toContain("JetBrains Mono");
-  expect(fontFamily).toContain("Symbols Nerd Font Mono");
+  expect(fontFamily).toBe('"JetBrainsMono Nerd Font Mono", monospace');
   await page.locator(".terminal-lines").evaluate((terminal) => {
     const symbol = document.createElement("span");
     symbol.textContent = " 󰊢 ";
@@ -890,8 +887,9 @@ test("terminal uses JetBrains Mono with bundled Nerd Font symbols", async ({
       .filter((font) => font.status === "loaded")
       .map((font) => font.family),
   );
-  expect(loadedFonts).toContain("JetBrains Mono");
-  expect(loadedFonts).toContain("Symbols Nerd Font Mono");
+  expect(loadedFonts).toContain("JetBrainsMono Nerd Font Mono");
+  expect(loadedFonts).not.toContain("JetBrains Mono");
+  expect(loadedFonts).not.toContain("Symbols Nerd Font Mono");
 });
 
 test("command palette works with a keyboard only", async ({ page }) => {
