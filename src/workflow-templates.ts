@@ -1,17 +1,7 @@
-import type { RuntimeName } from "./state";
+import { isAgentRuntime, type RuntimeName } from "../server/agent-runtimes";
 
-export const RUNTIME_COMMAND: Record<RuntimeName, string> = {
-  "Claude Code": "claude",
-  Codex: "codex --full-auto",
-  Muse: "muse",
-  OpenCode: "opencode",
-  Pi: "pi",
-  "Qwen Code": "qwen",
-};
+export { RUNTIME_COMMAND } from "../server/agent-runtimes";
 
-const RUNTIMES = new Set<RuntimeName>(
-  Object.keys(RUNTIME_COMMAND) as RuntimeName[],
-);
 const TEMPLATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_PARALLEL_LAUNCHES = 3;
 
@@ -95,7 +85,7 @@ export function parseWorkflowTemplate(
     const prompt = validString(step.prompt, 20_000);
     if (
       !runtime ||
-      !RUNTIMES.has(runtime) ||
+      !isAgentRuntime(runtime) ||
       !stepId ||
       !TEMPLATE_ID.test(stepId) ||
       !label ||

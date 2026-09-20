@@ -1,3 +1,7 @@
+import type { RuntimeName } from "../server/agent-runtimes";
+
+export type { RuntimeName } from "../server/agent-runtimes";
+
 export type AgentStatus =
   | "working"
   | "blocked"
@@ -5,14 +9,6 @@ export type AgentStatus =
   | "done"
   | "failed"
   | "unknown";
-
-export type RuntimeName =
-  | "Claude Code"
-  | "Codex"
-  | "Muse"
-  | "OpenCode"
-  | "Pi"
-  | "Qwen Code";
 
 export interface WorkspaceWorktree {
   branch: string;

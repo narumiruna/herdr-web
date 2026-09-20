@@ -17,6 +17,8 @@
     "scripts/lan-address.mjs",
     "scripts/start-workbench.d.mts",
     "scripts/start-workbench.mjs",
+    "scripts/startup-environment.d.mts",
+    "scripts/startup-environment.mjs",
     "server",
     "src",
     "tsconfig.json",

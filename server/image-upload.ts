@@ -1,14 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import {
-  link,
-  mkdir,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { homedir } from "node:os";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { link, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { paneUploadDirectory } from "./upload-directory.js";
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -81,39 +74,18 @@ export function validateImage({ data, mediaType }: ImageUploadInput): string {
   return extension;
 }
 
-function contains(parent: string, child: string): boolean {
-  const path = relative(parent, child);
-  return (
-    path === "" ||
-    (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`))
-  );
-}
-
 export async function writePaneImage(
   cwd: string,
   input: ImageUploadInput,
   projectsRoot?: string,
-  uploadsRoot = join(homedir(), ".herdr-web", "uploads"),
+  uploadsRoot?: string,
 ): Promise<UploadedImage> {
   const extension = validateImage(input);
-  if (!isAbsolute(cwd)) {
-    throw new TypeError("Herdr pane did not report an absolute directory");
-  }
-  const projectDirectory = await realpath(cwd);
-  if (projectsRoot) {
-    const allowedRoot = await realpath(projectsRoot);
-    if (!contains(allowedRoot, projectDirectory)) {
-      throw new TypeError(
-        "Pane directory is outside the Docker-mounted HERDR_PROJECTS_ROOT",
-      );
-    }
-  }
-
-  if (!isAbsolute(uploadsRoot)) {
-    throw new TypeError("herdr-web upload directory must be absolute");
-  }
-  await mkdir(uploadsRoot, { mode: 0o700, recursive: true });
-  const uploadDirectory = await realpath(uploadsRoot);
+  const uploadDirectory = await paneUploadDirectory(
+    cwd,
+    projectsRoot,
+    uploadsRoot,
+  );
 
   const uploadId = input.uploadId
     ? validateImageUploadId(input.uploadId)

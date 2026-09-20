@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isAgentRuntime } from "./agent-runtimes.js";
 import {
   type FileUploadInput,
   MAX_FILE_BYTES,
@@ -38,49 +39,48 @@ import type {
   ViewerShareStore,
 } from "./share-store.js";
 import type { TerminalTicketStore } from "./terminal-tickets.js";
-import {
-  type ProjectWorkflowStep,
-  type ProjectWorkflowTemplate,
-  WORKFLOW_RUNTIMES,
-  type WorkflowTemplateStore,
+import type {
+  ProjectWorkflowStep,
+  ProjectWorkflowTemplate,
+  WorkflowTemplateStore,
 } from "./workflow-template-store.js";
 
 export interface HerdrService {
-  agentLifecycle?(
+  agentLifecycle(
     target: string,
     action: AgentLifecycleAction,
   ): Promise<unknown>;
   closePane(paneId: string): Promise<unknown>;
-  closeTab?(tabId: string): Promise<unknown>;
+  closeTab(tabId: string): Promise<unknown>;
   createSession(input: CreateSessionInput): Promise<unknown>;
-  createTerminal?(input: CreateTerminalInput): Promise<unknown>;
+  createTerminal(input: CreateTerminalInput): Promise<unknown>;
   createWorkspace(input: CreateWorkspaceInput): Promise<unknown>;
   getState(): Promise<unknown>;
-  getSnapshotState?(): Promise<unknown>;
-  invokePluginAction?(actionId: string): Promise<unknown>;
-  listPluginActions?(): Promise<unknown>;
-  listPluginLogs?(pluginId?: string): Promise<unknown>;
-  listPlugins?(): Promise<unknown>;
-  manageIntegration?(
+  getSnapshotState(): Promise<unknown>;
+  invokePluginAction(actionId: string): Promise<unknown>;
+  listPluginActions(): Promise<unknown>;
+  listPluginLogs(pluginId?: string): Promise<unknown>;
+  listPlugins(): Promise<unknown>;
+  manageIntegration(
     target: string,
     action: IntegrationAction,
   ): Promise<unknown>;
   promptAgent(target: string, text: string): Promise<unknown>;
-  moveTab?(tabId: string, direction: "left" | "right"): Promise<unknown>;
-  renameTab?(tabId: string, label: string): Promise<unknown>;
-  setPluginEnabled?(pluginId: string, enabled: boolean): Promise<unknown>;
+  moveTab(tabId: string, direction: "left" | "right"): Promise<unknown>;
+  renameTab(tabId: string, label: string): Promise<unknown>;
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<unknown>;
   setSplitRatio(
     tabId: string,
     path: boolean[],
     ratio: number,
   ): Promise<unknown>;
   splitPane(paneId: string, direction: PaneSplitDirection): Promise<unknown>;
-  subscribeEvents?(
+  subscribeEvents(
     signal: AbortSignal,
     onEvent: (event: unknown) => void,
     onReady?: () => void,
   ): Promise<void>;
-  uploadFile?(paneId: string, input: FileUploadInput): Promise<UploadedFile>;
+  uploadFile(paneId: string, input: FileUploadInput): Promise<UploadedFile>;
   uploadImage(paneId: string, input: ImageUploadInput): Promise<UploadedImage>;
 }
 
@@ -88,12 +88,12 @@ interface HandlerOptions {
   machineService?: SavedMachineService;
   service: HerdrService;
   terminalConfigured?: boolean;
-  pushNotifications?: PushNotificationService;
-  shareStore?: ViewerShareStore;
-  terminalTickets?: TerminalTicketStore;
+  pushNotifications: PushNotificationService;
+  shareStore: ViewerShareStore;
+  terminalTickets: TerminalTicketStore;
   token: string;
   viewToken?: string;
-  workflowTemplates?: WorkflowTemplateStore;
+  workflowTemplates: WorkflowTemplateStore;
 }
 
 const RESOURCE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -175,15 +175,15 @@ interface AccessPrincipal {
 function accessPrincipal(
   request: IncomingMessage,
   controllerToken: string,
-  viewToken?: string,
-  shareStore?: ViewerShareStore,
+  viewToken: string | undefined,
+  shareStore: ViewerShareStore,
 ): AccessPrincipal | undefined {
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return undefined;
   const supplied = header.slice(7);
   if (tokenMatches(supplied, controllerToken)) return { role: "controller" };
   if (viewToken && tokenMatches(supplied, viewToken)) return { role: "viewer" };
-  const share = shareStore?.resolve(supplied);
+  const share = shareStore.resolve(supplied);
   return share ? { role: "viewer", share } : undefined;
 }
 
@@ -419,9 +419,7 @@ function cleanShareDuration(value: unknown): number {
 function cleanWorkflowStep(value: unknown, index: number): ProjectWorkflowStep {
   const step = objectBody(value);
   const runtime = cleanText(step.runtime, "runtime", 40);
-  if (
-    !WORKFLOW_RUNTIMES.includes(runtime as (typeof WORKFLOW_RUNTIMES)[number])
-  ) {
+  if (!isAgentRuntime(runtime)) {
     throw new TypeError("Unsupported workflow Agent runtime");
   }
   if (
@@ -447,7 +445,7 @@ function cleanWorkflowStep(value: unknown, index: number): ProjectWorkflowStep {
         ? Number(step.order)
         : index,
     prompt,
-    runtime: runtime as ProjectWorkflowStep["runtime"],
+    runtime,
     waitForPrevious: step.waitForPrevious === true,
   };
 }
@@ -492,10 +490,6 @@ function blockedAgentOwnsPane(state: unknown, paneId: string): boolean {
       (agent) => agent.agent_status === "blocked" && agent.pane_id === paneId,
     ) === true
   );
-}
-
-async function snapshotState(service: HerdrService): Promise<unknown> {
-  return service.getSnapshotState?.() ?? service.getState();
 }
 
 function shareEventAllowed(
@@ -606,15 +600,6 @@ export function createHerdrHttpHandler({
     const { role } = principal;
     try {
       if (request.method === "GET" && url.pathname === "/api/herdr/events") {
-        if (!service.subscribeEvents) {
-          sendJson(response, 404, {
-            error: {
-              code: "event_stream_unavailable",
-              message: "Herdr event streaming is unavailable",
-            },
-          });
-          return;
-        }
         if (activeEventStreams >= 32) {
           sendJson(response, 429, {
             error: {
@@ -636,16 +621,15 @@ export function createHerdrHttpHandler({
             )
           : undefined;
         shareExpiry?.unref();
-        const stopRevocationListener =
-          principal.share && shareStore
-            ? shareStore.onRevoked((shareId) => {
-                if (shareId === principal.share?.id) controller.abort();
-              })
-            : undefined;
+        const stopRevocationListener = principal.share
+          ? shareStore.onRevoked((shareId) => {
+              if (shareId === principal.share?.id) controller.abort();
+            })
+          : undefined;
         response.once("close", () => controller.abort());
         try {
           let shareState = principal.share
-            ? await snapshotState(service)
+            ? await service.getSnapshotState()
             : undefined;
           const writeEvent = async (event: unknown) => {
             if (response.writableEnded) return;
@@ -653,7 +637,7 @@ export function createHerdrHttpHandler({
               if (
                 !shareEventAllowed(event, principal.share.scope, shareState)
               ) {
-                shareState = await snapshotState(service);
+                shareState = await service.getSnapshotState();
                 if (
                   !shareEventAllowed(event, principal.share.scope, shareState)
                 ) {
@@ -714,7 +698,7 @@ export function createHerdrHttpHandler({
       if (request.method === "GET" && url.pathname === "/api/herdr/state") {
         const state = await service.getState();
         if (principal.share) {
-          if (!shareStore?.isActive(principal.share.id)) {
+          if (!shareStore.isActive(principal.share.id)) {
             sendJson(response, 401, {
               error: {
                 code: "share_expired_or_revoked",
@@ -755,7 +739,7 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/panes\/([^/]+)\/terminal-ticket$/,
       );
       if (request.method === "POST" && terminalTicket?.[1]) {
-        if (!terminalConfigured || !terminalTickets) {
+        if (!terminalConfigured) {
           sendJson(response, 409, {
             error: {
               code: "terminal_streaming_unavailable",
@@ -821,7 +805,7 @@ export function createHerdrHttpHandler({
           });
           return;
         }
-        if (principal.share && !shareStore?.isActive(principal.share.id)) {
+        if (principal.share && !shareStore.isActive(principal.share.id)) {
           sendJson(response, 401, {
             error: {
               code: "share_expired_or_revoked",
@@ -860,17 +844,11 @@ export function createHerdrHttpHandler({
         request.method === "GET" &&
         url.pathname === "/api/herdr/viewer-shares"
       ) {
-        if (role !== "controller" || !shareStore) {
-          sendJson(response, role === "controller" ? 404 : 403, {
+        if (role !== "controller") {
+          sendJson(response, 403, {
             error: {
-              code:
-                role === "controller"
-                  ? "share_api_unavailable"
-                  : "read_only_access",
-              message:
-                role === "controller"
-                  ? "Viewer share management is unavailable"
-                  : "Viewer shares require controller access",
+              code: "read_only_access",
+              message: "Viewer shares require controller access",
             },
           });
           return;
@@ -885,13 +863,10 @@ export function createHerdrHttpHandler({
         request.method === "POST" &&
         url.pathname === "/api/herdr/viewer-shares"
       ) {
-        if (role !== "controller" || !shareStore) {
-          sendJson(response, role === "controller" ? 404 : 403, {
+        if (role !== "controller") {
+          sendJson(response, 403, {
             error: {
-              code:
-                role === "controller"
-                  ? "share_api_unavailable"
-                  : "read_only_access",
+              code: "read_only_access",
               message: "Viewer share management requires controller access",
             },
           });
@@ -924,13 +899,10 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/viewer-shares\/([^/]+)$/,
       );
       if (request.method === "DELETE" && viewerShare?.[1]) {
-        if (role !== "controller" || !shareStore) {
-          sendJson(response, role === "controller" ? 404 : 403, {
+        if (role !== "controller") {
+          sendJson(response, 403, {
             error: {
-              code:
-                role === "controller"
-                  ? "share_api_unavailable"
-                  : "read_only_access",
+              code: "read_only_access",
               message: "Viewer share management requires controller access",
             },
           });
@@ -946,7 +918,7 @@ export function createHerdrHttpHandler({
           });
           return;
         }
-        terminalTickets?.revokeShare(id);
+        terminalTickets.revokeShare(id);
         sendJson(response, 200, { id, type: "viewer_share_revoked" });
         return;
       }
@@ -990,15 +962,6 @@ export function createHerdrHttpHandler({
         request.method === "GET" &&
         url.pathname === "/api/herdr/push/config"
       ) {
-        if (!pushNotifications) {
-          sendJson(response, 404, {
-            error: {
-              code: "push_api_unavailable",
-              message: "Background push notifications are unavailable",
-            },
-          });
-          return;
-        }
         sendJson(response, 200, {
           publicKey: pushNotifications.publicKey(),
           type: "push_config",
@@ -1009,20 +972,11 @@ export function createHerdrHttpHandler({
         request.method === "PUT" &&
         url.pathname === "/api/herdr/push/subscription"
       ) {
-        if (!pushNotifications) {
-          sendJson(response, 404, {
-            error: {
-              code: "push_api_unavailable",
-              message: "Background push notifications are unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         await pushNotifications.upsert(
           cleanPushSubscription(body.subscription),
           cleanPushPreferences(body.preferences),
-          await snapshotState(service),
+          await service.getSnapshotState(),
         );
         sendJson(response, 200, { type: "push_subscription_saved" });
         return;
@@ -1031,15 +985,6 @@ export function createHerdrHttpHandler({
         request.method === "DELETE" &&
         url.pathname === "/api/herdr/push/subscription"
       ) {
-        if (!pushNotifications) {
-          sendJson(response, 404, {
-            error: {
-              code: "push_api_unavailable",
-              message: "Background push notifications are unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         const endpoint = cleanText(body.endpoint, "endpoint", 4_096);
         await pushNotifications.remove(endpoint);
@@ -1050,15 +995,6 @@ export function createHerdrHttpHandler({
         request.method === "GET" &&
         url.pathname === "/api/herdr/workflow-templates"
       ) {
-        if (!workflowTemplates) {
-          sendJson(response, 404, {
-            error: {
-              code: "workflow_template_api_unavailable",
-              message: "Project workflow template storage is unavailable",
-            },
-          });
-          return;
-        }
         const projectKey = cleanPath(
           url.searchParams.get("projectKey"),
           "projectKey",
@@ -1073,15 +1009,6 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/workflow-templates\/([^/]+)$/,
       );
       if (request.method === "PUT" && workflowTemplate?.[1]) {
-        if (!workflowTemplates) {
-          sendJson(response, 404, {
-            error: {
-              code: "workflow_template_api_unavailable",
-              message: "Project workflow template storage is unavailable",
-            },
-          });
-          return;
-        }
         const id = cleanExtensionId(
           workflowTemplate[1],
           "workflow template id",
@@ -1092,15 +1019,6 @@ export function createHerdrHttpHandler({
         return;
       }
       if (request.method === "DELETE" && workflowTemplate?.[1]) {
-        if (!workflowTemplates) {
-          sendJson(response, 404, {
-            error: {
-              code: "workflow_template_api_unavailable",
-              message: "Project workflow template storage is unavailable",
-            },
-          });
-          return;
-        }
         const id = cleanExtensionId(
           workflowTemplate[1],
           "workflow template id",
@@ -1122,15 +1040,6 @@ export function createHerdrHttpHandler({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/herdr/plugins") {
-        if (!service.listPlugins) {
-          sendJson(response, 404, {
-            error: {
-              code: "plugin_api_unavailable",
-              message: "Herdr plugin management is unavailable",
-            },
-          });
-          return;
-        }
         sendJson(response, 200, await service.listPlugins());
         return;
       }
@@ -1138,15 +1047,6 @@ export function createHerdrHttpHandler({
         request.method === "GET" &&
         url.pathname === "/api/herdr/plugin-actions"
       ) {
-        if (!service.listPluginActions) {
-          sendJson(response, 404, {
-            error: {
-              code: "plugin_api_unavailable",
-              message: "Herdr plugin actions are unavailable",
-            },
-          });
-          return;
-        }
         sendJson(response, 200, await service.listPluginActions());
         return;
       }
@@ -1154,15 +1054,6 @@ export function createHerdrHttpHandler({
         request.method === "GET" &&
         url.pathname === "/api/herdr/plugin-logs"
       ) {
-        if (!service.listPluginLogs) {
-          sendJson(response, 404, {
-            error: {
-              code: "plugin_api_unavailable",
-              message: "Herdr plugin logs are unavailable",
-            },
-          });
-          return;
-        }
         const pluginId = url.searchParams.get("pluginId")?.trim();
         sendJson(
           response,
@@ -1175,15 +1066,6 @@ export function createHerdrHttpHandler({
       }
       const plugin = url.pathname.match(/^\/api\/herdr\/plugins\/([^/]+)$/);
       if (request.method === "PATCH" && plugin?.[1]) {
-        if (!service.setPluginEnabled) {
-          sendJson(response, 404, {
-            error: {
-              code: "plugin_api_unavailable",
-              message: "Herdr plugin management is unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         if (typeof body.enabled !== "boolean") {
           throw new TypeError("enabled must be a boolean");
@@ -1202,15 +1084,6 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/plugin-actions\/([^/]+)\/invoke$/,
       );
       if (request.method === "POST" && pluginAction?.[1]) {
-        if (!service.invokePluginAction) {
-          sendJson(response, 404, {
-            error: {
-              code: "plugin_api_unavailable",
-              message: "Herdr plugin actions are unavailable",
-            },
-          });
-          return;
-        }
         sendJson(
           response,
           200,
@@ -1224,15 +1097,6 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/integrations\/([^/]+)$/,
       );
       if (request.method === "POST" && integration?.[1]) {
-        if (!service.manageIntegration) {
-          sendJson(response, 404, {
-            error: {
-              code: "integration_api_unavailable",
-              message: "Herdr integration management is unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         sendJson(
           response,
@@ -1268,15 +1132,6 @@ export function createHerdrHttpHandler({
       }
       const file = url.pathname.match(/^\/api\/herdr\/panes\/([^/]+)\/files$/);
       if (request.method === "POST" && file?.[1]) {
-        if (!service.uploadFile) {
-          sendJson(response, 404, {
-            error: {
-              code: "file_upload_unavailable",
-              message: "Generic file upload is unavailable",
-            },
-          });
-          return;
-        }
         const mediaType = request.headers["content-type"]
           ?.split(";", 1)[0]
           ?.trim()
@@ -1344,15 +1199,6 @@ export function createHerdrHttpHandler({
       }
       const tab = url.pathname.match(/^\/api\/herdr\/tabs\/([^/]+)$/);
       if (request.method === "PATCH" && tab?.[1]) {
-        if (!service.renameTab) {
-          sendJson(response, 404, {
-            error: {
-              code: "tab_rename_unavailable",
-              message: "Herdr tab rename is unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         sendJson(
           response,
@@ -1365,29 +1211,11 @@ export function createHerdrHttpHandler({
         return;
       }
       if (request.method === "DELETE" && tab?.[1]) {
-        if (!service.closeTab) {
-          sendJson(response, 404, {
-            error: {
-              code: "tab_close_unavailable",
-              message: "Herdr tab close is unavailable",
-            },
-          });
-          return;
-        }
         sendJson(response, 200, await service.closeTab(cleanId(tab[1])));
         return;
       }
       const moveTab = url.pathname.match(/^\/api\/herdr\/tabs\/([^/]+)\/move$/);
       if (request.method === "POST" && moveTab?.[1]) {
-        if (!service.moveTab) {
-          sendJson(response, 404, {
-            error: {
-              code: "tab_move_unavailable",
-              message: "Herdr tab ordering is unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         sendJson(
           response,
@@ -1403,15 +1231,6 @@ export function createHerdrHttpHandler({
         /^\/api\/herdr\/agents\/([^/]+)\/lifecycle$/,
       );
       if (request.method === "POST" && lifecycle?.[1]) {
-        if (!service.agentLifecycle) {
-          sendJson(response, 404, {
-            error: {
-              code: "agent_lifecycle_unavailable",
-              message: "Herdr Agent lifecycle controls are unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         sendJson(
           response,
@@ -1427,15 +1246,6 @@ export function createHerdrHttpHandler({
         request.method === "POST" &&
         url.pathname === "/api/herdr/terminals"
       ) {
-        if (!service.createTerminal) {
-          sendJson(response, 404, {
-            error: {
-              code: "terminal_lifecycle_unavailable",
-              message: "Herdr terminal creation is unavailable",
-            },
-          });
-          return;
-        }
         const body = objectBody(await readJson(request));
         sendJson(
           response,

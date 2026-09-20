@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createConnection } from "node:net";
+import { createConnection, type Socket } from "node:net";
 
 const MAX_HERDR_LINE_BYTES = 4 * 1024 * 1024;
 
@@ -40,6 +40,54 @@ export class HerdrApiError extends Error {
   }
 }
 
+// Returning false stops processing the current chunk after the caller settles.
+function receiveMessages(
+  socket: Socket,
+  kind: "response" | "subscription",
+  onMessage: (value: unknown) => boolean,
+  onError: (error: Error) => void,
+): void {
+  let buffer = "";
+  const oversized = () =>
+    onError(
+      new Error(
+        kind === "response"
+          ? "Herdr returned an oversized response"
+          : "Herdr returned an oversized subscription event",
+      ),
+    );
+  socket.setEncoding("utf8");
+  socket.on("data", (chunk) => {
+    buffer += chunk;
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf("\n");
+      if (!line) continue;
+      if (Buffer.byteLength(line) > MAX_HERDR_LINE_BYTES) {
+        oversized();
+        return;
+      }
+      let value: unknown;
+      try {
+        value = JSON.parse(line);
+      } catch {
+        onError(
+          new Error(
+            kind === "response"
+              ? "Herdr returned invalid JSON"
+              : "Herdr returned invalid subscription JSON",
+          ),
+        );
+        return;
+      }
+      if (!onMessage(value)) return;
+    }
+    if (Buffer.byteLength(buffer) > MAX_HERDR_LINE_BYTES) oversized();
+  });
+}
+
 export class HerdrClient {
   readonly endpoint: HerdrEndpoint;
   readonly timeoutMs: number;
@@ -47,6 +95,12 @@ export class HerdrClient {
   constructor(endpoint: HerdrEndpoint, options: HerdrClientOptions = {}) {
     this.endpoint = endpoint;
     this.timeoutMs = options.timeoutMs ?? 5_000;
+  }
+
+  private connect(): Socket {
+    return typeof this.endpoint === "string"
+      ? createConnection(this.endpoint)
+      : createConnection(this.endpoint.port, this.endpoint.host);
   }
 
   request<T = unknown>(
@@ -57,12 +111,8 @@ export class HerdrClient {
     const id = `herdr-web:${randomUUID()}`;
     const timeoutMs = options.timeoutMs ?? this.timeoutMs;
     return new Promise<T>((resolve, reject) => {
-      const socket =
-        typeof this.endpoint === "string"
-          ? createConnection(this.endpoint)
-          : createConnection(this.endpoint.port, this.endpoint.host);
+      const socket = this.connect();
       let settled = false;
-      let buffer = "";
       const finish = (error?: Error, result?: T) => {
         if (settled) return;
         settled = true;
@@ -75,48 +125,29 @@ export class HerdrClient {
         finish(new Error(`Herdr request timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      socket.setEncoding("utf8");
       socket.once("error", (error) => finish(error));
       socket.once("connect", () => {
         socket.write(`${JSON.stringify({ id, method, params })}\n`);
       });
-      socket.on("data", (chunk) => {
-        buffer += chunk;
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line) continue;
-          if (Buffer.byteLength(line) > MAX_HERDR_LINE_BYTES) {
-            finish(new Error("Herdr returned an oversized response"));
-            return;
-          }
-          let response: HerdrResponse;
-          try {
-            response = JSON.parse(line) as HerdrResponse;
-          } catch {
-            finish(new Error("Herdr returned invalid JSON"));
-            return;
-          }
-          if (response.id !== id) continue;
+      receiveMessages(
+        socket,
+        "response",
+        (value) => {
+          const response = value as HerdrResponse;
+          if (response.id !== id) return true;
           if (response.error) {
             finish(
               new HerdrApiError(response.error.code, response.error.message),
             );
-            return;
-          }
-          if (!("result" in response)) {
+          } else if (!("result" in response)) {
             finish(new Error("Herdr response did not include a result"));
-            return;
+          } else {
+            finish(undefined, response.result as T);
           }
-          finish(undefined, response.result as T);
-          return;
-        }
-        if (Buffer.byteLength(buffer) > MAX_HERDR_LINE_BYTES) {
-          finish(new Error("Herdr returned an oversized response"));
-        }
-      });
+          return false;
+        },
+        finish,
+      );
       socket.once("end", () => {
         finish(new Error("Herdr closed the socket before responding"));
       });
@@ -130,11 +161,7 @@ export class HerdrClient {
   ): Promise<void> {
     const id = `herdr-web:${randomUUID()}`;
     return new Promise<void>((resolve, reject) => {
-      const socket =
-        typeof this.endpoint === "string"
-          ? createConnection(this.endpoint)
-          : createConnection(this.endpoint.port, this.endpoint.host);
-      let buffer = "";
+      const socket = this.connect();
       let ready = false;
       let settled = false;
       const finish = (error?: Error) => {
@@ -158,42 +185,26 @@ export class HerdrClient {
         return;
       }
       signal.addEventListener("abort", abort, { once: true });
-      socket.setEncoding("utf8");
       socket.once("error", (error) => finish(error));
       socket.once("connect", () => {
         socket.write(`${JSON.stringify({ id, method, params })}\n`);
       });
-      socket.on("data", (chunk) => {
-        buffer += chunk;
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line) continue;
-          if (Buffer.byteLength(line) > MAX_HERDR_LINE_BYTES) {
-            finish(new Error("Herdr returned an oversized subscription event"));
-            return;
-          }
-          let value: unknown;
-          try {
-            value = JSON.parse(line);
-          } catch {
-            finish(new Error("Herdr returned invalid subscription JSON"));
-            return;
-          }
+      receiveMessages(
+        socket,
+        "subscription",
+        (value) => {
           if (!ready) {
             const response = value as HerdrResponse;
-            if (response.id !== id) continue;
+            if (response.id !== id) return true;
             if (response.error) {
               finish(
                 new HerdrApiError(response.error.code, response.error.message),
               );
-              return;
+              return false;
             }
             if (!("result" in response)) {
               finish(new Error("Herdr subscription did not start"));
-              return;
+              return false;
             }
             ready = true;
             clearTimeout(timeout);
@@ -205,9 +216,9 @@ export class HerdrClient {
                   ? error
                   : new Error("Herdr subscription setup failed"),
               );
-              return;
+              return false;
             }
-            continue;
+            return true;
           }
           try {
             onEvent(value as T);
@@ -217,13 +228,12 @@ export class HerdrClient {
                 ? error
                 : new Error("Herdr subscription event handling failed"),
             );
-            return;
+            return false;
           }
-        }
-        if (Buffer.byteLength(buffer) > MAX_HERDR_LINE_BYTES) {
-          finish(new Error("Herdr returned an oversized subscription event"));
-        }
-      });
+          return true;
+        },
+        finish,
+      );
       socket.once("end", () => {
         finish(
           signal.aborted

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -7,6 +7,7 @@ import {
   executeWorkflow,
   parseWorkflowTemplate,
   parseWorkflowTemplates,
+  RUNTIME_COMMAND,
   type WorkflowTemplate,
 } from "../src/workflow-templates";
 
@@ -50,6 +51,17 @@ function workflow(): WorkflowTemplate {
 }
 
 describe("workflow templates", () => {
+  test("retains the ordered runtime choices and exact display commands", () => {
+    expect(Object.entries(RUNTIME_COMMAND)).toEqual([
+      ["Claude Code", "claude"],
+      ["Codex", "codex --full-auto"],
+      ["Muse", "muse"],
+      ["OpenCode", "opencode"],
+      ["Pi", "pi"],
+      ["Qwen Code", "qwen"],
+    ]);
+  });
+
   test("accepts only versioned, bounded, allowlisted Agent steps", () => {
     expect(parseWorkflowTemplate(workflow())).toMatchObject({
       id: "review-pr",
@@ -111,6 +123,29 @@ describe("workflow templates", () => {
       },
     ]);
     expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  test("recovers the mutation queue after an unreadable store is repaired", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-workflow-recovery-"));
+    directories.push(directory);
+    const path = join(directory, "workflows.json");
+    const store = new WorkflowTemplateStore(path);
+    const template = {
+      ...workflow(),
+      projectKey: "/repo",
+      scope: "project" as const,
+    };
+    await writeFile(path, "invalid JSON");
+    await expect(store.save(template)).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe("invalid JSON");
+    await writeFile(path, '{"templates":[],"version":1}');
+    await store.save(template);
+    expect(await store.list("/repo")).toEqual([template]);
+    await Promise.all([
+      store.delete("/repo", template.id),
+      store.save(template),
+    ]);
+    expect(await store.list("/repo")).toEqual([template]);
   });
 
   test("persists project-scoped templates atomically outside the project", async () => {

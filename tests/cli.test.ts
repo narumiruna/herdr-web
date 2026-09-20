@@ -5,14 +5,30 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 const projectRoot = process.cwd();
 const cliPath = resolve(projectRoot, "scripts/herdr-web.mjs");
+const directories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    directories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+async function temporaryDirectory(prefix: string) {
+  const directory = await mkdtemp(resolve(tmpdir(), prefix));
+  directories.push(directory);
+  return directory;
+}
 
 interface Invocation {
   command: "herdr" | "npm";
@@ -59,7 +75,7 @@ async function runCli(
     snapshot = { result: { snapshot: { panes: [] } } },
   }: CliOptions = {},
 ) {
-  const root = await mkdtemp(resolve(tmpdir(), "herdr-web-cli-"));
+  const root = await temporaryDirectory("herdr-web-cli-");
   const { binDirectory, logPath } = await createFakeCommands(root);
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd: root,
@@ -88,7 +104,7 @@ async function runCli(
 
 describe("herdr-web CLI", () => {
   it("creates a workspace for a directory and starts the web workbench", async () => {
-    const fixtureRoot = await mkdtemp(resolve(tmpdir(), "herdr project "));
+    const fixtureRoot = await temporaryDirectory("herdr project ");
     const target = resolve(fixtureRoot, "sample project");
     await mkdir(target);
 
@@ -116,7 +132,7 @@ describe("herdr-web CLI", () => {
   });
 
   it("focuses a workspace whose pane already uses the directory", async () => {
-    const target = await mkdtemp(resolve(tmpdir(), "existing-herdr-project-"));
+    const target = await temporaryDirectory("existing-herdr-project-");
     const snapshot = {
       result: {
         snapshot: {
@@ -231,7 +247,7 @@ describe("herdr-web CLI", () => {
   });
 
   it("rejects extra positional arguments before calling external commands", async () => {
-    const target = await mkdtemp(resolve(tmpdir(), "extra-herdr-project-"));
+    const target = await temporaryDirectory("extra-herdr-project-");
     const result = await runCli([target, "extra"]);
 
     expect(result.status).not.toBe(0);
@@ -240,7 +256,7 @@ describe("herdr-web CLI", () => {
   });
 
   it("does not start the web workbench when Herdr fails", async () => {
-    const target = await mkdtemp(resolve(tmpdir(), "failing-herdr-project-"));
+    const target = await temporaryDirectory("failing-herdr-project-");
     const canonicalTarget = await realpath(target);
     const result = await runCli([target], { env: { HERDR_ACTION_EXIT: "7" } });
 

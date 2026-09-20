@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  attentionNotification,
+  isAttentionStatus,
+} from "../server/attention-notification";
 import { readProductStorage, writeProductStorage } from "./product-storage";
 import type { Agent, AgentStatus, HerdrState } from "./state";
 
@@ -112,10 +116,6 @@ export function attentionKey(agent: Agent, transitionAt = 0): string {
   return `${agent.status}:${transitionAt}`;
 }
 
-function attentionStatus(status: AgentStatus): boolean {
-  return status === "blocked" || status === "done" || status === "failed";
-}
-
 export function deriveAttentionGroups(
   state: HerdrState,
   preferences: AttentionPreferences,
@@ -123,7 +123,7 @@ export function deriveAttentionGroups(
 ): AttentionGroups {
   const result: AttentionGroups = { done: [], failed: [], needsInput: [] };
   for (const agent of state.agents) {
-    if (agent.kind !== "agent" || !attentionStatus(agent.status)) continue;
+    if (agent.kind !== "agent" || !isAttentionStatus(agent.status)) continue;
     const firstSeenAt = preferences.firstSeenAt[agent.id] ?? now;
     const key = attentionKey(agent, firstSeenAt);
     if (preferences.reviewedKeys[agent.id] === key) continue;
@@ -138,20 +138,6 @@ export function deriveAttentionGroups(
     else result.done.push(item);
   }
   return result;
-}
-
-function notificationTitle(
-  agent: Agent,
-  privacy: AttentionPreferences["notificationPrivacy"],
-): string {
-  if (privacy === "private") {
-    return agent.status === "done"
-      ? "A Herdr Agent completed"
-      : "A Herdr Agent needs attention";
-  }
-  if (agent.status === "blocked") return `${agent.label} needs input`;
-  if (agent.status === "failed") return `${agent.label} failed`;
-  return `${agent.label} completed`;
 }
 
 function notificationUrl(agent: Agent): string {
@@ -189,17 +175,16 @@ async function showAgentNotification(
   onOpen: (agentId: string, paneId: string) => void,
 ): Promise<"delivered" | "push-active"> {
   if (backgroundPushActive) return "push-active";
-  const title = notificationTitle(agent, privacy);
   const url = notificationUrl(agent);
-  const options: NotificationOptions = {
-    body:
-      privacy === "private"
-        ? "Open herdr-web to review this Agent."
-        : `${workspaceName} · ${agent.currentStep || agent.summary}`,
-    data: { url },
-    icon: "/icons/herdr-web-192.png",
-    tag: `herdr-web-${agent.id}-${agent.status}`,
-  };
+  const { title, ...options } = attentionNotification(
+    {
+      ...agent,
+      detail: agent.currentStep || agent.summary,
+      url,
+      workspaceName,
+    },
+    privacy,
+  );
   try {
     const ready = navigator.serviceWorker?.ready;
     const registration = ready
@@ -310,16 +295,16 @@ export function useAttentionCenter({
         initialized.current &&
         previous !== undefined &&
         previous !== agent.status &&
-        attentionStatus(agent.status);
+        isAttentionStatus(agent.status);
       if (
-        attentionStatus(agent.status) &&
+        isAttentionStatus(agent.status) &&
         (!firstSeen[agent.id] || attentionTransition)
       ) {
         firstSeen[agent.id] = timestamp;
         delete reviewedKeys[agent.id];
         delete snoozedUntil[agent.id];
         transitionStateChanged = true;
-      } else if (!attentionStatus(agent.status) && firstSeen[agent.id]) {
+      } else if (!isAttentionStatus(agent.status) && firstSeen[agent.id]) {
         delete firstSeen[agent.id];
         delete reviewedKeys[agent.id];
         delete snoozedUntil[agent.id];
@@ -340,7 +325,7 @@ export function useAttentionCenter({
       return;
     }
     for (const agent of state.agents) {
-      if (agent.kind !== "agent" || !attentionStatus(agent.status)) continue;
+      if (agent.kind !== "agent" || !isAttentionStatus(agent.status)) continue;
       const previous = previousStatus.current[agent.id];
       if (!previous || previous === agent.status) continue;
       if (!preferences.notificationEnabled) continue;

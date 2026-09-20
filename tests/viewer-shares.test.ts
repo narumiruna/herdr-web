@@ -7,6 +7,7 @@ import { createHerdrHttpHandler, type HerdrService } from "../server/http-app";
 import { projectStateForShare } from "../server/share-projection";
 import { ViewerShareStore } from "../server/share-store";
 import { TerminalTicketStore } from "../server/terminal-tickets";
+import { httpStores } from "./http-stores";
 
 const directories: string[] = [];
 const servers: Server[] = [];
@@ -94,6 +95,22 @@ function scopedState() {
 async function startShareApi(store: ViewerShareStore) {
   const state = scopedState();
   const service: HerdrService = {
+    agentLifecycle: vi.fn(),
+    closeTab: vi.fn(),
+    createTerminal: vi.fn(),
+    getSnapshotState: vi.fn(async () => structuredClone(state)),
+    invokePluginAction: vi.fn(),
+    listPluginActions: vi.fn(),
+    listPluginLogs: vi.fn(),
+    listPlugins: vi.fn(),
+    manageIntegration: vi.fn(),
+    moveTab: vi.fn(),
+    renameTab: vi.fn(),
+    setPluginEnabled: vi.fn(),
+    subscribeEvents: vi.fn(async (_signal, _onEvent, onReady) => {
+      onReady?.();
+    }),
+    uploadFile: vi.fn(),
     closePane: vi.fn(),
     createSession: vi.fn(),
     createWorkspace: vi.fn(),
@@ -104,8 +121,11 @@ async function startShareApi(store: ViewerShareStore) {
     uploadImage: vi.fn(),
   };
   const tickets = new TerminalTicketStore();
+  const directory = await mkdtemp(join(tmpdir(), "herdr-share-http-"));
+  directories.push(directory);
   const server = createServer(
     createHerdrHttpHandler({
+      ...(await httpStores(directory)),
       service,
       shareStore: store,
       terminalConfigured: true,
@@ -165,14 +185,41 @@ describe("scoped viewer shares", () => {
     expect(store.resolve(revocable.token)).toBeUndefined();
 
     const retryable = await store.create({ workspaceId: "w1" }, 5_000);
+    const revoked = vi.fn();
+    const unsubscribe = store.onRevoked(revoked);
     const backup = `${directory}-backup`;
+    directories.push(backup);
     await rename(directory, backup);
     await writeFile(directory, "block persistence");
-    await expect(store.revoke(retryable.share.id)).rejects.toThrow();
+    const revoking = store.revoke(retryable.share.id);
+    expect(revoked).toHaveBeenCalledExactlyOnceWith(retryable.share.id);
     expect(store.resolve(retryable.token)).toBeUndefined();
+    await expect(revoking).rejects.toThrow();
     await rm(directory, { force: true });
     await rename(backup, directory);
     expect(await store.revoke(retryable.share.id)).toBe(true);
+    expect(revoked).toHaveBeenCalledOnce();
+    unsubscribe();
+    const reloaded = new ViewerShareStore(path, { now: () => now });
+    await reloaded.load();
+    expect(reloaded.resolve(retryable.token)).toBeUndefined();
+  });
+
+  test("preserves concurrent share creation in the persisted store", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-share-queue-"));
+    directories.push(directory);
+    const path = join(directory, "shares.json");
+    const store = new ViewerShareStore(path);
+    await store.load();
+    const created = await Promise.all([
+      store.create({ workspaceId: "w1" }, 60_000),
+      store.create({ workspaceId: "w2" }, 60_000),
+    ]);
+    const reloaded = new ViewerShareStore(path);
+    await reloaded.load();
+    expect(reloaded.list()).toEqual(created.map(({ share }) => share));
+    for (const { share, token } of created)
+      expect(reloaded.resolve(token)).toEqual(share);
   });
 
   test("enforces scope on snapshots and tickets and invalidates revocation", async () => {

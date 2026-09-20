@@ -1,9 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import webpush, {
   type PushSubscription as WebPushSubscription,
 } from "web-push";
+import {
+  attentionNotification,
+  isAttentionStatus,
+} from "./attention-notification.js";
+import { writePrivateJson } from "./private-json-file.js";
 
 export interface PushPreferences {
   cooldownMs: number;
@@ -112,10 +116,6 @@ function projectAgents(state: unknown): AgentProjection[] {
   });
 }
 
-function isAttentionStatus(status: string): boolean {
-  return status === "blocked" || status === "done" || status === "failed";
-}
-
 function retainAgentHistory<T>(
   history: Record<string, T>,
   agentIds: Set<string>,
@@ -129,30 +129,21 @@ function pushPayload(
   agent: AgentProjection,
   preferences: PushPreferences,
 ): string {
-  const privateMode = preferences.privacy === "private";
-  const title = privateMode
-    ? agent.status === "done"
-      ? "A Herdr Agent completed"
-      : "A Herdr Agent needs attention"
-    : agent.status === "blocked"
-      ? `${agent.label} needs input`
-      : agent.status === "failed"
-        ? `${agent.label} failed`
-        : `${agent.label} completed`;
   const query = new URLSearchParams({
     pane: agent.paneId,
     session: agent.id,
     workspace: agent.workspaceId,
   });
   return JSON.stringify({
-    body: privateMode
-      ? "Open herdr-web to review this Agent."
-      : `${agent.workspaceName} · ${agent.currentStep || agent.status}`,
-    data: { url: `/?${query}` },
-    icon: "/icons/herdr-web-192.png",
+    ...attentionNotification(
+      {
+        ...agent,
+        detail: agent.currentStep || agent.status,
+        url: `/?${query}`,
+      },
+      preferences.privacy,
+    ),
     silent: !preferences.soundEnabled,
-    tag: `herdr-web-${agent.id}-${agent.status}`,
-    title,
   });
 }
 
@@ -220,12 +211,7 @@ export class PushNotificationService {
   private persist(): Promise<void> {
     const write = this.writes.then(async () => {
       const store = this.requireStore();
-      await mkdir(dirname(this.filePath), { recursive: true });
-      const temporary = `${this.filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(store, null, 2)}\n`, {
-        mode: 0o600,
-      });
-      await rename(temporary, this.filePath);
+      await writePrivateJson(this.filePath, () => store);
     });
     this.writes = write.catch(() => undefined);
     return write;

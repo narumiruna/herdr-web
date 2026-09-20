@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { AGENT_RUNTIMES, isAgentRuntime } from "./agent-runtimes.js";
 import {
   type FileUploadInput,
   type UploadedFile,
@@ -151,22 +152,6 @@ async function settleWithConcurrency<T>(
   );
   return results;
 }
-
-const RUNTIMES: Record<
-  string,
-  { args: string[]; command: string; kind: string }
-> = {
-  "Claude Code": { args: [], command: "claude", kind: "claude" },
-  Codex: {
-    args: ["--full-auto"],
-    command: "codex --full-auto",
-    kind: "codex",
-  },
-  Muse: { args: [], command: "muse", kind: "muse" },
-  OpenCode: { args: [], command: "opencode", kind: "opencode" },
-  Pi: { args: [], command: "pi", kind: "pi" },
-  "Qwen Code": { args: [], command: "qwen", kind: "qwen" },
-};
 
 export function parseGitWorktreeBranches(output: string): Map<string, string> {
   const branches = new Map<string, string>();
@@ -578,8 +563,9 @@ export class LiveHerdrService {
     input: CreateSessionInput,
     paneId: string,
   ): Promise<unknown> {
-    const runtime = RUNTIMES[input.runtime];
-    if (!runtime) throw new TypeError("Unsupported agent runtime or command");
+    if (!isAgentRuntime(input.runtime))
+      throw new TypeError("Unsupported agent runtime or command");
+    const runtime = AGENT_RUNTIMES[input.runtime];
     const startDeadline = Date.now() + 60_000;
     let started: unknown;
     while (Date.now() < startDeadline) {
@@ -622,8 +608,10 @@ export class LiveHerdrService {
   }
 
   async createSession(input: CreateSessionInput): Promise<unknown> {
-    const runtime = RUNTIMES[input.runtime];
-    if (!runtime || runtime.command !== input.command) {
+    if (
+      !isAgentRuntime(input.runtime) ||
+      AGENT_RUNTIMES[input.runtime].command !== input.command
+    ) {
       throw new TypeError("Unsupported agent runtime or command");
     }
     const created = await this.client.request<TabCreatedResponse>(

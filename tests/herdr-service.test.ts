@@ -11,6 +11,65 @@ import {
 } from "../server/herdr-service";
 
 describe("LiveHerdrService", () => {
+  test.each([
+    ["Claude Code", "claude", "claude", []],
+    ["Codex", "codex --full-auto", "codex", ["--full-auto"]],
+    ["Muse", "muse", "muse", []],
+    ["OpenCode", "opencode", "opencode", []],
+    ["Pi", "pi", "pi", []],
+    ["Qwen Code", "qwen", "qwen", []],
+  ] as const)(
+    "launches %s with its exact approved command and arguments",
+    async (runtime, command, kind, args) => {
+      const request = vi
+        .fn()
+        .mockResolvedValueOnce({
+          type: "tab_created",
+          tab: { tab_id: "t1" },
+          root_pane: { pane_id: "p1" },
+        })
+        .mockResolvedValueOnce({ type: "agent_started" })
+        .mockResolvedValueOnce({
+          agent: { agent: kind, interactive_ready: true },
+        });
+      const service = new LiveHerdrService({
+        request,
+      } as unknown as HerdrClient);
+      await service.createSession({
+        command,
+        label: "review",
+        runtime,
+        workspaceId: "w1",
+      });
+      expect(request).toHaveBeenNthCalledWith(
+        2,
+        "agent.start",
+        { args, kind, name: "review", pane_id: "p1", timeout_ms: 60_000 },
+        { timeoutMs: 65_000 },
+      );
+    },
+  );
+
+  test.each([
+    ["Unsupported", "shell"],
+    ["Pi", "claude"],
+    ["Codex", "codex"],
+    ["__proto__", "shell"],
+    ["constructor", "shell"],
+  ])("rejects %s/%s before creating a tab", async (runtime, command) => {
+    const request = vi.fn();
+    const service = new LiveHerdrService({ request } as unknown as HerdrClient);
+    await expect(
+      service.createSession({
+        runtime,
+        command,
+        label: "review",
+        workspaceId: "w1",
+      }),
+    ).rejects.toThrow("Unsupported agent runtime or command");
+    expect(request).not.toHaveBeenCalled();
+  });
+
   test("parses and applies Git worktree branch metadata", () => {
     const branches = parseGitWorktreeBranches(`worktree /repo/herdr-web
 HEAD abc

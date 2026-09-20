@@ -43,11 +43,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.history.replaceState({}, "", "/");
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, "serviceWorker");
 });
 
-function attentionState(status: "blocked" | "done" | "idle"): HerdrState {
+function attentionState(
+  status: "blocked" | "done" | "failed" | "idle",
+): HerdrState {
   const state = structuredClone(createDemoState());
   const agent = state.agents.find(({ id }) => id === "agent-review");
   if (!agent) throw new Error("Missing demo Agent");
@@ -81,6 +84,56 @@ function NotificationHarness({
 }
 
 describe("attention supervision", () => {
+  for (const privacy of ["full", "private"] as const) {
+    test.each([
+      ["blocked", "needs input"],
+      ["failed", "failed"],
+      ["done", "completed"],
+    ] as const)(
+      `preserves ${privacy} foreground %s content and page-local links`,
+      async (status, label) => {
+        window.history.replaceState({}, "", "/workbench?keep=1#anchor");
+        window.localStorage.setItem(
+          "herdr-web-attention-preferences",
+          JSON.stringify({
+            notificationEnabled: true,
+            notificationPrivacy: privacy,
+            version: 1,
+          }),
+        );
+        const view = render(
+          <NotificationHarness state={attentionState("idle")} />,
+        );
+        const state = attentionState(status);
+        const agent = state.agents.find(({ id }) => id === "agent-review");
+        if (!agent) throw new Error("Missing Agent");
+        agent.currentStep = "";
+        agent.summary = "summary fallback";
+        view.rerender(<NotificationHarness state={state} />);
+        await waitFor(() => expect(FakeNotification.instances).toHaveLength(1));
+        const notification = FakeNotification.instances[0];
+        expect(notification?.title).toBe(
+          privacy === "private"
+            ? status === "done"
+              ? "A Herdr Agent completed"
+              : "A Herdr Agent needs attention"
+            : `api-review ${label}`,
+        );
+        expect(notification?.options).toEqual({
+          body:
+            privacy === "private"
+              ? "Open herdr-web to review this Agent."
+              : "herdr · summary fallback",
+          data: {
+            url: "/workbench?keep=1&workspace=herdr-core&session=agent-review&pane=review-main#anchor",
+          },
+          icon: "/icons/herdr-web-192.png",
+          tag: `herdr-web-agent-review-${status}`,
+        });
+      },
+    );
+  }
+
   test("defensively parses preferences and derives only unreviewed real attention", () => {
     expect(parseAttentionPreferences("not json").version).toBe(1);
     const state = attentionState("blocked");

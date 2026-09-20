@@ -8,6 +8,7 @@ import {
   retryFailedTerminalImages,
   shellEscapePath,
   terminalImageInput,
+  terminalImageValidationError,
   updateTerminalImage,
 } from "../src/components/terminal-images";
 
@@ -90,6 +91,20 @@ describe("terminal image queue", () => {
     } as unknown as DataTransfer;
 
     expect(imageFilesFromTransfer(data)).toEqual([first, second]);
+  });
+
+  test("retains the inclusive 1-byte to 8-MiB image limits", () => {
+    const maximum = 8 * 1024 * 1024;
+    for (const size of [0, 1, maximum, maximum + 1]) {
+      const file = new File([new Uint8Array(size)], "image.png", {
+        type: "image/png",
+      });
+      expect(terminalImageValidationError(file)).toBe(
+        size === 0 || size > maximum
+          ? "Image size must be between 1 byte and 8 MiB."
+          : "",
+      );
+    }
   });
 
   test("escapes and separates every path without submitting", () => {

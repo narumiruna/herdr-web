@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writePrivateJson } from "./private-json-file.js";
 
 export interface ShareScope {
   agentId?: string;
@@ -93,16 +93,12 @@ export class ViewerShareStore {
   }
 
   private persist(): Promise<void> {
-    const write = this.writes.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      const temporary = `${this.filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-      await writeFile(
-        temporary,
-        `${JSON.stringify({ shares: this.shares, version: 1 }, null, 2)}\n`,
-        { mode: 0o600 },
-      );
-      await rename(temporary, this.filePath);
-    });
+    const write = this.writes.then(() =>
+      writePrivateJson(this.filePath, () => ({
+        shares: this.shares,
+        version: 1,
+      })),
+    );
     this.writes = write.catch(() => undefined);
     return write;
   }
