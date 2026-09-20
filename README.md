@@ -270,6 +270,7 @@ CI runs on Linux, macOS, and Windows. Browser failure evidence is retained as a 
 | --- | --- |
 | Herdr socket transport | `server/herdr-client.ts` |
 | Snapshot, events, and mutations | `server/herdr-service.ts` |
+| Approved Agent launch presets | `server/agent-runtimes.ts` |
 | HTTP authentication and API validation | `server/http-app.ts` |
 | Terminal process and WebSocket bridge | `server/terminal-session.ts`, `server/terminal-websocket.ts` |
 | Snapshot-to-workbench mapping | `src/live-state.ts` |
@@ -279,6 +280,8 @@ CI runs on Linux, macOS, and Windows. Browser failure evidence is retained as a 
 | Viewer shares | `server/share-store.ts`, `server/share-projection.ts` |
 | Workflow templates | `server/workflow-template-store.ts`, `src/workflow-templates.ts` |
 | Push notifications and PWA | `server/push-notifications.ts`, `public/sw.js` |
+
+Browser/server-shared runtime presets and notification presentation live in dependency-free modules under `server/`. Notification delivery remains separate in `src/attention-center.ts` and `server/push-notifications.ts`. Store-specific queues call `server/private-json-file.ts` for atomic private writes; file and image policies share only directory checks in `server/upload-directory.ts`. Startup scripts share token and network helpers in `scripts/startup-environment.mjs`.
 
 The front end uses React, Vite, xterm.js, and Radix Colors, Icons, Themes, and Primitives. Interactive terminals use the bundled JetBrainsMono Nerd Font Mono; see [`public/fonts/README.md`](public/fonts/README.md) for its source and licenses.
 

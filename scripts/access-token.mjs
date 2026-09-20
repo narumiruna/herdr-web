@@ -1,3 +1,3 @@
-import { randomBytes } from "node:crypto";
+import { accessToken } from "./startup-environment.mjs";
 
-process.stdout.write(randomBytes(24).toString("hex"));
+process.stdout.write(accessToken());

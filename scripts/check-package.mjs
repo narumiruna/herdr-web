@@ -60,6 +60,8 @@ for (const path of [
   "justfile",
   "scripts/herdr-web.mjs",
   "scripts/start-workbench.mjs",
+  "scripts/startup-environment.mjs",
+  "scripts/startup-environment.d.mts",
   "server/index.ts",
   "src/main.tsx",
   "vite.config.ts",

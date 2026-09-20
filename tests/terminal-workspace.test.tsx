@@ -203,6 +203,50 @@ describe("TerminalWorkspace snapshot frames", () => {
 });
 
 describe("TerminalWorkspace decision states", () => {
+  test("prefers clipboard files, falls back to items, and leaves text paste alone", () => {
+    render(<Harness />);
+    const first = new File(["png"], "first.png", { type: "image/png" });
+    const second = new File(["png"], "second.png", { type: "image/png" });
+    expect(
+      fireEvent.paste(window, {
+        clipboardData: {
+          files: [],
+          items: [{ kind: "string", type: "text/plain" }],
+        },
+      }),
+    ).toBe(true);
+    fireEvent.paste(window, {
+      clipboardData: {
+        files: [first],
+        items: [{ kind: "file", type: second.type, getAsFile: () => second }],
+      },
+    });
+    expect(screen.getByText("first.png")).toBeVisible();
+    expect(screen.queryByText("second.png")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove first.png" }));
+    fireEvent.paste(window, {
+      clipboardData: {
+        files: [],
+        items: [{ kind: "file", type: second.type, getAsFile: () => second }],
+      },
+    });
+    expect(screen.getByText("second.png")).toBeVisible();
+  });
+
+  test.each([
+    ["image/svg+xml", "content", "Choose a PNG, JPEG, GIF, or WebP image."],
+    ["image/png", "", "Image size must be between 1 byte and 8 MiB."],
+  ])("preserves validation for %s attachments", (type, contents, error) => {
+    render(<Harness />);
+    fireEvent.paste(window, {
+      clipboardData: {
+        files: [new File([contents], "invalid", { type })],
+        items: [],
+      },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(error);
+  });
+
   test("replaces disabled Agent controls with a compact read-only terminal bar", () => {
     const agent = demoAgent();
     agent.kind = "terminal";

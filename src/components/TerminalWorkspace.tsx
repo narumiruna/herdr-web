@@ -28,7 +28,6 @@ import {
   useState,
 } from "react";
 import {
-  MAX_ATTACHMENT_BYTES,
   MAX_PROMPT_CHARACTERS,
   SUPPORTED_IMAGE_TYPES,
   type TerminalTicket,
@@ -47,6 +46,10 @@ import { IconTooltip } from "./IconTooltip";
 import { InteractiveTerminal } from "./InteractiveTerminal";
 import { clampPaneRatio, PaneResizeHandle } from "./PaneResizeHandle";
 import { RadixDialog } from "./RadixDialog";
+import {
+  imageFilesFromTransfer,
+  terminalImageValidationError,
+} from "./terminal-images";
 
 // This workspace remains the single owner of pane focus, split layout,
 // fallback composition, and close confirmation so remote mutations cannot
@@ -122,19 +125,6 @@ function lineClass(line: string): string {
     return "terminal-frame";
   }
   return "";
-}
-
-function imageFromTransfer(data: DataTransfer): File | undefined {
-  const file = Array.from(data.files).find(({ type }) =>
-    type.startsWith("image/"),
-  );
-  if (file) return file;
-  for (const item of Array.from(data.items)) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const image = item.getAsFile();
-    if (image) return image;
-  }
-  return undefined;
 }
 
 function movePaneTab(event: KeyboardEvent<HTMLButtonElement>) {
@@ -456,20 +446,9 @@ export function TerminalWorkspace({
         });
         return;
       }
-      if (
-        !SUPPORTED_IMAGE_TYPES.includes(
-          file.type as (typeof SUPPORTED_IMAGE_TYPES)[number],
-        )
-      ) {
-        updateDraft(agentId, {
-          attachmentError: "Choose a PNG, JPEG, GIF, or WebP image.",
-        });
-        return;
-      }
-      if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {
-        updateDraft(agentId, {
-          attachmentError: "Image size must be between 1 byte and 8 MiB.",
-        });
+      const attachmentError = terminalImageValidationError(file);
+      if (attachmentError) {
+        updateDraft(agentId, { attachmentError });
         return;
       }
       updateDraft(agentId, {
@@ -490,7 +469,7 @@ export function TerminalWorkspace({
       if (!actionsEnabled || !canPrompt || isSending || !event.clipboardData) {
         return;
       }
-      const image = imageFromTransfer(event.clipboardData);
+      const image = imageFilesFromTransfer(event.clipboardData)[0];
       if (!image) return;
       event.preventDefault();
       queueImage(image, activeAgentId);
@@ -503,7 +482,7 @@ export function TerminalWorkspace({
     event.preventDefault();
     dragDepth.current = 0;
     setDragging(false);
-    const image = imageFromTransfer(event.dataTransfer);
+    const image = imageFilesFromTransfer(event.dataTransfer)[0];
     if (image) queueImage(image);
   };
 

@@ -1,11 +1,18 @@
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { HerdrApiError } from "../server/herdr-client";
 import { createHerdrHttpHandler, type HerdrService } from "../server/http-app";
 import type { SavedMachineService } from "../server/machine-service";
 import type { PushNotificationService } from "../server/push-notifications";
 import { TerminalTicketStore } from "../server/terminal-tickets";
 
+import { httpStores } from "./http-stores";
+
 const servers: Server[] = [];
+const directories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
@@ -15,6 +22,11 @@ afterEach(async () => {
         (server) =>
           new Promise<void>((resolve) => server.close(() => resolve())),
       ),
+  );
+  await Promise.all(
+    directories
+      .splice(0)
+      .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
 
@@ -28,13 +40,18 @@ async function startApi(
     viewToken?: string;
   },
 ): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-http-"));
+  directories.push(directory);
+  const stores = await httpStores(directory);
   const server = createServer(
     createHerdrHttpHandler({
+      ...stores,
       machineService: terminal?.machineService,
-      pushNotifications: terminal?.pushNotifications,
+      pushNotifications:
+        terminal?.pushNotifications ?? stores.pushNotifications,
       service,
       terminalConfigured: terminal?.configured,
-      terminalTickets: terminal?.tickets,
+      terminalTickets: terminal?.tickets ?? stores.terminalTickets,
       token: "test-secret",
       viewToken: terminal?.viewToken,
     }),
@@ -61,6 +78,10 @@ function fakeService(): HerdrService {
       workspace: { workspace_id: "w6" },
     }),
     getState: vi.fn().mockResolvedValue({ reads: {}, snapshot: {} }),
+    getSnapshotState: vi.fn().mockResolvedValue({ snapshot: {} }),
+    subscribeEvents: vi.fn(async (_signal, _onEvent, onReady) => {
+      onReady?.();
+    }),
     invokePluginAction: vi
       .fn()
       .mockResolvedValue({ type: "plugin_action_invoked" }),
@@ -100,6 +121,142 @@ function fakeService(): HerdrService {
 }
 
 describe("herdr HTTP bridge", () => {
+  test("retains unavailable machine supervision and upstream method errors", async () => {
+    const service = fakeService();
+    vi.mocked(service.listPlugins).mockRejectedValue(
+      new HerdrApiError("method_not_found", "Unsupported method"),
+    );
+    const base = await startApi(service);
+    const headers = { authorization: "Bearer test-secret" };
+    const machines = await fetch(`${base}/api/herdr/machines`, { headers });
+    expect(machines.status).toBe(404);
+    expect(await machines.json()).toEqual({
+      error: {
+        code: "machine_api_unavailable",
+        message: "Saved SSH machine supervision is unavailable",
+      },
+    });
+    const plugins = await fetch(`${base}/api/herdr/plugins`, { headers });
+    expect(plugins.status).toBe(502);
+    expect(await plugins.json()).toEqual({
+      error: { code: "method_not_found", message: "Unsupported method" },
+    });
+  });
+
+  test("keeps project workflows controller-only with validation and persistent CRUD", async () => {
+    const base = await startApi(fakeService(), {
+      configured: false,
+      tickets: new TerminalTicketStore(),
+      viewToken: "viewer",
+    });
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "application/json",
+    };
+    const path = `${base}/api/herdr/workflow-templates/review`;
+    const template = {
+      name: "Review",
+      projectKey: "/repo",
+      steps: [{ id: "step1", label: "Review", runtime: "Pi" }],
+    };
+    for (const [method, url] of [
+      ["GET", `${base}/api/herdr/workflow-templates?projectKey=/repo`],
+      ["PUT", path],
+      ["DELETE", `${path}?projectKey=/repo`],
+      ["GET", `${base}/api/herdr/push/config`],
+      ["GET", `${base}/api/herdr/viewer-shares`],
+      ["POST", `${base}/api/herdr/viewer-shares`],
+      ["DELETE", `${base}/api/herdr/viewer-shares/unknown`],
+    ]) {
+      expect(
+        await fetch(url, {
+          method,
+          headers: { authorization: "Bearer viewer" },
+        }),
+      ).toHaveProperty("status", 403);
+    }
+    expect(
+      await fetch(path, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          ...template,
+          steps: [{ ...template.steps[0], runtime: "shell" }],
+        }),
+      }),
+    ).toHaveProperty("status", 400);
+    expect(
+      await fetch(path, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(template),
+      }),
+    ).toHaveProperty("status", 200);
+    const listed = await fetch(
+      `${base}/api/herdr/workflow-templates?projectKey=/repo`,
+      { headers },
+    );
+    expect(await listed.json()).toEqual({
+      type: "workflow_template_list",
+      templates: [
+        {
+          id: "review",
+          name: "Review",
+          projectKey: "/repo",
+          scope: "project",
+          version: 1,
+          steps: [
+            {
+              id: "step1",
+              label: "Review",
+              runtime: "Pi",
+              cwd: "",
+              prompt: "",
+              order: 0,
+              waitForPrevious: false,
+            },
+          ],
+        },
+      ],
+    });
+    expect(
+      await fetch(`${path}?projectKey=/repo`, { method: "DELETE", headers }),
+    ).toHaveProperty("status", 200);
+    expect(
+      await fetch(`${path}?projectKey=/repo`, { method: "DELETE", headers }),
+    ).toHaveProperty("status", 404);
+  });
+
+  test("retains generic upload validation and binary forwarding", async () => {
+    const service = fakeService();
+    const base = await startApi(service);
+    const headers = {
+      authorization: "Bearer test-secret",
+      "content-type": "text/plain",
+      "x-herdr-filename": "note.txt",
+    };
+    expect(
+      await fetch(`${base}/api/herdr/panes/p1/files`, {
+        method: "POST",
+        headers,
+        body: "hello",
+      }),
+    ).toHaveProperty("status", 200);
+    expect(service.uploadFile).toHaveBeenCalledWith("p1", {
+      data: Buffer.from("hello"),
+      filename: "note.txt",
+      mediaType: "text/plain",
+    });
+    expect(
+      await fetch(`${base}/api/herdr/panes/p1/files`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/octet-stream" },
+        body: "invalid",
+      }),
+    ).toHaveProperty("status", 400);
+    expect(service.uploadFile).toHaveBeenCalledOnce();
+  });
+
   test("fails closed without a bearer token", async () => {
     const baseUrl = await startApi(fakeService());
 

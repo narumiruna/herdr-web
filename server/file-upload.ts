@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
+import { paneUploadDirectory } from "./upload-directory.js";
 
 export const MAX_FILE_BYTES = 16 * 1024 * 1024;
 
@@ -35,14 +35,6 @@ function cleanExtension(filename?: string): string {
   return extension && extension !== "." ? extension : "";
 }
 
-function contains(parent: string, child: string): boolean {
-  const path = relative(parent, child);
-  return (
-    path === "" ||
-    (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`))
-  );
-}
-
 export function validateFile({ data, mediaType }: FileUploadInput): void {
   const cleanType = mediaType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
   if (!cleanType) throw new TypeError("File content type is required");
@@ -61,27 +53,14 @@ export async function writePaneFile(
   cwd: string,
   input: FileUploadInput,
   projectsRoot?: string,
-  uploadsRoot = join(homedir(), ".herdr-web", "uploads"),
+  uploadsRoot?: string,
 ): Promise<UploadedFile> {
   validateFile(input);
-  if (!isAbsolute(cwd)) {
-    throw new TypeError("Herdr pane did not report an absolute directory");
-  }
-  const projectDirectory = await realpath(cwd);
-  if (projectsRoot) {
-    const allowedRoot = await realpath(projectsRoot);
-    if (!contains(allowedRoot, projectDirectory)) {
-      throw new TypeError(
-        "Pane directory is outside the Docker-mounted HERDR_PROJECTS_ROOT",
-      );
-    }
-  }
-
-  if (!isAbsolute(uploadsRoot)) {
-    throw new TypeError("herdr-web upload directory must be absolute");
-  }
-  await mkdir(uploadsRoot, { mode: 0o700, recursive: true });
-  const uploadDirectory = await realpath(uploadsRoot);
+  const uploadDirectory = await paneUploadDirectory(
+    cwd,
+    projectsRoot,
+    uploadsRoot,
+  );
   const filename = `file-${Date.now()}-${randomBytes(8).toString("hex")}${cleanExtension(input.filename)}`;
   const path = join(uploadDirectory, filename);
   await writeFile(path, input.data, { flag: "wx", mode: 0o600 });

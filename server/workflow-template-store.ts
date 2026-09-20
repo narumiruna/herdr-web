@@ -1,17 +1,6 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-
-export const WORKFLOW_RUNTIMES = [
-  "Claude Code",
-  "Codex",
-  "Muse",
-  "OpenCode",
-  "Pi",
-  "Qwen Code",
-] as const;
-
-export type WorkflowRuntime = (typeof WORKFLOW_RUNTIMES)[number];
+import { readFile } from "node:fs/promises";
+import type { RuntimeName } from "./agent-runtimes.js";
+import { writePrivateJson } from "./private-json-file.js";
 
 export interface ProjectWorkflowStep {
   cwd: string;
@@ -19,7 +8,7 @@ export interface ProjectWorkflowStep {
   label: string;
   order: number;
   prompt: string;
-  runtime: WorkflowRuntime;
+  runtime: RuntimeName;
   waitForPrevious: boolean;
 }
 
@@ -58,15 +47,6 @@ export class WorkflowTemplateStore {
     }
   }
 
-  private async write(value: StoredWorkflows): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    const temporary = `${this.filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    await rename(temporary, this.filePath);
-  }
-
   async list(projectKey: string): Promise<ProjectWorkflowTemplate[]> {
     const store = await this.read();
     return store.templates.filter(
@@ -98,7 +78,7 @@ export class WorkflowTemplateStore {
       const templates = [...store.templates];
       if (existing >= 0) templates[existing] = template;
       else templates.push(template);
-      await this.write({ templates, version: 1 });
+      await writePrivateJson(this.filePath, () => ({ templates, version: 1 }));
     });
   }
 
@@ -109,7 +89,7 @@ export class WorkflowTemplateStore {
         (template) => template.id !== id || template.projectKey !== projectKey,
       );
       if (templates.length === store.templates.length) return false;
-      await this.write({ templates, version: 1 });
+      await writePrivateJson(this.filePath, () => ({ templates, version: 1 }));
       return true;
     });
   }

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -41,6 +41,99 @@ const subscription: BrowserPushSubscription = {
 };
 
 describe("background Web Push notifications", () => {
+  for (const privacy of ["full", "private"] as const) {
+    test.each([
+      ["blocked", "needs input"],
+      ["failed", "failed"],
+      ["done", "completed"],
+    ] as const)(
+      `preserves ${privacy} background %s content and Agent-pane links`,
+      async (status, label) => {
+        const directory = await mkdtemp(join(tmpdir(), "herdr-push-content-"));
+        directories.push(directory);
+        const send = vi.fn().mockResolvedValue(undefined);
+        const service = new PushNotificationService(
+          join(directory, "push.json"),
+          { send },
+        );
+        await service.load();
+        await service.upsert(
+          subscription,
+          { cooldownMs: 5_000, mutedAgentIds: [], privacy, soundEnabled: true },
+          state("idle"),
+        );
+        const next = state(status);
+        next.snapshot.agents[0].tokens.summary = "";
+        await service.processState(next);
+        expect(send).toHaveBeenCalledOnce();
+        expect(JSON.parse(send.mock.calls[0][1])).toEqual({
+          body:
+            privacy === "private"
+              ? "Open herdr-web to review this Agent."
+              : `private-project · ${status}`,
+          data: { url: "/?pane=w1%3Ap1&session=w1%3Ap1&workspace=w1" },
+          icon: "/icons/herdr-web-192.png",
+          silent: false,
+          tag: `herdr-web-w1:p1-${status}`,
+          title:
+            privacy === "private"
+              ? status === "done"
+                ? "A Herdr Agent completed"
+                : "A Herdr Agent needs attention"
+              : `security-review ${label}`,
+        });
+      },
+    );
+  }
+
+  test("persists concurrent subscriptions and recovers its write queue after failure", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "herdr-push-queue-"));
+    directories.push(directory);
+    const path = join(directory, "push.json");
+    const service = new PushNotificationService(path, { send: vi.fn() });
+    await service.load();
+    const publicKey = service.publicKey();
+    const preferences = {
+      cooldownMs: 5_000,
+      mutedAgentIds: [],
+      privacy: "private" as const,
+      soundEnabled: false,
+    };
+    const second = {
+      ...subscription,
+      endpoint: "https://push.example.test/subscription/two",
+    };
+    await Promise.all([
+      service.upsert(subscription, preferences, state("idle")),
+      service.upsert(second, preferences, state("idle")),
+    ]);
+    expect(
+      JSON.parse(await readFile(path, "utf8")).subscriptions.map(
+        (entry: { subscription: BrowserPushSubscription }) =>
+          entry.subscription.endpoint,
+      ),
+    ).toEqual([subscription.endpoint, second.endpoint]);
+
+    const backup = join(directory, "backup.json");
+    await rename(path, backup);
+    // A directory at the target makes the atomic rename fail, not the mutation itself.
+    await mkdir(path);
+    await expect(service.remove(subscription.endpoint)).rejects.toThrow();
+    expect(service.hasSubscriptions()).toBe(true);
+    await rm(path, { recursive: true });
+    await rename(backup, path);
+    await service.upsert(second, preferences, state("done"));
+    const reloaded = new PushNotificationService(path, { send: vi.fn() });
+    await reloaded.load();
+    expect(reloaded.publicKey()).toBe(publicKey);
+    const stored = JSON.parse(await readFile(path, "utf8"));
+    expect(stored.subscriptions).toHaveLength(1);
+    expect(stored.subscriptions[0]).toMatchObject({
+      subscription: second,
+      lastStatuses: { "w1:p1": "done" },
+    });
+  });
+
   test("baselines subscriptions and sends deduplicated private transition pushes", async () => {
     const directory = await mkdtemp(join(tmpdir(), "herdr-push-"));
     directories.push(directory);
