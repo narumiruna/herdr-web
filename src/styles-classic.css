@@ -71,7 +71,7 @@
   border-radius: 10px;
 }
 .theme-classic .status-pill,
-.theme-classic .work-status-summary span {
+.theme-classic .work-status-summary button {
   border-radius: 999px;
 }
 .theme-classic .topbar {

@@ -1199,78 +1199,94 @@ export function InteractiveTerminal({
           </span>
         </span>
         <span className="interactive-terminal-actions">
-          {toolbarActions}
-          <button
-            type="button"
-            aria-label="Search terminal"
-            onClick={() => setSearchOpen((open) => !open)}
-          >
-            <MagnifyingGlassIcon />
-          </button>
-          <button
-            type="button"
-            aria-label="Terminal diagnostics"
-            onClick={() => setDiagnosticsOpen(true)}
-          >
-            <ActivityLogIcon />
-          </button>
-          <input
-            ref={fileInput}
-            className="composer-file-input"
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            aria-label="Choose images for terminal"
-            multiple
-            onChange={(event) => {
-              imageQueue.stage(Array.from(event.currentTarget.files ?? []));
-              event.currentTarget.value = "";
-            }}
-          />
-          <button
-            type="button"
-            aria-label="Insert image path"
-            disabled={!canUploadImages}
-            onClick={() => fileInput.current?.click()}
-          >
-            <ImageIcon />
-          </button>
-          <input
-            ref={genericFileInput}
-            className="composer-file-input"
-            type="file"
-            aria-label="Choose file for terminal"
-            onChange={(event) => {
-              void uploadGenericFile(
-                event.currentTarget.files?.item(0) ?? undefined,
-              );
-              event.currentTarget.value = "";
-            }}
-          />
-          <button
-            type="button"
-            aria-label="Upload file and insert path"
-            disabled={!canUploadFiles}
-            onClick={() => genericFileInput.current?.click()}
-          >
-            <FilePlusIcon />
-          </button>
-          <button
-            type="button"
-            aria-label="Detach pane"
-            onClick={openDetachedPane}
-          >
-            <OpenInNewWindowIcon />
-          </button>
-          {canPrompt && (
+          {toolbarActions && (
+            <span className="terminal-action-group" data-kind="pane">
+              {toolbarActions}
+            </span>
+          )}
+          <span className="terminal-action-group" data-kind="inspect">
             <button
               type="button"
-              aria-label="Prompt Agent"
-              disabled={!structuredActionsEnabled}
-              onClick={() => setPromptOpen(true)}
+              aria-label="Search terminal"
+              title="Search terminal"
+              onClick={() => setSearchOpen((open) => !open)}
             >
-              <ChatBubbleIcon />
+              <MagnifyingGlassIcon />
             </button>
-          )}
+            <button
+              type="button"
+              aria-label="Terminal diagnostics"
+              title="Terminal diagnostics"
+              onClick={() => setDiagnosticsOpen(true)}
+            >
+              <ActivityLogIcon />
+            </button>
+          </span>
+          <span className="terminal-action-group" data-kind="files">
+            <input
+              ref={fileInput}
+              className="composer-file-input"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              aria-label="Choose images for terminal"
+              multiple
+              onChange={(event) => {
+                imageQueue.stage(Array.from(event.currentTarget.files ?? []));
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Insert image path"
+              title="Insert image path"
+              disabled={!canUploadImages}
+              onClick={() => fileInput.current?.click()}
+            >
+              <ImageIcon />
+            </button>
+            <input
+              ref={genericFileInput}
+              className="composer-file-input"
+              type="file"
+              aria-label="Choose file for terminal"
+              onChange={(event) => {
+                void uploadGenericFile(
+                  event.currentTarget.files?.item(0) ?? undefined,
+                );
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Upload file and insert path"
+              title="Upload file and insert path"
+              disabled={!canUploadFiles}
+              onClick={() => genericFileInput.current?.click()}
+            >
+              <FilePlusIcon />
+            </button>
+          </span>
+          <span className="terminal-action-group" data-kind="session">
+            <button
+              type="button"
+              aria-label="Detach pane"
+              title="Detach pane"
+              onClick={openDetachedPane}
+            >
+              <OpenInNewWindowIcon />
+            </button>
+            {canPrompt && (
+              <button
+                type="button"
+                aria-label="Prompt Agent"
+                title="Prompt Agent"
+                disabled={!structuredActionsEnabled}
+                onClick={() => setPromptOpen(true)}
+              >
+                <ChatBubbleIcon />
+              </button>
+            )}
+          </span>
         </span>
       </div>
       <div

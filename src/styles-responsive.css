@@ -1,3 +1,9 @@
+@media (max-width: 1280px) {
+  :where(.session-tabs[data-combined="true"]) .work-status-summary {
+    display: none;
+  }
+}
+
 @media (max-width: 1100px) {
   .connection-state,
   .topbar-context > strong {
@@ -5,6 +11,10 @@
   }
   .work-status-summary {
     gap: 8px;
+  }
+  :where(.session-tabs[data-combined="true"]) > .topbar-context {
+    flex-basis: 0;
+    padding-left: 0;
   }
 }
 
@@ -30,8 +40,19 @@
     min-height: calc(60px + env(safe-area-inset-top));
     padding: env(safe-area-inset-top) 12px 0;
   }
-  .topbar .mobile-nav-trigger {
+  .topbar .mobile-nav-trigger,
+  .session-tabs[data-combined="true"] .mobile-nav-trigger {
     display: inline-flex;
+  }
+  :where(.session-tabs[data-combined="true"]) > .topbar-context {
+    max-width: none;
+    flex: 0 0 auto;
+    padding-left: 12px;
+  }
+  .session-tabs[data-combined="true"]
+    .topbar-actions
+    :is(.desktop-details, .desktop-appearance, .desktop-mission-control) {
+    display: none;
   }
   .topbar-context .mobile-brand-mark {
     display: inline-flex;
@@ -108,7 +129,8 @@
     gap: 8px;
     padding: env(safe-area-inset-top) 8px 0;
   }
-  .topbar-context > strong {
+  .topbar-context > strong,
+  .session-tabs[data-combined="true"] .topbar-context > .mobile-brand-mark {
     display: none;
   }
   .topbar-actions {
@@ -134,6 +156,7 @@
   }
   .topbar-actions .rt-IconButton,
   .topbar .mobile-nav-trigger,
+  .session-tabs[data-combined="true"] .mobile-nav-trigger,
   .dialog-close {
     width: 44px;
     height: 44px;

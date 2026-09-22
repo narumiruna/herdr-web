@@ -13,6 +13,8 @@ import { StatusPill } from "./StatusPill";
 interface SessionTabsProps {
   canCreateSession: boolean;
   children: ReactNode;
+  headerActions?: ReactNode;
+  headerContext?: ReactNode;
   onAgentLifecycle?: (
     session: Agent,
     action: "archive" | "clear" | "restart" | "stop",
@@ -31,6 +33,8 @@ interface SessionTabsProps {
 export function SessionTabs({
   canCreateSession,
   children,
+  headerActions,
+  headerContext,
   onAgentLifecycle,
   onCloseSession,
   onMoveSession,
@@ -63,7 +67,11 @@ export function SessionTabs({
       value={selectedId}
       onValueChange={onSelect}
     >
-      <div className="session-tabs">
+      <div
+        className="session-tabs"
+        data-combined={Boolean(headerContext || headerActions)}
+      >
+        {headerContext}
         <ScrollArea.Root className="session-tabs-scroll">
           <ScrollArea.Viewport className="session-tabs-viewport">
             <Tabs.List
@@ -104,102 +112,105 @@ export function SessionTabs({
             <ScrollArea.Thumb className="session-tabs-scrollbar-thumb" />
           </ScrollArea.Scrollbar>
         </ScrollArea.Root>
-        <IconButton
-          type="button"
-          className="session-tabs-new"
-          variant="ghost"
-          color="gray"
-          disabled={!canCreateSession}
-          aria-label={`New Agent in ${workspaceName}`}
-          title={`New Agent in ${workspaceName}`}
-          onClick={(event) => onNewSession(event.currentTarget)}
-        >
-          <PlusIcon aria-hidden="true" />
-        </IconButton>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <IconButton
-              type="button"
-              className="session-tabs-new"
-              variant="ghost"
-              color="gray"
-              disabled={!selectedSession}
-              aria-label="Session lifecycle actions"
-            >
-              <DotsHorizontalIcon aria-hidden="true" />
-            </IconButton>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" sideOffset={6} size="1">
-            <DropdownMenu.Item
-              disabled={!canCreateSession || !onNewTerminal}
-              onSelect={(event) => {
-                const target = event.currentTarget as HTMLElement;
-                onNewTerminal?.(target);
-              }}
-            >
-              New Terminal
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              disabled={!selectedSession || !onRenameSession}
-              onSelect={() =>
-                selectedSession && onRenameSession?.(selectedSession)
-              }
-            >
-              Rename tab
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              disabled={!selectedSession || !onMoveSession}
-              onSelect={() =>
-                selectedSession && onMoveSession?.(selectedSession, "left")
-              }
-            >
-              Move tab left
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              disabled={!selectedSession || !onMoveSession}
-              onSelect={() =>
-                selectedSession && onMoveSession?.(selectedSession, "right")
-              }
-            >
-              Move tab right
-            </DropdownMenu.Item>
-            {selectedSession?.kind === "agent" && (
-              <>
-                <DropdownMenu.Separator />
-                {(["restart", "stop", "archive", "clear"] as const).map(
-                  (action) => (
-                    <DropdownMenu.Item
-                      key={action}
-                      disabled={!onAgentLifecycle}
-                      color={
-                        action === "archive" || action === "clear"
-                          ? "red"
-                          : undefined
-                      }
-                      onSelect={() =>
-                        selectedSession &&
-                        onAgentLifecycle?.(selectedSession, action)
-                      }
-                    >
-                      {action[0]?.toUpperCase()}
-                      {action.slice(1)} Agent
-                    </DropdownMenu.Item>
-                  ),
-                )}
-              </>
-            )}
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item
-              color="red"
-              disabled={!selectedSession || !onCloseSession}
-              onSelect={() =>
-                selectedSession && onCloseSession?.(selectedSession)
-              }
-            >
-              Close tab
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+        <div className="session-tabs-controls">
+          <IconButton
+            type="button"
+            className="session-tabs-new"
+            variant="ghost"
+            color="gray"
+            disabled={!canCreateSession}
+            aria-label={`New Agent in ${workspaceName}`}
+            title={`New Agent in ${workspaceName}`}
+            onClick={(event) => onNewSession(event.currentTarget)}
+          >
+            <PlusIcon aria-hidden="true" />
+          </IconButton>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <IconButton
+                type="button"
+                className="session-tabs-new"
+                variant="ghost"
+                color="gray"
+                disabled={!selectedSession}
+                aria-label="Session lifecycle actions"
+              >
+                <DotsHorizontalIcon aria-hidden="true" />
+              </IconButton>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" sideOffset={6} size="1">
+              <DropdownMenu.Item
+                disabled={!canCreateSession || !onNewTerminal}
+                onSelect={(event) => {
+                  const target = event.currentTarget as HTMLElement;
+                  onNewTerminal?.(target);
+                }}
+              >
+                New Terminal
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!selectedSession || !onRenameSession}
+                onSelect={() =>
+                  selectedSession && onRenameSession?.(selectedSession)
+                }
+              >
+                Rename tab
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!selectedSession || !onMoveSession}
+                onSelect={() =>
+                  selectedSession && onMoveSession?.(selectedSession, "left")
+                }
+              >
+                Move tab left
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!selectedSession || !onMoveSession}
+                onSelect={() =>
+                  selectedSession && onMoveSession?.(selectedSession, "right")
+                }
+              >
+                Move tab right
+              </DropdownMenu.Item>
+              {selectedSession?.kind === "agent" && (
+                <>
+                  <DropdownMenu.Separator />
+                  {(["restart", "stop", "archive", "clear"] as const).map(
+                    (action) => (
+                      <DropdownMenu.Item
+                        key={action}
+                        disabled={!onAgentLifecycle}
+                        color={
+                          action === "archive" || action === "clear"
+                            ? "red"
+                            : undefined
+                        }
+                        onSelect={() =>
+                          selectedSession &&
+                          onAgentLifecycle?.(selectedSession, action)
+                        }
+                      >
+                        {action[0]?.toUpperCase()}
+                        {action.slice(1)} Agent
+                      </DropdownMenu.Item>
+                    ),
+                  )}
+                </>
+              )}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                color="red"
+                disabled={!selectedSession || !onCloseSession}
+                onSelect={() =>
+                  selectedSession && onCloseSession?.(selectedSession)
+                }
+              >
+                Close tab
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
+        {headerActions}
       </div>
       <Tabs.Content
         className="session-tab-content"

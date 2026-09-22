@@ -144,7 +144,12 @@
   background: var(--panel);
 }
 :is(.theme-mist, .theme-sage, .theme-linen)
-  .workspace-item[data-active="true"] {
+  :is(
+    .workspace-item[data-active="true"],
+    .agent-item[data-active="true"],
+    .attention-item[data-active="true"]
+  ) {
+  border-left-color: var(--clean-accent);
   background: var(--clean-accent-fill);
 }
 :is(.theme-mist, .theme-sage, .theme-linen) .session-tab[data-state="active"] {

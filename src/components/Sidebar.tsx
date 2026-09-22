@@ -1,5 +1,6 @@
 import {
   BellIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   Component1Icon,
   CubeIcon,
@@ -15,7 +16,7 @@ import {
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import type { HerdrState, Workspace } from "../state";
 import { HerdrWebLogo } from "./HerdrWebLogo";
 import { agentStatusLabel, StatusPill } from "./StatusPill";
@@ -117,6 +118,9 @@ export function Sidebar({
   const spacesHeadingId = useId();
   const agentsHeadingId = useId();
   const menuTrigger = useRef<HTMLButtonElement>(null);
+  const [collapsedWorkspaceIds, setCollapsedWorkspaceIds] = useState<
+    Set<string>
+  >(() => new Set());
   const attention = state.agents.filter(
     ({ kind, status }) => kind === "agent" && status === "blocked",
   );
@@ -172,13 +176,13 @@ export function Sidebar({
   const renderWorkspaceButton = (
     workspace: Workspace,
     variant: "space" | "worktree",
+    grouped = false,
   ) => {
     const selected = workspace.id === state.selectedWorkspaceId;
     const isWorktree = variant === "worktree";
     const label = isWorktree ? worktreeLabel(workspace) : workspace.name;
     const detail = isWorktree
-      ? workspaceAttentionDetail(workspace) ||
-        (label === workspace.name ? workspace.branch : workspace.name)
+      ? workspaceAttentionDetail(workspace)
       : workspaceDetail(workspace);
     return (
       <button
@@ -194,6 +198,7 @@ export function Sidebar({
             ? `Open ${label} worktree Space`
             : `Open ${workspace.name} Space`
         }
+        title={`${label} — ${workspace.path}`}
         onClick={() => selectWorkspace(workspace.id)}
       >
         {isWorktree ? (
@@ -207,16 +212,19 @@ export function Sidebar({
           </span>
         )}
         <span className="workspace-copy">
-          <strong>{label}</strong>
+          <strong title={label}>{label}</strong>
           {detail && (
             <small
               data-attention={Boolean(workspaceAttentionDetail(workspace))}
+              title={detail}
             >
               {detail}
             </small>
           )}
         </span>
-        <ChevronRightIcon className="workspace-chevron" aria-hidden="true" />
+        {!grouped && (
+          <ChevronRightIcon className="workspace-chevron" aria-hidden="true" />
+        )}
       </button>
     );
   };
@@ -282,21 +290,56 @@ export function Sidebar({
                   <span>{state.workspaces.length}</span>
                 </div>
                 <div className="workspace-list">
-                  {workspaceRows.map(({ children, workspace }) => (
-                    <div className="workspace-tree" key={workspace.id}>
-                      {renderWorkspaceButton(workspace, "space")}
-                      {children.length > 0 && (
-                        <fieldset className="worktree-list">
-                          <legend className="sr-only">
-                            {workspace.name} worktrees
-                          </legend>
-                          {children.map((child) =>
-                            renderWorkspaceButton(child, "worktree"),
+                  {workspaceRows.map(({ children, workspace }) => {
+                    const collapsed = collapsedWorkspaceIds.has(workspace.id);
+                    return (
+                      <div className="workspace-tree" key={workspace.id}>
+                        <div className="workspace-tree-heading">
+                          {renderWorkspaceButton(
+                            workspace,
+                            "space",
+                            children.length > 0,
                           )}
-                        </fieldset>
-                      )}
-                    </div>
-                  ))}
+                          {children.length > 0 && (
+                            <button
+                              type="button"
+                              className="workspace-group-toggle"
+                              aria-expanded={!collapsed}
+                              aria-label={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
+                              title={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
+                              onClick={() =>
+                                setCollapsedWorkspaceIds((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(workspace.id)) {
+                                    next.delete(workspace.id);
+                                  } else {
+                                    next.add(workspace.id);
+                                  }
+                                  return next;
+                                })
+                              }
+                            >
+                              {collapsed ? (
+                                <ChevronRightIcon aria-hidden="true" />
+                              ) : (
+                                <ChevronDownIcon aria-hidden="true" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        {children.length > 0 && !collapsed && (
+                          <fieldset className="worktree-list">
+                            <legend className="sr-only">
+                              {workspace.name} worktrees
+                            </legend>
+                            {children.map((child) =>
+                              renderWorkspaceButton(child, "worktree"),
+                            )}
+                          </fieldset>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             </nav>
@@ -432,12 +475,13 @@ export function Sidebar({
                       data-active={selected}
                       aria-current={selected ? "page" : undefined}
                       aria-label={`Open ${agent.label} Agent in ${workspace?.name ?? "unknown Space"}, ${agentStatusLabel(agent.status)}`}
+                      title={`${agent.label} — ${workspace?.name ?? "Unknown Space"} — ${agentStatusLabel(agent.status)}`}
                       key={agent.id}
                       onClick={() => selectAgent(agent.id)}
                     >
                       <StatusPill status={agent.status} compact />
                       <span className="agent-item-copy">
-                        <strong>{agent.label}</strong>
+                        <strong title={agent.label}>{agent.label}</strong>
                         <span className="agent-item-meta">
                           <small>{workspace?.name ?? "Unknown Space"}</small>
                           <span

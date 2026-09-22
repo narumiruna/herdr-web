@@ -46,27 +46,39 @@
 .work-status-summary {
   display: flex;
   min-width: 0;
-  max-width: min(46vw, 420px);
+  max-width: min(46vw, 460px);
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  color: var(--ink-muted);
-  font-size: 10px;
+  border: 0;
   white-space: nowrap;
 }
-.work-status-summary span {
+.work-status-summary button {
   display: inline-flex;
-  min-height: 24px;
+  min-height: 26px;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
 }
-.work-status-summary span::before {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
-  content: "";
+.work-status-summary button:hover,
+.work-status-summary button:focus-visible {
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.work-status-summary button strong {
+  color: inherit;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
 }
 .work-status-summary [data-kind="needs-input"] {
   color: var(--amber-12);

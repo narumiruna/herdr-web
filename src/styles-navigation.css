@@ -203,6 +203,9 @@
 .attention-item[data-active="true"] {
   background: var(--panel-muted);
 }
+.attention-item[data-active="true"] {
+  border-left: 3px solid var(--amber-9);
+}
 .attention-item > svg:first-child {
   color: var(--amber-10);
 }
@@ -248,6 +251,38 @@
 .workspace-item:hover,
 .workspace-item[data-active="true"] {
   background: var(--panel-muted);
+}
+.workspace-item[data-active="true"] {
+  border-left: 3px solid var(--amber-9);
+  color: var(--ink);
+}
+.workspace-tree-heading {
+  position: relative;
+  min-width: 0;
+}
+.workspace-tree-heading > .workspace-item {
+  padding-right: 38px;
+}
+.workspace-group-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  place-items: center;
+  transform: translateY(-50%);
+}
+.workspace-group-toggle:hover,
+.workspace-group-toggle:focus-visible {
+  background: color-mix(in srgb, var(--border-strong) 18%, transparent);
+  color: var(--ink);
 }
 .worktree-item {
   grid-template-columns: 28px minmax(0, 1fr) 14px;
@@ -419,6 +454,10 @@
 .agent-item:hover,
 .agent-item[data-active="true"] {
   background: var(--panel-muted);
+}
+.agent-item[data-active="true"] {
+  border-left: 3px solid var(--amber-9);
+  color: var(--ink);
 }
 .workspace-item[data-active="true"] strong,
 .agent-item[data-active="true"] strong {

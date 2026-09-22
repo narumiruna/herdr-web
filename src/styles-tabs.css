@@ -26,7 +26,7 @@
 .session-tabs-scroll {
   width: auto;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
 }
 .session-tabs-viewport {
   width: 100%;
@@ -65,6 +65,7 @@
 .session-tab[data-state="active"] {
   border-bottom-color: var(--amber-11);
   color: var(--ink);
+  font-weight: 600;
 }
 .session-tab-icon {
   display: grid;
@@ -107,6 +108,12 @@
   border-radius: 4px;
   background: var(--sand-7);
 }
+.session-tabs-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
 .session-tabs-new.rt-IconButton {
   width: 40px;
   height: 36px;
@@ -119,6 +126,26 @@
 .session-tabs-new.rt-IconButton:hover {
   background: var(--panel-muted);
   color: var(--ink);
+}
+.session-tabs[data-combined="true"] {
+  min-height: 56px;
+  background: var(--canvas);
+}
+.session-tabs[data-combined="true"] > .topbar-context {
+  max-width: 150px;
+  flex: 0 1 150px;
+  padding-left: 16px;
+}
+.session-tabs[data-combined="true"] > .topbar-context strong {
+  max-width: 120px;
+}
+.session-tabs[data-combined="true"] .session-tabs-list,
+.session-tabs[data-combined="true"] .session-tab {
+  height: 55px;
+}
+.session-tabs[data-combined="true"] > .topbar-actions {
+  flex: 0 0 auto;
+  padding-right: 12px;
 }
 
 @media (max-width: 620px) {
@@ -144,5 +171,11 @@
     width: 45px;
     height: 45px;
     flex-basis: 45px;
+  }
+}
+
+@media (max-width: 350px) {
+  .session-tabs[data-combined="true"] .session-tabs-controls {
+    display: none;
   }
 }
