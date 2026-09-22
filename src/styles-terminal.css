@@ -35,6 +35,25 @@
   align-items: center;
   gap: 6px;
 }
+.interactive-terminal-actions {
+  min-width: 0;
+  gap: 9px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.interactive-terminal-actions::-webkit-scrollbar {
+  display: none;
+}
+.terminal-action-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+.terminal-action-group + .terminal-action-group {
+  padding-left: 8px;
+  border-left: 1px solid var(--terminal-border);
+}
 .interactive-terminal-state i {
   width: 6px;
   height: 6px;
@@ -67,6 +86,9 @@
 .interactive-terminal-actions button:focus-visible {
   background: var(--terminal-elevated);
   color: var(--terminal-text);
+}
+.interactive-terminal-actions button:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
 }
 .interactive-terminal-actions button:disabled {
   cursor: not-allowed;

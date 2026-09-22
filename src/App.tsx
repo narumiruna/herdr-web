@@ -48,7 +48,12 @@ import {
 import { ViewerShareDialog } from "./components/ViewerShareDialog";
 import { WorkflowTemplatesDialog } from "./components/WorkflowTemplatesDialog";
 import { readProductStorage, writeProductStorage } from "./product-storage";
-import { type HerdrState, type RuntimeName, tabsForWorkspace } from "./state";
+import {
+  type AgentStatus,
+  type HerdrState,
+  type RuntimeName,
+  tabsForWorkspace,
+} from "./state";
 import { parseTerminalFontSize } from "./terminal-preferences";
 import {
   themeAppearance,
@@ -184,6 +189,9 @@ export function App({
   const [keybindingsOpen, setKeybindingsOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [missionControlOpen, setMissionControlOpen] = useState(false);
+  const [missionControlFilter, setMissionControlFilter] = useState<
+    AgentStatus | "other"
+  >();
   const [workflowsOpen, setWorkflowsOpen] = useState(false);
   const [viewerSharesOpen, setViewerSharesOpen] = useState(false);
   const [projectWorkflows, setProjectWorkflows] = useState<WorkflowTemplate[]>(
@@ -735,6 +743,15 @@ export function App({
   const openMissionControlDialog = (returnFocus?: HTMLElement | null) => {
     missionControlReturnFocus.current =
       returnFocus ?? (document.activeElement as HTMLElement | null);
+    setMissionControlFilter(undefined);
+    setMissionControlOpen(true);
+  };
+  const openMissionControlFilter = (
+    filter: AgentStatus | "other",
+    returnFocus: HTMLElement,
+  ) => {
+    missionControlReturnFocus.current = returnFocus;
+    setMissionControlFilter(filter);
     setMissionControlOpen(true);
   };
   const openWorkflowsDialog = (returnFocus?: HTMLElement | null) => {
@@ -1308,6 +1325,197 @@ export function App({
     );
   }
 
+  const workbenchHeaderContext = (
+    <div className="topbar-context">
+      <IconButton
+        ref={mobileNavTrigger}
+        variant="ghost"
+        color="gray"
+        className="mobile-nav-trigger"
+        aria-label="Open navigation"
+        onClick={() => setMobileNavOpen(true)}
+      >
+        <HamburgerMenuIcon />
+      </IconButton>
+      <span className="mobile-brand-mark">
+        <HerdrWebLogo compact />
+      </span>
+      <strong title={workspace?.name}>{workspace?.name ?? "herdr-web"}</strong>
+    </div>
+  );
+
+  const workbenchHeaderActions = (
+    <div className="topbar-actions">
+      <fieldset className="work-status-summary">
+        <legend className="sr-only">Agent status filters</legend>
+        <button
+          type="button"
+          data-kind="needs-input"
+          aria-label={`Filter Agents by Needs input, ${statusCounts.needsInput}`}
+          onClick={(event) =>
+            openMissionControlFilter("blocked", event.currentTarget)
+          }
+        >
+          <strong>{statusCounts.needsInput}</strong> needs input
+        </button>
+        {statusCounts.failed > 0 && (
+          <button
+            type="button"
+            data-kind="failed"
+            aria-label={`Filter Agents by Failed, ${statusCounts.failed}`}
+            onClick={(event) =>
+              openMissionControlFilter("failed", event.currentTarget)
+            }
+          >
+            <strong>{statusCounts.failed}</strong> failed
+          </button>
+        )}
+        <button
+          type="button"
+          data-kind="working"
+          aria-label={`Filter Agents by Working, ${statusCounts.working}`}
+          onClick={(event) =>
+            openMissionControlFilter("working", event.currentTarget)
+          }
+        >
+          <strong>{statusCounts.working}</strong> working
+        </button>
+        <button
+          type="button"
+          data-kind="completed"
+          aria-label={`Filter Agents by Done, ${statusCounts.completed}`}
+          onClick={(event) =>
+            openMissionControlFilter("done", event.currentTarget)
+          }
+        >
+          <strong>{statusCounts.completed}</strong> done
+        </button>
+        {statusCounts.unknown > 0 && (
+          <button
+            type="button"
+            data-kind="unknown"
+            aria-label={`Filter Agents by Other status, ${statusCounts.unknown}`}
+            onClick={(event) =>
+              openMissionControlFilter("other", event.currentTarget)
+            }
+          >
+            <strong>{statusCounts.unknown}</strong> other
+          </button>
+        )}
+      </fieldset>
+      <IconTooltip label="Attention Inbox">
+        <IconButton
+          type="button"
+          variant="soft"
+          color="gray"
+          className="desktop-notifications attention-inbox-trigger"
+          aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
+          onClick={() => openAttentionDialog()}
+        >
+          <BellIcon />
+          {attention.groups.needsInput.length +
+            attention.groups.failed.length +
+            attention.groups.done.length >
+            0 && (
+            <span>
+              {attention.groups.needsInput.length +
+                attention.groups.failed.length +
+                attention.groups.done.length}
+            </span>
+          )}
+        </IconButton>
+      </IconTooltip>
+      <IconTooltip label="Mission Control">
+        <IconButton
+          type="button"
+          variant="soft"
+          color="gray"
+          className="desktop-mission-control"
+          aria-label="Open Mission Control"
+          onClick={() => openMissionControlDialog()}
+        >
+          <DashboardIcon />
+        </IconButton>
+      </IconTooltip>
+      {workspace && (
+        <Button
+          type="button"
+          variant="soft"
+          color="gray"
+          className="desktop-new-agent"
+          disabled={!canStartAgent}
+          onClick={() => openSessionDialog()}
+        >
+          <PlusIcon /> New agent
+        </Button>
+      )}
+      <button
+        ref={commandTrigger}
+        type="button"
+        className="command-button"
+        aria-label="Open Action Palette"
+        onClick={() => setCommandOpen(true)}
+      >
+        <MagnifyingGlassIcon />
+        <span>Actions</span>
+        <kbd>⌘ K</kbd>
+      </button>
+      {agent && (
+        <IconTooltip label="Session details">
+          <IconButton
+            type="button"
+            variant="soft"
+            color="gray"
+            className="desktop-details"
+            aria-label="Open details"
+            onClick={() => openDetailsDialog()}
+          >
+            <InfoCircledIcon />
+          </IconButton>
+        </IconTooltip>
+      )}
+      <IconTooltip
+        label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
+      >
+        <IconButton
+          type="button"
+          variant="soft"
+          color="gray"
+          className="theme-toggle desktop-appearance"
+          aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
+          onClick={() =>
+            setWorkbenchTheme((current) => toggleThemeAppearance(current))
+          }
+        >
+          {appearance === "light" ? <MoonIcon /> : <SunIcon />}
+        </IconButton>
+      </IconTooltip>
+      <IconButton
+        ref={mobileMoreTrigger}
+        type="button"
+        variant="soft"
+        color="gray"
+        className="mobile-more-trigger"
+        aria-label="Open more actions"
+        onClick={() => setMobileActionsOpen(true)}
+      >
+        <DotsHorizontalIcon />
+      </IconButton>
+      <span
+        className="connection-state"
+        data-state={runtime.connection}
+        title={
+          runtime.connection === "connected" ? "Connected" : "Reconnecting"
+        }
+      >
+        <i aria-hidden="true" />
+        <span className="sr-only">
+          {runtime.connection === "connected" ? "Connected" : "Reconnecting"}
+        </span>
+      </span>
+    </div>
+  );
+
   return (
     <Theme
       appearance={appearance}
@@ -1349,166 +1557,12 @@ export function App({
           />
 
           <div className="app-surface">
-            <header className="topbar">
-              <div className="topbar-context">
-                <IconButton
-                  ref={mobileNavTrigger}
-                  variant="ghost"
-                  color="gray"
-                  className="mobile-nav-trigger"
-                  aria-label="Open navigation"
-                  onClick={() => setMobileNavOpen(true)}
-                >
-                  <HamburgerMenuIcon />
-                </IconButton>
-                <span className="mobile-brand-mark">
-                  <HerdrWebLogo compact />
-                </span>
-                <strong>{workspace?.name ?? "herdr-web"}</strong>
-              </div>
-
-              <div className="topbar-actions">
-                <div
-                  className="work-status-summary"
-                  role="status"
-                  aria-label={`${statusCounts.needsInput} Agents need input, ${statusCounts.failed} failed, ${statusCounts.working} working, ${statusCounts.completed} completed, ${statusCounts.unknown} unknown`}
-                >
-                  <span data-kind="needs-input">
-                    {statusCounts.needsInput} needs input
-                  </span>
-                  {statusCounts.failed > 0 && (
-                    <span data-kind="failed">{statusCounts.failed} failed</span>
-                  )}
-                  <span data-kind="working">
-                    {statusCounts.working} working
-                  </span>
-                  <span data-kind="completed">
-                    {statusCounts.completed} done
-                  </span>
-                  {statusCounts.unknown > 0 && (
-                    <span data-kind="unknown">
-                      {statusCounts.unknown} unknown
-                    </span>
-                  )}
-                </div>
-                <IconTooltip label="Attention Inbox">
-                  <IconButton
-                    type="button"
-                    variant="soft"
-                    color="gray"
-                    className="desktop-notifications attention-inbox-trigger"
-                    aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
-                    onClick={() => openAttentionDialog()}
-                  >
-                    <BellIcon />
-                    {attention.groups.needsInput.length +
-                      attention.groups.failed.length +
-                      attention.groups.done.length >
-                      0 && (
-                      <span>
-                        {attention.groups.needsInput.length +
-                          attention.groups.failed.length +
-                          attention.groups.done.length}
-                      </span>
-                    )}
-                  </IconButton>
-                </IconTooltip>
-                <IconTooltip label="Mission Control">
-                  <IconButton
-                    type="button"
-                    variant="soft"
-                    color="gray"
-                    className="desktop-mission-control"
-                    aria-label="Open Mission Control"
-                    onClick={() => openMissionControlDialog()}
-                  >
-                    <DashboardIcon />
-                  </IconButton>
-                </IconTooltip>
-                {workspace && (
-                  <Button
-                    type="button"
-                    variant="soft"
-                    color="gray"
-                    className="desktop-new-agent"
-                    disabled={!canStartAgent}
-                    onClick={() => openSessionDialog()}
-                  >
-                    <PlusIcon /> New agent
-                  </Button>
-                )}
-                <button
-                  ref={commandTrigger}
-                  type="button"
-                  className="command-button"
-                  aria-label="Open Action Palette"
-                  onClick={() => setCommandOpen(true)}
-                >
-                  <MagnifyingGlassIcon />
-                  <span>Actions</span>
-                  <kbd>⌘ K</kbd>
-                </button>
-                {agent && (
-                  <IconTooltip label="Session details">
-                    <IconButton
-                      type="button"
-                      variant="soft"
-                      color="gray"
-                      className="desktop-details"
-                      aria-label="Open details"
-                      onClick={() => openDetailsDialog()}
-                    >
-                      <InfoCircledIcon />
-                    </IconButton>
-                  </IconTooltip>
-                )}
-                <IconTooltip
-                  label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-                >
-                  <IconButton
-                    type="button"
-                    variant="soft"
-                    color="gray"
-                    className="theme-toggle desktop-appearance"
-                    aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-                    onClick={() =>
-                      setWorkbenchTheme((current) =>
-                        toggleThemeAppearance(current),
-                      )
-                    }
-                  >
-                    {appearance === "light" ? <MoonIcon /> : <SunIcon />}
-                  </IconButton>
-                </IconTooltip>
-                <IconButton
-                  ref={mobileMoreTrigger}
-                  type="button"
-                  variant="soft"
-                  color="gray"
-                  className="mobile-more-trigger"
-                  aria-label="Open more actions"
-                  onClick={() => setMobileActionsOpen(true)}
-                >
-                  <DotsHorizontalIcon />
-                </IconButton>
-                <span
-                  className="connection-state"
-                  data-state={runtime.connection}
-                  title={
-                    runtime.connection === "connected"
-                      ? "Connected"
-                      : "Reconnecting"
-                  }
-                >
-                  <i aria-hidden="true" />
-                  <span className="sr-only">
-                    {runtime.connection === "connected"
-                      ? "Connected"
-                      : "Reconnecting"}
-                  </span>
-                </span>
-              </div>
-            </header>
+            {(!workspace || !agent) && (
+              <header className="topbar">
+                {workbenchHeaderContext}
+                {workbenchHeaderActions}
+              </header>
+            )}
 
             {(runtime.connection === "reconnecting" || !platform.online) && (
               <div
@@ -1643,6 +1697,8 @@ export function App({
 
             {workspace && agent ? (
               <SessionTabs
+                headerActions={workbenchHeaderActions}
+                headerContext={workbenchHeaderContext}
                 workspaceName={workspace.name}
                 sessions={workspaceTabs}
                 selectedId={agent.id}
@@ -1737,8 +1793,10 @@ export function App({
           }
           open={missionControlOpen}
           state={state}
+          statusFilter={missionControlFilter}
           onOpenAgent={openAgentFromSupervision}
           onOpenChange={setMissionControlOpen}
+          onStatusFilterChange={setMissionControlFilter}
         />
         <WorkflowTemplatesDialog
           canLaunch={canStartAgent}

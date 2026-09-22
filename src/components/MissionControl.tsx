@@ -5,7 +5,7 @@ import {
 } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import type { SavedMachineListResult } from "../herdr-api";
-import type { Agent, HerdrState } from "../state";
+import type { Agent, AgentStatus, HerdrState } from "../state";
 import type { AccessRole, RuntimeConnection } from "../use-herdr-runtime";
 import { MachineFleet } from "./MachineFleet";
 import { RadixDialog } from "./RadixDialog";
@@ -18,8 +18,10 @@ interface MissionControlProps {
   loadMachines?: (forceRefresh?: boolean) => Promise<SavedMachineListResult>;
   open: boolean;
   state: HerdrState;
+  statusFilter?: AgentStatus | "other";
   onOpenAgent: (agentId: string, paneId: string) => void;
   onOpenChange: (open: boolean) => void;
+  onStatusFilterChange?: (status?: AgentStatus | "other") => void;
 }
 
 function attentionAge(timestamp: number, now: number): string {
@@ -37,6 +39,27 @@ function agentPreview(agent: Agent): string {
   return agent.currentStep || agent.summary || "No recent preview available";
 }
 
+function statusFilterLabel(status: AgentStatus | "other"): string {
+  if (status === "blocked") return "Needs input";
+  if (status === "done") return "Done";
+  if (status === "failed") return "Failed";
+  if (status === "working") return "Working";
+  if (status === "other") return "Other status";
+  return status === "idle" ? "Idle" : "Unknown";
+}
+
+function matchesStatusFilter(
+  agent: Agent,
+  status: AgentStatus | "other" | undefined,
+): boolean {
+  if (!status) return true;
+  if (agent.kind !== "agent") return false;
+  if (status === "other") {
+    return agent.status === "idle" || agent.status === "unknown";
+  }
+  return agent.status === status;
+}
+
 export function MissionControl({
   accessRole,
   attentionStartedAt,
@@ -44,8 +67,10 @@ export function MissionControl({
   loadMachines,
   open,
   state,
+  statusFilter,
   onOpenAgent,
   onOpenChange,
+  onStatusFilterChange,
 }: MissionControlProps) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -60,16 +85,30 @@ export function MissionControl({
       return timestamp ? [[agent.id, timestamp] as const] : [];
     }),
   );
+  const visibleWorkspaces = state.workspaces
+    .map((workspace) => ({
+      agents: state.agents.filter(
+        (agent) =>
+          agent.workspaceId === workspace.id &&
+          matchesStatusFilter(agent, statusFilter),
+      ),
+      workspace,
+    }))
+    .filter(({ agents }) => !statusFilter || agents.length > 0);
 
   return (
     <RadixDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Mission Control"
-      description="A real-time supervision overview. The terminal-first workbench remains the primary workspace."
+      description={
+        statusFilter
+          ? `Agents filtered by ${statusFilterLabel(statusFilter)}.`
+          : "A real-time supervision overview. The terminal-first workbench remains the primary workspace."
+      }
       className="mission-control-dialog"
     >
-      <div className="mission-control-summary" role="status">
+      <div className="mission-control-summary">
         <span data-state={connection}>
           <i aria-hidden="true" />
           {connection === "connected" ? "Connected" : "Reconnecting"}
@@ -85,6 +124,17 @@ export function MissionControl({
           {state.agents.filter(({ status }) => status === "blocked").length}{" "}
           need input
         </span>
+        {statusFilter && (
+          <button
+            type="button"
+            className="mission-filter-clear"
+            aria-label={`Clear ${statusFilterLabel(statusFilter)} Agent filter`}
+            onClick={() => onStatusFilterChange?.(undefined)}
+          >
+            {statusFilterLabel(statusFilter)} only{" "}
+            <span aria-hidden="true">×</span>
+          </button>
+        )}
         {(state.capabilities.previewsTruncated ||
           state.capabilities.statusSubscriptionsTruncated) && (
           <span data-state="limited">
@@ -94,10 +144,13 @@ export function MissionControl({
         )}
       </div>
       <div className="mission-control-grid">
-        {state.workspaces.map((workspace) => {
-          const agents = state.agents.filter(
-            ({ workspaceId }) => workspaceId === workspace.id,
-          );
+        {visibleWorkspaces.length === 0 && (
+          <p className="mission-control-empty">
+            No Agents match{" "}
+            {statusFilter ? statusFilterLabel(statusFilter) : "this view"}.
+          </p>
+        )}
+        {visibleWorkspaces.map(({ agents, workspace }) => {
           return (
             <section key={workspace.id} className="mission-space-card">
               <header>

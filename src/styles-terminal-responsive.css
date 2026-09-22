@@ -28,6 +28,12 @@
   .interactive-terminal-tools {
     min-height: 44px;
   }
+  .interactive-terminal-actions {
+    gap: 3px;
+  }
+  .terminal-action-group + .terminal-action-group {
+    padding-left: 3px;
+  }
   .interactive-terminal-actions button {
     width: 44px;
     height: 44px;

@@ -106,6 +106,22 @@ describe("herdr-web terminal-first workbench", () => {
     expect(document.title).toContain("herdr-web");
   });
 
+  test("combines workspace controls and tabs into one workbench header", () => {
+    const app = render(<App live={false} />);
+    const header = app.container.querySelector(
+      '.session-tabs[data-combined="true"]',
+    );
+
+    expect(header).not.toBeNull();
+    expect(header).toContainElement(
+      screen.getByRole("tablist", { name: "herdr tabs" }),
+    );
+    expect(header).toContainElement(
+      screen.getByRole("button", { name: "New agent" }),
+    );
+    expect(app.container.querySelector(".app-surface > .topbar")).toBeNull();
+  });
+
   test("shows each workspace session in a keyboard-accessible tab bar", async () => {
     const user = renderApp();
     const tabList = screen.getByRole("tablist", { name: "herdr tabs" });
@@ -188,8 +204,9 @@ describe("herdr-web terminal-first workbench", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
-  test("groups linked worktree Spaces under their repository Space", () => {
+  test("groups linked worktree Spaces under collapsible repository Spaces", async () => {
     const state = createDemoState();
+    const user = userEvent.setup();
     state.selectedWorkspaceId = "linked-tree";
     state.selectedAgentId = "";
     state.selectedSessionByWorkspace = {};
@@ -257,9 +274,28 @@ describe("herdr-web terminal-first workbench", () => {
     expect(
       within(nav).getByRole("group", { name: "herdr-web worktrees" }),
     ).toBeVisible();
+    expect(linkedWorktree).toHaveAttribute(
+      "title",
+      "narumi/feat/tree — /repo/.herdr/worktree-clear-valley-bcba",
+    );
     expect(
       within(linkedWorktree).queryByText("worktree-clear-valley-bcba"),
     ).not.toBeInTheDocument();
+
+    await user.click(
+      within(nav).getByRole("button", {
+        name: "Collapse herdr-web worktrees",
+      }),
+    );
+    expect(
+      within(nav).queryByRole("group", { name: "herdr-web worktrees" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(nav).getByRole("button", { name: "Expand herdr-web worktrees" }),
+    );
+    expect(
+      within(nav).getByRole("group", { name: "herdr-web worktrees" }),
+    ).toBeVisible();
   });
 
   test("switches the Agents panel between grouped and priority order", async () => {
@@ -509,6 +545,27 @@ describe("herdr-web terminal-first workbench", () => {
     expect(
       await screen.findByRole("region", { name: "shell terminal" }),
     ).toBeVisible();
+  });
+
+  test("filters Mission Control from the status summary", async () => {
+    const user = renderApp();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Filter Agents by Working, 2",
+      }),
+    );
+
+    const mission = screen.getByRole("dialog", { name: "Mission Control" });
+    expect(within(mission).getByText("web-bridge")).toBeVisible();
+    expect(within(mission).getByText("plugin-index")).toBeVisible();
+    expect(within(mission).queryByText("api-review")).not.toBeInTheDocument();
+    await user.click(
+      within(mission).getByRole("button", {
+        name: "Clear Working Agent filter",
+      }),
+    );
+    expect(within(mission).getByText("api-review")).toBeVisible();
   });
 
   test("opens Attention Inbox previews and Mission Control without replacing the terminal", async () => {
