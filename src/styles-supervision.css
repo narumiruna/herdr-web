@@ -13,15 +13,15 @@
   top: -5px;
   right: -5px;
   display: grid;
-  min-width: 16px;
-  height: 16px;
+  min-width: 18px;
+  height: 18px;
   padding: 0 4px;
   border: 2px solid var(--panel-raised);
   border-radius: 999px;
   background: var(--amber-9);
   color: var(--amber-contrast);
   font:
-    700 8px / 1 "IBM Plex Mono",
+    700 var(--text-caption) / 1 "IBM Plex Mono",
     monospace;
   place-items: center;
 }
@@ -34,7 +34,8 @@
   border-bottom: 1px solid var(--blue-6);
   background: var(--blue-3);
   color: var(--blue-12);
-  font-size: 11px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .active-share-banner span {
   overflow: hidden;
@@ -77,7 +78,7 @@
 .attention-inbox-list h3,
 .attention-inbox-list p {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 .attention-inbox-list p {
   padding: 4px 12px 12px;
@@ -112,7 +113,7 @@
 .attention-inbox-detail small {
   overflow: hidden;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -172,7 +173,7 @@
   flex-direction: column;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .attention-quick-reply textarea,
 .workflow-editor input,
@@ -214,7 +215,7 @@
   gap: 12px;
   padding-top: 10px;
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .mission-control-summary {
@@ -232,7 +233,7 @@
   border-radius: 3px;
   background: var(--panel-muted);
   color: var(--ink-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .mission-filter-clear {
   border: 1px solid var(--amber-7);
@@ -331,7 +332,7 @@
 .mission-agent-list button > span:last-child {
   color: var(--ink-muted);
   font:
-    9px "IBM Plex Mono",
+    var(--text-caption) "IBM Plex Mono",
     monospace;
 }
 .mission-agent-list p {
@@ -383,7 +384,7 @@
 }
 .machine-fleet-limit {
   margin-bottom: 9px;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .machine-fleet-grid {
   display: grid;
@@ -414,7 +415,7 @@
   flex: 0 0 auto;
   gap: 5px;
   color: var(--ink-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   text-transform: uppercase;
 }
 .machine-status i,
@@ -447,7 +448,7 @@
   border-radius: 3px;
   background: var(--panel-muted);
   color: var(--ink-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 .machine-counts span[data-attention="true"] {
   background: var(--amber-3);
@@ -462,7 +463,7 @@
 .machine-space-list section > header small,
 .machine-space-list section > header span {
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 .machine-space-list ul {
   margin: 0;
@@ -476,7 +477,7 @@
   gap: 7px;
   padding: 6px 10px 6px 24px;
   border-top: 1px solid var(--border);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .machine-space-list li > span {
   overflow: hidden;
@@ -544,7 +545,7 @@
   flex-direction: column;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .workflow-editor input,
 .workflow-editor select {
@@ -620,7 +621,7 @@
   flex-direction: column;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .viewer-share-create select,
 .settings-toggle-options select {
@@ -703,7 +704,7 @@
 }
 .terminal-diagnostics-grid dt {
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 .terminal-diagnostics-grid dd {
   margin: 4px 0 0;
@@ -713,7 +714,7 @@
 }
 .terminal-diagnostics-note {
   margin-bottom: 0;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .settings-toggle-options {

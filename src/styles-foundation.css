@@ -1,5 +1,10 @@
 /* Japanese editorial foundation: warm paper, sumi ink, and restrained accents. */
 :root {
+  --text-caption: 11px;
+  --text-compact: 12px;
+  --text-body: 14px;
+  --leading-compact: 1.4;
+  --leading-body: 1.55;
   font-family: "Bricolage Grotesque Variable", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -35,6 +40,8 @@
   --ink-secondary: var(--secondary-ink);
   --ink-muted: var(--secondary-ink);
   --muted: var(--secondary-ink);
+  --selection-accent: #66558c;
+  --selection-fill: #ece7f3;
   --terminal: var(--raised-paper);
   --terminal-panel: #f0ece4;
   --terminal-elevated: #e7e1d7;
@@ -93,7 +100,7 @@
   --paper: #11110f;
   --raised-paper: #1c1b18;
   --sumi: #eeeae1;
-  --secondary-ink: #bbb4a8;
+  --secondary-ink: #cbc4b8;
   --fine-rule: #34322d;
   --control-border: #706b61;
   --indigo: #a9c2ec;
@@ -115,6 +122,8 @@
   --ink-secondary: var(--secondary-ink);
   --ink-muted: var(--secondary-ink);
   --muted: var(--secondary-ink);
+  --selection-accent: #c2b2eb;
+  --selection-fill: #2a2637;
   --terminal: var(--paper);
   --terminal-panel: #191916;
   --terminal-elevated: #262520;

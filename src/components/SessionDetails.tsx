@@ -63,6 +63,26 @@ export function SessionDetails({
             </dd>
           </div>
         )}
+        {agent.kind === "agent" && agent.currentStep && (
+          <div>
+            <dt>Current task</dt>
+            <dd>{agent.currentStep}</dd>
+          </div>
+        )}
+        {agent.kind === "agent" &&
+          agent.summary &&
+          agent.summary !== agent.currentStep && (
+            <div>
+              <dt>Goal</dt>
+              <dd>{agent.summary}</dd>
+            </div>
+          )}
+        {agent.kind === "agent" && agent.updated && (
+          <div>
+            <dt>Updated</dt>
+            <dd>{agent.updated}</dd>
+          </div>
+        )}
         <div>
           <dt>Runtime</dt>
           <dd>{agent.runtime}</dd>

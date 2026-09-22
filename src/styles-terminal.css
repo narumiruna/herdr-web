@@ -4,7 +4,7 @@
   --terminal-elevated: #252525;
   --terminal-border: #3a3a3a;
   --terminal-text: #eeeeec;
-  --terminal-muted: #b4b4b0;
+  --terminal-muted: #c5c5c0;
   --focus-ring: #dfaa72;
   position: relative;
   display: flex;
@@ -17,7 +17,7 @@
 }
 .interactive-terminal-tools {
   display: flex;
-  min-height: 32px;
+  min-height: 34px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
@@ -27,7 +27,7 @@
   background: var(--terminal-panel);
   color: var(--terminal-muted);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .interactive-terminal-state,
 .interactive-terminal-actions {
@@ -53,6 +53,39 @@
 .terminal-action-group + .terminal-action-group {
   padding-left: 8px;
   border-left: 1px solid var(--terminal-border);
+}
+.terminal-actions-menu {
+  z-index: 100;
+  min-width: 220px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-dialog);
+}
+.terminal-actions-menu-item {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border-radius: 5px;
+  outline: 0;
+  cursor: pointer;
+  font-size: var(--text-caption);
+}
+.terminal-actions-menu-item[data-highlighted] {
+  background: var(--panel-muted);
+}
+.terminal-actions-menu-item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.terminal-actions-menu-separator {
+  height: 1px;
+  margin: 4px;
+  background: var(--border);
 }
 .interactive-terminal-state i {
   width: 6px;
@@ -105,7 +138,7 @@
   background: var(--terminal-panel);
   color: var(--terminal-muted);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .terminal-selection-toolbar button {
   display: inline-flex;
@@ -131,7 +164,8 @@
   background: var(--red-3);
   color: var(--red-12);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .terminal-paste-sink {
   position: absolute;
@@ -171,7 +205,7 @@
   background: var(--terminal-elevated);
   color: var(--terminal-muted);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .terminal-search label {
   display: inline-flex;
@@ -215,7 +249,7 @@
 }
 .terminal-state-overlay {
   position: absolute;
-  inset: 32px 0 0;
+  inset: 34px 0 0;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -224,7 +258,7 @@
   background: color-mix(in srgb, var(--terminal) 82%, transparent);
   color: var(--terminal-muted);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 .terminal-state-action {
   flex-direction: column;
@@ -304,11 +338,11 @@
 .terminal-image-status,
 .terminal-image-warning {
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .terminal-image-copy code {
   color: var(--ink-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .terminal-image-status {
   display: inline-flex;
@@ -459,20 +493,21 @@
 .composer-attachment-copy strong {
   overflow: hidden;
   color: var(--terminal-text);
-  font-size: 11px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .composer-attachment-copy small {
   overflow: hidden;
   color: var(--terminal-muted);
-  font-size: 11px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
   overflow-wrap: anywhere;
   white-space: normal;
 }
 .composer-error {
   color: var(--red-9);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 .composer-send-error {
   display: flex;
@@ -484,7 +519,8 @@
   border-radius: 7px;
   background: color-mix(in srgb, var(--red-9) 13%, transparent);
   color: var(--red-12);
-  font-size: 11px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .composer-send-error button {
   min-height: 30px;
@@ -497,12 +533,12 @@
 }
 .composer-progress {
   color: var(--amber-8);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 .composer-success {
   color: var(--grass-12);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 .message-composer textarea {
   width: 100%;
@@ -515,7 +551,7 @@
   background: transparent;
   color: var(--terminal-text);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 12px;
+  font-size: var(--text-compact);
   line-height: 24px;
 }
 .message-composer textarea::placeholder {
@@ -537,7 +573,7 @@
   gap: 12px;
   color: var(--terminal-muted);
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .terminal-readonly {
   display: flex;
@@ -553,11 +589,12 @@
 .terminal-readonly > span {
   display: flex;
   flex-direction: column;
-  font-size: 11px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .terminal-readonly strong {
   color: var(--terminal-text);
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 
 .confirm-body {

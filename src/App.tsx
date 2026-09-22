@@ -1333,13 +1333,15 @@ export function App({
             {runtime.actionError && (
               <div className="runtime-error" role="alert">
                 <span>{runtime.actionError}</span>
-                <button
-                  type="button"
-                  aria-label="Dismiss action error"
-                  onClick={runtime.clearActionError}
-                >
-                  <Cross2Icon />
-                </button>
+                <IconTooltip label="Dismiss action error">
+                  <button
+                    type="button"
+                    aria-label="Dismiss action error"
+                    onClick={runtime.clearActionError}
+                  >
+                    <Cross2Icon />
+                  </button>
+                </IconTooltip>
               </div>
             )}
             {terminalWorkspace(detachedAgent)}
@@ -1427,51 +1429,55 @@ export function App({
           </button>
         )}
       </fieldset>
-      <IconTooltip label="Attention Inbox">
-        <IconButton
-          type="button"
-          variant="soft"
-          color="gray"
-          className="desktop-notifications attention-inbox-trigger"
-          aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
-          onClick={() => openAttentionDialog()}
-        >
-          <BellIcon />
-          {attention.groups.needsInput.length +
-            attention.groups.failed.length +
-            attention.groups.done.length >
-            0 && (
-            <span>
-              {attention.groups.needsInput.length +
-                attention.groups.failed.length +
-                attention.groups.done.length}
-            </span>
-          )}
-        </IconButton>
-      </IconTooltip>
-      <IconTooltip label="Mission Control">
-        <IconButton
-          type="button"
-          variant="soft"
-          color="gray"
-          className="desktop-mission-control"
-          aria-label="Open Mission Control"
-          onClick={() => openMissionControlDialog()}
-        >
-          <DashboardIcon />
-        </IconButton>
-      </IconTooltip>
+      <span className="topbar-action-group" data-kind="supervision">
+        <IconTooltip label="Attention Inbox">
+          <IconButton
+            type="button"
+            variant="soft"
+            color="gray"
+            className="desktop-notifications attention-inbox-trigger"
+            aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
+            onClick={() => openAttentionDialog()}
+          >
+            <BellIcon />
+            {attention.groups.needsInput.length +
+              attention.groups.failed.length +
+              attention.groups.done.length >
+              0 && (
+              <span>
+                {attention.groups.needsInput.length +
+                  attention.groups.failed.length +
+                  attention.groups.done.length}
+              </span>
+            )}
+          </IconButton>
+        </IconTooltip>
+        <IconTooltip label="Mission Control">
+          <IconButton
+            type="button"
+            variant="soft"
+            color="gray"
+            className="desktop-mission-control"
+            aria-label="Open Mission Control"
+            onClick={() => openMissionControlDialog()}
+          >
+            <DashboardIcon />
+          </IconButton>
+        </IconTooltip>
+      </span>
       {workspace && (
-        <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          className="desktop-new-agent"
-          disabled={!canStartAgent}
-          onClick={() => openSessionDialog()}
-        >
-          <PlusIcon /> New agent
-        </Button>
+        <span className="topbar-action-group" data-kind="creation">
+          <Button
+            type="button"
+            variant="soft"
+            color="gray"
+            className="desktop-new-agent"
+            disabled={!canStartAgent}
+            onClick={() => openSessionDialog()}
+          >
+            <PlusIcon /> New agent
+          </Button>
+        </span>
       )}
       <button
         ref={commandTrigger}
@@ -1484,36 +1490,50 @@ export function App({
         <span>Actions</span>
         <kbd>⌘ K</kbd>
       </button>
-      {agent && (
-        <IconTooltip label="Session details">
+      <span className="topbar-action-group" data-kind="utilities">
+        {agent && (
+          <IconTooltip label="Session details">
+            <IconButton
+              type="button"
+              variant="soft"
+              color="gray"
+              className="desktop-details"
+              aria-label="Open details"
+              onClick={() => openDetailsDialog()}
+            >
+              <InfoCircledIcon />
+            </IconButton>
+          </IconTooltip>
+        )}
+        <IconTooltip
+          label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
+        >
           <IconButton
             type="button"
             variant="soft"
             color="gray"
-            className="desktop-details"
-            aria-label="Open details"
-            onClick={() => openDetailsDialog()}
+            className="theme-toggle desktop-appearance"
+            aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
+            onClick={() =>
+              setWorkbenchTheme((current) => toggleThemeAppearance(current))
+            }
           >
-            <InfoCircledIcon />
+            {appearance === "light" ? <MoonIcon /> : <SunIcon />}
           </IconButton>
         </IconTooltip>
-      )}
-      <IconTooltip
-        label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-      >
-        <IconButton
-          type="button"
-          variant="soft"
-          color="gray"
-          className="theme-toggle desktop-appearance"
-          aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-          onClick={() =>
-            setWorkbenchTheme((current) => toggleThemeAppearance(current))
+        <span
+          className="connection-state"
+          data-state={runtime.connection}
+          title={
+            runtime.connection === "connected" ? "Connected" : "Reconnecting"
           }
         >
-          {appearance === "light" ? <MoonIcon /> : <SunIcon />}
-        </IconButton>
-      </IconTooltip>
+          <i aria-hidden="true" />
+          <span className="sr-only">
+            {runtime.connection === "connected" ? "Connected" : "Reconnecting"}
+          </span>
+        </span>
+      </span>
       <IconButton
         ref={mobileMoreTrigger}
         type="button"
@@ -1525,18 +1545,6 @@ export function App({
       >
         <DotsHorizontalIcon />
       </IconButton>
-      <span
-        className="connection-state"
-        data-state={runtime.connection}
-        title={
-          runtime.connection === "connected" ? "Connected" : "Reconnecting"
-        }
-      >
-        <i aria-hidden="true" />
-        <span className="sr-only">
-          {runtime.connection === "connected" ? "Connected" : "Reconnecting"}
-        </span>
-      </span>
     </div>
   );
 
@@ -1642,13 +1650,15 @@ export function App({
             {runtime.actionError && (
               <div className="runtime-error" role="alert">
                 <span>{runtime.actionError}</span>
-                <button
-                  type="button"
-                  aria-label="Dismiss action error"
-                  onClick={runtime.clearActionError}
-                >
-                  <Cross2Icon />
-                </button>
+                <IconTooltip label="Dismiss action error">
+                  <button
+                    type="button"
+                    aria-label="Dismiss action error"
+                    onClick={runtime.clearActionError}
+                  >
+                    <Cross2Icon />
+                  </button>
+                </IconTooltip>
               </div>
             )}
 
@@ -1709,13 +1719,15 @@ export function App({
                     </Button>
                   )}
                   {pendingLaunch.status !== "starting" && (
-                    <button
-                      type="button"
-                      aria-label="Dismiss Agent launch status"
-                      onClick={() => setPendingLaunch(undefined)}
-                    >
-                      <Cross2Icon />
-                    </button>
+                    <IconTooltip label="Dismiss Agent launch status">
+                      <button
+                        type="button"
+                        aria-label="Dismiss Agent launch status"
+                        onClick={() => setPendingLaunch(undefined)}
+                      >
+                        <Cross2Icon />
+                      </button>
+                    </IconTooltip>
                   )}
                 </span>
               </div>
