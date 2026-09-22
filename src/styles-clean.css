@@ -170,6 +170,19 @@
   );
 }
 :is(.theme-mist, .theme-sage, .theme-linen)
+  .sidebar-section-resize-handle:is(
+    :hover,
+    :focus-visible,
+    [data-dragging="true"]
+  ) {
+  background: linear-gradient(
+    to bottom,
+    var(--panel) 0 calc(50% - 1px),
+    var(--clean-accent) calc(50% - 1px) calc(50% + 1px),
+    var(--panel) calc(50% + 1px)
+  );
+}
+:is(.theme-mist, .theme-sage, .theme-linen)
   .pane-resize-handle[data-direction="right"]:is(:hover, :focus-visible) {
   background: linear-gradient(
     to right,

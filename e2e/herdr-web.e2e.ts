@@ -1027,6 +1027,60 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
+test("mouse resizing persists Spaces and Agents proportions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const separator = page.getByRole("separator", {
+    name: "Resize Spaces and Agents panels",
+  });
+  const sections = page.locator(".desktop-sidebar .sidebar-sections");
+  const sectionBox = await sections.boundingBox();
+  const separatorBox = await separator.boundingBox();
+  if (!sectionBox || !separatorBox) {
+    throw new Error("Sidebar section separator is not visible");
+  }
+  const targetRatio = 0.55;
+  const targetY =
+    sectionBox.y +
+    (sectionBox.height - separatorBox.height) * targetRatio +
+    separatorBox.height / 2;
+  await page.mouse.move(
+    separatorBox.x + separatorBox.width / 2,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(separatorBox.x + separatorBox.width / 2, targetY);
+  await page.mouse.up();
+
+  await expect(separator).toHaveAttribute("aria-valuenow", "55");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Number(localStorage.getItem("herdr-web-sidebar-spaces-ratio")),
+      ),
+    )
+    .toBeCloseTo(targetRatio, 2);
+  const panelHeights = await page.evaluate(() => ({
+    agents:
+      document
+        .querySelector(".desktop-sidebar .agent-panel")
+        ?.getBoundingClientRect().height ?? 0,
+    spaces:
+      document
+        .querySelector(".desktop-sidebar .spaces-panel")
+        ?.getBoundingClientRect().height ?? 0,
+  }));
+  expect(
+    panelHeights.spaces / (panelHeights.spaces + panelHeights.agents),
+  ).toBeCloseTo(targetRatio, 2);
+
+  await page.reload();
+  await expect(separator).toHaveAttribute("aria-valuenow", "55");
+});
+
 test("mouse resizing persists navigation width and updates pane proportions", async ({
   page,
 }) => {

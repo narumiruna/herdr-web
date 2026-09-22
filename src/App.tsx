@@ -41,6 +41,10 @@ import {
   SidebarResizeHandle,
 } from "./components/SidebarResizeHandle";
 import {
+  clampSidebarSpacesRatio,
+  DEFAULT_SIDEBAR_SPACES_RATIO,
+} from "./components/SidebarSectionResizeHandle";
+import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
   TerminalWorkspace,
@@ -173,6 +177,16 @@ export function App({
     return Number.isFinite(saved)
       ? clampSidebarWidth(saved)
       : DEFAULT_SIDEBAR_WIDTH;
+  });
+  const [sidebarSpacesRatio, setSidebarSpacesRatio] = useState(() => {
+    const stored =
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "sidebar-spaces-ratio")
+        : null;
+    const saved = stored === null ? Number.NaN : Number(stored);
+    return Number.isFinite(saved)
+      ? clampSidebarSpacesRatio(saved)
+      : DEFAULT_SIDEBAR_SPACES_RATIO;
   });
   const [terminalFontSize, setTerminalFontSize] = useState(() =>
     parseTerminalFontSize(
@@ -512,6 +526,16 @@ export function App({
       );
     }
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(
+        window.localStorage,
+        "sidebar-spaces-ratio",
+        String(sidebarSpacesRatio),
+      );
+    }
+  }, [sidebarSpacesRatio]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -1537,7 +1561,9 @@ export function App({
               state={state}
               agentSort={agentSort}
               canCreateSpace={canCreateSpace}
+              spacesRatio={sidebarSpacesRatio}
               onAgentSortChange={setAgentSort}
+              onSpacesRatioChange={setSidebarSpacesRatio}
               onSelectWorkspace={selectWorkspace}
               onSelectAgent={selectAgent}
               onNewSpace={openNewSpaceDialog}
@@ -1894,7 +1920,9 @@ export function App({
             state={state}
             agentSort={agentSort}
             canCreateSpace={canCreateSpace}
+            spacesRatio={sidebarSpacesRatio}
             onAgentSortChange={setAgentSort}
+            onSpacesRatioChange={setSidebarSpacesRatio}
             onSelectWorkspace={selectWorkspace}
             onSelectAgent={selectAgent}
             onNewSpace={openNewSpaceDialog}

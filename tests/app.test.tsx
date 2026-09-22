@@ -204,6 +204,29 @@ describe("herdr-web terminal-first workbench", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
+  test("restores and persists the Spaces and Agents panel proportions", async () => {
+    window.localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.7");
+    renderApp();
+    const separator = screen.getByRole("separator", {
+      name: "Resize Spaces and Agents panels",
+    });
+
+    expect(separator).toHaveAttribute("aria-valuenow", "70");
+    expect(separator).toHaveAttribute(
+      "aria-valuetext",
+      "70% Spaces, 30% Agents",
+    );
+
+    fireEvent.keyDown(separator, { key: "ArrowUp" });
+
+    await waitFor(() =>
+      expect(
+        Number(window.localStorage.getItem("herdr-web-sidebar-spaces-ratio")),
+      ).toBeCloseTo(0.65),
+    );
+    expect(separator).toHaveAttribute("aria-valuenow", "65");
+  });
+
   test("groups linked worktree Spaces under collapsible repository Spaces", async () => {
     const state = createDemoState();
     const user = userEvent.setup();

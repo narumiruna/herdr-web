@@ -70,6 +70,12 @@
   padding: 0 18px;
   border-bottom: 1px solid var(--border);
 }
+.sidebar-sections {
+  --sidebar-section-handle-size: 8px;
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+}
 .spaces-panel {
   display: flex;
   min-height: 0;
@@ -385,13 +391,37 @@
 .workspace-item[data-active="true"] .workspace-chevron {
   opacity: 1;
 }
+.sidebar-section-resize-handle {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  height: var(--sidebar-section-handle-size);
+  margin: 0;
+  border: 0;
+  outline-offset: -2px;
+  background: linear-gradient(
+    to bottom,
+    var(--panel) 0 calc(50% - 0.5px),
+    var(--border) calc(50% - 0.5px) calc(50% + 0.5px),
+    var(--panel) calc(50% + 0.5px)
+  );
+  cursor: row-resize;
+  touch-action: none;
+}
+.sidebar-section-resize-handle:hover,
+.sidebar-section-resize-handle:focus-visible,
+.sidebar-section-resize-handle[data-dragging="true"] {
+  background: linear-gradient(
+    to bottom,
+    var(--panel) 0 calc(50% - 1px),
+    var(--amber-9) calc(50% - 1px) calc(50% + 1px),
+    var(--panel) calc(50% + 1px)
+  );
+}
 .agent-panel {
   display: flex;
-  min-height: 156px;
-  max-height: 42%;
-  flex: 0 1 36%;
+  min-height: 0;
   flex-direction: column;
-  border-top: 1px solid var(--border);
 }
 .agent-panel-heading {
   min-height: 48px;
