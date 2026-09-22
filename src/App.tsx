@@ -303,9 +303,11 @@ export function App({
       ({ workspaceId }) => workspace && workspaceId === workspace.id,
     );
   const workspaceTabs = workspace ? tabsForWorkspace(state, workspace.id) : [];
-  const canCreateSpace =
+  const canMutateSessions =
     runtime.connection === "connected" && runtime.accessRole === "controller";
-  const canStartAgent = canCreateSpace && pendingLaunch?.status !== "starting";
+  const canCreateSpace = canMutateSessions;
+  const canStartAgent =
+    canMutateSessions && pendingLaunch?.status !== "starting";
   const statusCounts = state.agents.reduce(
     (counts, session) => {
       if (session.kind !== "agent") return counts;
@@ -1962,6 +1964,7 @@ export function App({
               <>
                 <button
                   type="button"
+                  disabled={!canMutateSessions}
                   onClick={() => {
                     setMobileActionsOpen(false);
                     void renameSession(agent);
@@ -1975,6 +1978,7 @@ export function App({
                 </button>
                 <button
                   type="button"
+                  disabled={!canMutateSessions}
                   onClick={() => {
                     setMobileActionsOpen(false);
                     void moveSession(agent, "left");
@@ -1988,6 +1992,7 @@ export function App({
                 </button>
                 <button
                   type="button"
+                  disabled={!canMutateSessions}
                   onClick={() => {
                     setMobileActionsOpen(false);
                     void moveSession(agent, "right");
@@ -2003,6 +2008,7 @@ export function App({
                   <>
                     <button
                       type="button"
+                      disabled={!canMutateSessions}
                       onClick={() => {
                         setMobileActionsOpen(false);
                         void runAgentLifecycle(agent, "restart");
@@ -2019,6 +2025,7 @@ export function App({
                     <button
                       type="button"
                       data-destructive="true"
+                      disabled={!canMutateSessions}
                       onClick={() => {
                         setMobileActionsOpen(false);
                         void runAgentLifecycle(agent, "stop");
@@ -2035,6 +2042,7 @@ export function App({
                     <button
                       type="button"
                       data-destructive="true"
+                      disabled={!canMutateSessions}
                       onClick={() => {
                         setMobileActionsOpen(false);
                         void runAgentLifecycle(agent, "archive");
@@ -2049,6 +2057,7 @@ export function App({
                     <button
                       type="button"
                       data-destructive="true"
+                      disabled={!canMutateSessions}
                       onClick={() => {
                         setMobileActionsOpen(false);
                         void runAgentLifecycle(agent, "clear");
@@ -2065,6 +2074,7 @@ export function App({
                 <button
                   type="button"
                   data-destructive="true"
+                  disabled={!canMutateSessions}
                   onClick={() => {
                     setMobileActionsOpen(false);
                     void closeSession(agent);

@@ -163,6 +163,29 @@ describe("live herdr-web app", () => {
     ).toBeDisabled();
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    const mobileActions = screen.getByRole("dialog", { name: "More actions" });
+    for (const name of [
+      "Rename tab",
+      "Move tab left",
+      "Move tab right",
+      "Restart Agent",
+      "Stop Agent",
+      "Archive Agent",
+      "Clear Agent",
+      "Close tab",
+    ]) {
+      expect(
+        within(mobileActions).getByRole("button", {
+          name: new RegExp(`^${name}`),
+        }),
+      ).toBeDisabled();
+    }
+    await user.click(
+      within(mobileActions).getByRole("button", { name: "Close dialog" }),
+    );
+
     await user.keyboard("{Meta>}k{/Meta}");
     const palette = screen.getByRole("dialog", { name: "Action Palette" });
     await user.type(
