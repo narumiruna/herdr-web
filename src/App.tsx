@@ -1,17 +1,24 @@
 import {
+  ArchiveIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   BellIcon,
   CheckCircledIcon,
   Cross2Icon,
   DashboardIcon,
+  DesktopIcon,
   DotsHorizontalIcon,
   HamburgerMenuIcon,
   InfoCircledIcon,
   Link2Icon,
   MagnifyingGlassIcon,
   MoonIcon,
+  Pencil1Icon,
   PlusIcon,
   ReloadIcon,
+  StopIcon,
   SunIcon,
+  TrashIcon,
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button, IconButton, Theme } from "@radix-ui/themes";
@@ -296,9 +303,11 @@ export function App({
       ({ workspaceId }) => workspace && workspaceId === workspace.id,
     );
   const workspaceTabs = workspace ? tabsForWorkspace(state, workspace.id) : [];
-  const canCreateSpace =
+  const canMutateSessions =
     runtime.connection === "connected" && runtime.accessRole === "controller";
-  const canStartAgent = canCreateSpace && pendingLaunch?.status !== "starting";
+  const canCreateSpace = canMutateSessions;
+  const canStartAgent =
+    canMutateSessions && pendingLaunch?.status !== "starting";
   const statusCounts = state.agents.reduce(
     (counts, session) => {
       if (session.kind !== "agent") return counts;
@@ -1918,35 +1927,179 @@ export function App({
         >
           <div className="mobile-action-list">
             {workspace && (
-              <button
-                type="button"
-                disabled={!canStartAgent}
-                onClick={() => {
-                  setMobileActionsOpen(false);
-                  openSessionDialog(mobileMoreTrigger.current);
-                }}
-              >
-                <PlusIcon aria-hidden="true" />
-                <span>
-                  <strong>Start Agent</strong>
-                  <small>Launch an approved runtime in {workspace.name}.</small>
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={!canStartAgent}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    openSessionDialog(mobileMoreTrigger.current);
+                  }}
+                >
+                  <PlusIcon aria-hidden="true" />
+                  <span>
+                    <strong>Start Agent</strong>
+                    <small>
+                      Launch an approved runtime in {workspace.name}.
+                    </small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!canStartAgent}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    void createTerminal(mobileMoreTrigger.current);
+                  }}
+                >
+                  <DesktopIcon aria-hidden="true" />
+                  <span>
+                    <strong>New Terminal</strong>
+                    <small>Open a terminal tab in {workspace.name}.</small>
+                  </span>
+                </button>
+              </>
             )}
             {agent && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileActionsOpen(false);
-                  openDetailsDialog(mobileMoreTrigger.current);
-                }}
-              >
-                <InfoCircledIcon aria-hidden="true" />
-                <span>
-                  <strong>Session details</strong>
-                  <small>Runtime, current directory, and pane details.</small>
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={!canMutateSessions}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    void renameSession(agent);
+                  }}
+                >
+                  <Pencil1Icon aria-hidden="true" />
+                  <span>
+                    <strong>Rename tab</strong>
+                    <small>Rename {agent.label} for every Herdr client.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!canMutateSessions}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    void moveSession(agent, "left");
+                  }}
+                >
+                  <ArrowLeftIcon aria-hidden="true" />
+                  <span>
+                    <strong>Move tab left</strong>
+                    <small>Move {agent.label} one position left.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!canMutateSessions}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    void moveSession(agent, "right");
+                  }}
+                >
+                  <ArrowRightIcon aria-hidden="true" />
+                  <span>
+                    <strong>Move tab right</strong>
+                    <small>Move {agent.label} one position right.</small>
+                  </span>
+                </button>
+                {agent.kind === "agent" && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!canMutateSessions}
+                      onClick={() => {
+                        setMobileActionsOpen(false);
+                        void runAgentLifecycle(agent, "restart");
+                      }}
+                    >
+                      <ReloadIcon aria-hidden="true" />
+                      <span>
+                        <strong>Restart Agent</strong>
+                        <small>
+                          Restart {agent.label} in its current Space.
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      data-destructive="true"
+                      disabled={!canMutateSessions}
+                      onClick={() => {
+                        setMobileActionsOpen(false);
+                        void runAgentLifecycle(agent, "stop");
+                      }}
+                    >
+                      <StopIcon aria-hidden="true" />
+                      <span>
+                        <strong>Stop Agent</strong>
+                        <small>
+                          Stop {agent.label} for every Herdr client.
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      data-destructive="true"
+                      disabled={!canMutateSessions}
+                      onClick={() => {
+                        setMobileActionsOpen(false);
+                        void runAgentLifecycle(agent, "archive");
+                      }}
+                    >
+                      <ArchiveIcon aria-hidden="true" />
+                      <span>
+                        <strong>Archive Agent</strong>
+                        <small>Archive {agent.label} and its session.</small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      data-destructive="true"
+                      disabled={!canMutateSessions}
+                      onClick={() => {
+                        setMobileActionsOpen(false);
+                        void runAgentLifecycle(agent, "clear");
+                      }}
+                    >
+                      <TrashIcon aria-hidden="true" />
+                      <span>
+                        <strong>Clear Agent</strong>
+                        <small>Clear the {agent.label} session.</small>
+                      </span>
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  data-destructive="true"
+                  disabled={!canMutateSessions}
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    void closeSession(agent);
+                  }}
+                >
+                  <Cross2Icon aria-hidden="true" />
+                  <span>
+                    <strong>Close tab</strong>
+                    <small>Close {agent.label} for every Herdr client.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileActionsOpen(false);
+                    openDetailsDialog(mobileMoreTrigger.current);
+                  }}
+                >
+                  <InfoCircledIcon aria-hidden="true" />
+                  <span>
+                    <strong>Session details</strong>
+                    <small>Runtime, current directory, and pane details.</small>
+                  </span>
+                </button>
+              </>
             )}
             <button
               type="button"

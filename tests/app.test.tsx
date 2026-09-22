@@ -155,6 +155,32 @@ describe("herdr-web terminal-first workbench", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  test("keeps session controls available in the mobile action sheet", async () => {
+    const user = renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    const actions = screen.getByRole("dialog", { name: "More actions" });
+
+    for (const name of [
+      "Start Agent",
+      "New Terminal",
+      "Rename tab",
+      "Move tab left",
+      "Move tab right",
+      "Restart Agent",
+      "Stop Agent",
+      "Archive Agent",
+      "Clear Agent",
+      "Close tab",
+    ]) {
+      expect(
+        within(actions).getByRole("button", {
+          name: new RegExp(`^${name}`),
+        }),
+      ).toBeEnabled();
+    }
+  });
+
   test("opens the most urgent agent when a workspace is selected", async () => {
     const user = renderApp();
 
