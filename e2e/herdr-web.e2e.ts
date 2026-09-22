@@ -1246,7 +1246,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   const actions = page.getByRole("dialog", { name: "More actions" });
   await expect(actions).toBeVisible();
   for (const target of [
-    actions.getByRole("button", { name: /Start Agent/i }),
+    actions.getByRole("button", { name: /^Start Agent/i }),
     actions.getByRole("button", { name: /Session details/i }),
     actions.getByRole("button", { name: /appearance/i }),
   ]) {
@@ -1303,6 +1303,38 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
           element.getBoundingClientRect().bottom <= window.innerHeight,
       ),
   ).toBe(true);
+});
+
+test("320px mobile action sheet preserves session controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+
+  await expect(page.locator(".session-tabs-controls")).toBeHidden();
+  await page.getByRole("button", { name: "Open more actions" }).click();
+  const actions = page.getByRole("dialog", { name: "More actions" });
+
+  for (const name of [
+    "Start Agent",
+    "New Terminal",
+    "Rename tab",
+    "Move tab left",
+    "Move tab right",
+    "Restart Agent",
+    "Stop Agent",
+    "Archive Agent",
+    "Clear Agent",
+    "Close tab",
+  ]) {
+    const action = actions.getByRole("button", {
+      name: new RegExp(`^${name}`),
+    });
+    await expect(action).toBeEnabled();
+    await action.scrollIntoViewIfNeeded();
+    await expect(action).toBeVisible();
+  }
+  expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
 test("mobile Settings keeps terminal text presets inside the viewport", async ({
