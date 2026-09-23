@@ -743,6 +743,10 @@
   color: var(--amber-11);
   justify-self: center;
 }
+.mobile-action-list > button[data-destructive="true"] > svg,
+.mobile-action-list > button[data-destructive="true"] strong {
+  color: var(--red-11);
+}
 .mobile-action-list > button > span {
   display: flex;
   flex-direction: column;
