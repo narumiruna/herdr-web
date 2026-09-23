@@ -18,7 +18,7 @@ import {
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
-import { useId, useRef, useState } from "react";
+import { type CSSProperties, useId, useRef, useState } from "react";
 import { compactBranchLabel } from "../branch-label";
 import type { HerdrState, Workspace } from "../state";
 import { HerdrWebLogo } from "./HerdrWebLogo";
@@ -272,9 +272,12 @@ export function Sidebar({
 
       <div
         className="sidebar-sections"
-        style={{
-          gridTemplateRows: `minmax(0, ${spacesRatio}fr) var(--sidebar-section-handle-size) minmax(0, ${1 - spacesRatio}fr)`,
-        }}
+        style={
+          {
+            "--sidebar-agents-track": `${1 - spacesRatio}fr`,
+            "--sidebar-spaces-track": `${spacesRatio}fr`,
+          } as CSSProperties
+        }
       >
         <div className="spaces-panel">
           <ScrollArea.Root className="sidebar-scroll">

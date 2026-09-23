@@ -14,7 +14,6 @@ import {
   RowsIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button, DropdownMenu, IconButton } from "@radix-ui/themes";
 import {
   type CSSProperties,
@@ -722,23 +721,15 @@ export function TerminalWorkspace({
           </span>
         )}
         {workspace.branch && (
-          <Tooltip.Root delayDuration={350}>
-            <Tooltip.Trigger asChild>
-              <button
-                type="button"
-                className="terminal-toolbar-branch"
-                aria-label={`Branch ${workspace.branch}`}
-              >
-                {compactBranchLabel(workspace.branch)}
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-              <Tooltip.Content className="tooltip-content" sideOffset={7}>
-                Branch: {workspace.branch}
-                <Tooltip.Arrow className="tooltip-arrow" />
-              </Tooltip.Content>
-            </Tooltip.Portal>
-          </Tooltip.Root>
+          <code
+            className="terminal-toolbar-branch"
+            title={`Branch: ${workspace.branch}`}
+          >
+            <span aria-hidden="true">
+              {compactBranchLabel(workspace.branch)}
+            </span>
+            <span className="sr-only">Branch: {workspace.branch}</span>
+          </code>
         )}
       </>
     );

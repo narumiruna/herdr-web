@@ -203,14 +203,14 @@ describe("TerminalWorkspace snapshot frames", () => {
 });
 
 describe("TerminalWorkspace decision states", () => {
-  test("exposes branch and icon action labels on keyboard focus", async () => {
+  test("exposes branch text without action semantics and labels icon actions", async () => {
     render(<Harness />);
 
-    const branch = screen.getByLabelText("Branch feat/web-bridge");
-    branch.focus();
-    expect(
-      await screen.findByRole("tooltip", { name: "Branch: feat/web-bridge" }),
-    ).toBeVisible();
+    const branch = screen.getByTitle("Branch: feat/web-bridge");
+    expect(branch.tagName).toBe("CODE");
+    expect(branch).not.toHaveAttribute("role", "button");
+    expect(branch).not.toHaveAttribute("tabindex");
+    expect(branch).toHaveTextContent("Branch: feat/web-bridge");
 
     const copy = screen.getByRole("button", {
       name: "Copy current working directory",

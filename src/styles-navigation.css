@@ -75,6 +75,10 @@
   display: grid;
   min-height: 0;
   flex: 1 1 auto;
+  grid-template-rows:
+    minmax(0, var(--sidebar-spaces-track))
+    var(--sidebar-section-handle-size)
+    minmax(0, var(--sidebar-agents-track));
 }
 .spaces-panel {
   display: flex;

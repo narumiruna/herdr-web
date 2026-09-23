@@ -1190,6 +1190,59 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
+test("short mobile navigation keeps both panels usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 320 });
+  await page.addInitScript(() => {
+    localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.2");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+
+  const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
+  await expect(navigation).toBeVisible();
+  const separator = navigation.locator(".sidebar-section-resize-handle");
+  await expect(separator).toHaveCount(1);
+  await expect(separator).toBeHidden();
+
+  const bounds = await navigation.evaluate((element) => {
+    const rect = (selector: string) => {
+      const target = element.querySelector(selector);
+      if (!target) throw new Error(`Missing ${selector}`);
+      return target.getBoundingClientRect();
+    };
+    const sections = rect(".sidebar-sections");
+    const spaces = rect(".spaces-panel");
+    const spacesViewport = rect(".sidebar-viewport");
+    const spacesActions = rect(".spaces-actions");
+    const agents = rect(".agent-panel");
+    const agentsHeading = rect(".agent-panel-heading");
+    const agentsViewport = rect(".agent-panel-viewport");
+    return {
+      agentsBottom: agents.bottom,
+      agentsHeight: agents.height,
+      agentsTop: agents.top,
+      agentsHeadingBottom: agentsHeading.bottom,
+      agentsViewportHeight: agentsViewport.height,
+      sectionsBottom: sections.bottom,
+      spacesActionsBottom: spacesActions.bottom,
+      spacesHeight: spaces.height,
+      spacesViewportHeight: spacesViewport.height,
+    };
+  });
+  const navigationBox = await navigation.boundingBox();
+  expect(navigationBox).not.toBeNull();
+  expect(
+    Math.abs(bounds.spacesHeight - bounds.agentsHeight),
+  ).toBeLessThanOrEqual(1);
+  expect(bounds.spacesActionsBottom).toBeLessThanOrEqual(bounds.agentsTop);
+  expect(bounds.agentsHeadingBottom).toBeLessThanOrEqual(bounds.agentsBottom);
+  expect(bounds.spacesViewportHeight).toBeGreaterThan(0);
+  expect(bounds.agentsViewportHeight).toBeGreaterThan(0);
+  expect(bounds.sectionsBottom).toBeLessThanOrEqual(
+    (navigationBox?.y ?? 0) + (navigationBox?.height ?? 0),
+  );
+});
+
 test("mouse resizing persists Spaces and Agents proportions", async ({
   page,
 }) => {
