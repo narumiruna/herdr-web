@@ -45,10 +45,22 @@ for (const { label, theme } of WORKBENCH_THEMES) {
         fill: resolve(useClean ? "--clean-accent-fill" : "--amber-3"),
         ink: resolve("--ink"),
         muted: resolve("--ink-muted"),
+        navigationSelection: resolve("--selection-accent"),
+        semanticStatuses: [
+          resolve("--amber-12"),
+          resolve("--blue-12"),
+          resolve("--grass-12"),
+          resolve("--red-12"),
+        ],
       };
       probe.remove();
       return result;
     }, clean);
+
+    expect(new Set(colors.semanticStatuses).size).toBe(4);
+    for (const status of colors.semanticStatuses) {
+      expect(colors.navigationSelection).not.toBe(status);
+    }
 
     for (const [selected, inactive] of [
       [first, second],

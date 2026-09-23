@@ -8,6 +8,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { DropdownMenu, IconButton } from "@radix-ui/themes";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { Agent } from "../state";
+import { IconTooltip } from "./IconTooltip";
 import { StatusPill } from "./StatusPill";
 
 interface SessionTabsProps {
@@ -113,31 +114,35 @@ export function SessionTabs({
           </ScrollArea.Scrollbar>
         </ScrollArea.Root>
         <div className="session-tabs-controls">
-          <IconButton
-            type="button"
-            className="session-tabs-new"
-            variant="ghost"
-            color="gray"
-            disabled={!canCreateSession}
-            aria-label={`New Agent in ${workspaceName}`}
-            title={`New Agent in ${workspaceName}`}
-            onClick={(event) => onNewSession(event.currentTarget)}
-          >
-            <PlusIcon aria-hidden="true" />
-          </IconButton>
+          <IconTooltip label={`New Agent in ${workspaceName}`}>
+            <IconButton
+              type="button"
+              className="session-tabs-new"
+              variant="ghost"
+              color="gray"
+              disabled={!canCreateSession}
+              aria-label={`New Agent in ${workspaceName}`}
+              title={`New Agent in ${workspaceName}`}
+              onClick={(event) => onNewSession(event.currentTarget)}
+            >
+              <PlusIcon aria-hidden="true" />
+            </IconButton>
+          </IconTooltip>
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              <IconButton
-                type="button"
-                className="session-tabs-new"
-                variant="ghost"
-                color="gray"
-                disabled={!selectedSession}
-                aria-label="Session lifecycle actions"
-              >
-                <DotsHorizontalIcon aria-hidden="true" />
-              </IconButton>
-            </DropdownMenu.Trigger>
+            <IconTooltip label="Session lifecycle actions">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  type="button"
+                  className="session-tabs-new"
+                  variant="ghost"
+                  color="gray"
+                  disabled={!selectedSession}
+                  aria-label="Session lifecycle actions"
+                >
+                  <DotsHorizontalIcon aria-hidden="true" />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </IconTooltip>
             <DropdownMenu.Content align="end" sideOffset={6} size="1">
               <DropdownMenu.Item
                 disabled={!canCreateSession || !onNewTerminal}

@@ -2,6 +2,7 @@ import {
   BellIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CodeIcon,
   Component1Icon,
   CubeIcon,
   DashboardIcon,
@@ -15,8 +16,10 @@ import {
   StackIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
 import { useId, useRef, useState } from "react";
+import { compactBranchLabel } from "../branch-label";
 import type { HerdrState, Workspace } from "../state";
 import { HerdrWebLogo } from "./HerdrWebLogo";
 import { SidebarSectionResizeHandle } from "./SidebarSectionResizeHandle";
@@ -186,10 +189,16 @@ export function Sidebar({
     const selected = workspace.id === state.selectedWorkspaceId;
     const isWorktree = variant === "worktree";
     const label = isWorktree ? worktreeLabel(workspace) : workspace.name;
+    const branch = workspace.branch || workspace.worktree?.branch || "";
     const detail = isWorktree
       ? workspaceAttentionDetail(workspace)
       : workspaceDetail(workspace);
-    return (
+    const displayLabel = isWorktree ? compactBranchLabel(label) : label;
+    const displayDetail =
+      detail && detail !== workspaceAttentionDetail(workspace)
+        ? compactBranchLabel(detail)
+        : detail;
+    const button = (
       <button
         className={
           isWorktree ? "workspace-item worktree-item" : "workspace-item"
@@ -203,7 +212,9 @@ export function Sidebar({
             ? `Open ${label} worktree Space`
             : `Open ${workspace.name} Space`
         }
-        title={`${label} — ${workspace.path}`}
+        title={[label, branch !== label ? branch : "", workspace.path]
+          .filter(Boolean)
+          .join(" — ")}
         onClick={() => selectWorkspace(workspace.id)}
       >
         {isWorktree ? (
@@ -217,13 +228,13 @@ export function Sidebar({
           </span>
         )}
         <span className="workspace-copy">
-          <strong title={label}>{label}</strong>
+          <strong title={label}>{displayLabel}</strong>
           {detail && (
             <small
               data-attention={Boolean(workspaceAttentionDetail(workspace))}
               title={detail}
             >
-              {detail}
+              {displayDetail}
             </small>
           )}
         </span>
@@ -231,6 +242,18 @@ export function Sidebar({
           <ChevronRightIcon className="workspace-chevron" aria-hidden="true" />
         )}
       </button>
+    );
+    if (!branch) return button;
+    return (
+      <Tooltip.Root key={workspace.id} delayDuration={350}>
+        <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content className="tooltip-content" sideOffset={7}>
+            Branch: {branch}
+            <Tooltip.Arrow className="tooltip-arrow" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
     );
   };
   const runMenuAction = (
@@ -486,30 +509,54 @@ export function Sidebar({
                       ({ id }) => id === agent.workspaceId,
                     );
                     const selected = agent.id === state.selectedAgentId;
+                    const task = agent.currentStep || agent.summary;
+                    const tooltip = [
+                      agent.label,
+                      task,
+                      workspace?.name ?? "Unknown Space",
+                      agentStatusLabel(agent.status),
+                    ]
+                      .filter(Boolean)
+                      .join(" — ");
                     return (
-                      <button
-                        type="button"
-                        className="agent-item"
-                        data-active={selected}
-                        aria-current={selected ? "page" : undefined}
-                        aria-label={`Open ${agent.label} Agent in ${workspace?.name ?? "unknown Space"}, ${agentStatusLabel(agent.status)}`}
-                        title={`${agent.label} — ${workspace?.name ?? "Unknown Space"} — ${agentStatusLabel(agent.status)}`}
-                        key={agent.id}
-                        onClick={() => selectAgent(agent.id)}
-                      >
-                        <StatusPill status={agent.status} compact />
-                        <span className="agent-item-copy">
-                          <strong title={agent.label}>{agent.label}</strong>
-                          <span className="agent-item-meta">
-                            <small>{workspace?.name ?? "Unknown Space"}</small>
-                            <span
-                              className={`agent-item-state agent-state-${agent.status}`}
-                            >
-                              {agentStatusLabel(agent.status)}
+                      <Tooltip.Root key={agent.id} delayDuration={350}>
+                        <Tooltip.Trigger asChild>
+                          <button
+                            type="button"
+                            className="agent-item"
+                            data-active={selected}
+                            aria-current={selected ? "page" : undefined}
+                            aria-label={`Open ${agent.label} Agent in ${workspace?.name ?? "unknown Space"}, ${agentStatusLabel(agent.status)}`}
+                            title={tooltip}
+                            onClick={() => selectAgent(agent.id)}
+                          >
+                            <span className="agent-identity" aria-hidden="true">
+                              <CodeIcon />
                             </span>
-                          </span>
-                        </span>
-                      </button>
+                            <span className="agent-item-copy">
+                              <strong title={agent.label}>{agent.label}</strong>
+                              {task && (
+                                <span className="agent-item-task" title={task}>
+                                  {task}
+                                </span>
+                              )}
+                              <small>
+                                {workspace?.name ?? "Unknown Space"}
+                              </small>
+                            </span>
+                            <StatusPill status={agent.status} compact />
+                          </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content
+                            className="tooltip-content"
+                            sideOffset={7}
+                          >
+                            {tooltip}
+                            <Tooltip.Arrow className="tooltip-arrow" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
                     );
                   })}
                 </nav>

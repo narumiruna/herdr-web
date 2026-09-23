@@ -1,5 +1,7 @@
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
 
@@ -196,11 +198,17 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
     structuredActionsEnabled: true,
     ...overrides,
   };
-  const view = render(<InteractiveTerminal {...props} />);
+  const view = render(
+    <Tooltip.Provider>
+      <InteractiveTerminal {...props} />
+    </Tooltip.Provider>,
+  );
   await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
   const socket = FakeWebSocket.instances[0];
   if (!socket) throw new Error("Missing terminal socket");
-  return { ...view, createTicket, onUploadImage, props, socket };
+  const rerender = (terminal: ReactElement) =>
+    view.rerender(<Tooltip.Provider>{terminal}</Tooltip.Provider>);
+  return { ...view, createTicket, onUploadImage, props, rerender, socket };
 }
 
 describe("InteractiveTerminal", () => {
@@ -265,6 +273,9 @@ describe("InteractiveTerminal", () => {
     expect(await screen.findByText("Interactive")).toBeVisible();
     expect(xterm.instances[0]?.reset).toHaveBeenCalledOnce();
     expect(xterm.instances[0]?.write).toHaveBeenCalledOnce();
+    expect(
+      Array.from(xterm.instances[0]?.write.mock.calls[0]?.[0] as Uint8Array),
+    ).toEqual(Array.from(new TextEncoder().encode("\u001b[2J決定")));
 
     xterm.instances[0]?.data?.("echo hi\r");
     xterm.instances[0]?.resize?.({ cols: 90, rows: 28 });
@@ -418,9 +429,13 @@ describe("InteractiveTerminal", () => {
       serverUnixMs: Date.now() + serverClockSkew - 8,
     });
 
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Terminal diagnostics" }));
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "More terminal actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Terminal diagnostics" }),
+    );
     const dialog = screen.getByRole("dialog", { name: "Terminal diagnostics" });
     expect(dialog).toHaveTextContent("Herdr protocol20");
     expect(dialog).toHaveTextContent("Canvas fallback");
@@ -431,6 +446,70 @@ describe("InteractiveTerminal", () => {
     );
     expect(dialog).not.toHaveTextContent("hello");
     expect(dialog).not.toHaveTextContent("one-use-ticket");
+  });
+
+  test("keeps primary labels visible and overflow actions keyboard reachable", async () => {
+    const clickedInputs: string[] = [];
+    vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (
+      this: HTMLInputElement,
+    ) {
+      clickedInputs.push(this.getAttribute("aria-label") ?? "");
+    });
+    const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    const user = userEvent.setup();
+    const { socket } = await renderTerminal({
+      onUploadFile: vi.fn().mockResolvedValue({
+        mediaType: "text/plain",
+        path: "/repo/notes.txt",
+        size: 4,
+        type: "file_uploaded",
+      }),
+    });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+
+    const search = screen.getByRole("button", { name: "Search terminal" });
+    search.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Search terminal" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Prompt Agent" })).toBeVisible();
+
+    const more = screen.getByRole("button", {
+      name: "More terminal actions",
+    });
+    more.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "More terminal actions" }),
+    ).toBeVisible();
+    await user.keyboard("{Enter}");
+    const diagnostics = screen.getByRole("menuitem", {
+      name: "Terminal diagnostics",
+    });
+    expect(diagnostics).toHaveFocus();
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(clickedInputs).toEqual(["Choose images for terminal"]);
+
+    await user.click(more);
+    await user.click(
+      screen.getByRole("menuitem", {
+        name: "Upload file and insert path",
+      }),
+    );
+    expect(clickedInputs).toEqual([
+      "Choose images for terminal",
+      "Choose file for terminal",
+    ]);
+
+    await user.click(more);
+    await user.click(screen.getByRole("menuitem", { name: "Detach pane" }));
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: expect.stringContaining("detached=1"),
+      }),
+      "herdr-pane-w5:p1",
+      "popup,noopener,noreferrer",
+    );
   });
 
   test("enables deliberate screen-reader and reduced-motion terminal options", async () => {
@@ -595,6 +674,14 @@ describe("InteractiveTerminal", () => {
     socket.message(frame());
     socket.message({ type: "terminal.flow", writable: false });
     socket.message({ ...frame("more output"), full: false, seq: 2 });
+    expect(
+      xterm.instances[0]?.write.mock.calls.map(([bytes]) =>
+        Array.from(bytes as Uint8Array),
+      ),
+    ).toEqual([
+      Array.from(new TextEncoder().encode("hello")),
+      Array.from(new TextEncoder().encode("more output")),
+    ]);
 
     xterm.instances[0]?.data?.("must-wait");
     expect(
@@ -752,10 +839,10 @@ describe("InteractiveTerminal", () => {
     };
 
     render(
-      <>
+      <Tooltip.Provider>
         <InteractiveTerminal {...shared} focused={false} paneId="w5:p1" />
         <InteractiveTerminal {...shared} focused paneId="w5:p2" />
-      </>,
+      </Tooltip.Provider>,
     );
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
     for (const socket of FakeWebSocket.instances) socket.message(frame());
@@ -1163,13 +1250,17 @@ describe("InteractiveTerminal", () => {
     );
     socket.message(frame());
     expect(await screen.findByText("Watching")).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Insert image path" }),
-    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Prompt Agent" })).toBeDisabled();
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Terminal diagnostics" }));
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "More terminal actions" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Insert image path" }),
+    ).toHaveAttribute("data-disabled");
+    await user.click(
+      screen.getByRole("menuitem", { name: "Terminal diagnostics" }),
+    );
     expect(
       screen.getByRole("dialog", { name: "Terminal diagnostics" }),
     ).toHaveTextContent("observe");

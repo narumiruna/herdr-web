@@ -2,6 +2,7 @@ import {
   ActivityLogIcon,
   ChatBubbleIcon,
   CopyIcon,
+  DotsHorizontalIcon,
   EyeOpenIcon,
   FilePlusIcon,
   ImageIcon,
@@ -13,6 +14,7 @@ import { Button } from "@radix-ui/themes";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
+import { DropdownMenu } from "radix-ui";
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -36,6 +38,7 @@ import {
   clampTerminalFontSize,
   DEFAULT_TERMINAL_FONT_SIZE,
 } from "../terminal-preferences";
+import { IconTooltip } from "./IconTooltip";
 import { RadixDialog } from "./RadixDialog";
 import {
   type TerminalDiagnostics,
@@ -1204,25 +1207,35 @@ export function InteractiveTerminal({
               {toolbarActions}
             </span>
           )}
-          <span className="terminal-action-group" data-kind="inspect">
-            <button
-              type="button"
-              aria-label="Search terminal"
-              title="Search terminal"
-              onClick={() => setSearchOpen((open) => !open)}
-            >
-              <MagnifyingGlassIcon />
-            </button>
-            <button
-              type="button"
-              aria-label="Terminal diagnostics"
-              title="Terminal diagnostics"
-              onClick={() => setDiagnosticsOpen(true)}
-            >
-              <ActivityLogIcon />
-            </button>
+          <span className="terminal-action-group" data-kind="primary">
+            <IconTooltip label="Search terminal">
+              <button
+                type="button"
+                aria-label="Search terminal"
+                onClick={() => setSearchOpen((open) => !open)}
+              >
+                <MagnifyingGlassIcon />
+              </button>
+            </IconTooltip>
+            {canPrompt && (
+              <IconTooltip label="Prompt Agent">
+                <button
+                  type="button"
+                  aria-label="Prompt Agent"
+                  title={
+                    structuredActionsEnabled
+                      ? "Prompt Agent"
+                      : "Reconnect to prompt this Agent."
+                  }
+                  disabled={!structuredActionsEnabled}
+                  onClick={() => setPromptOpen(true)}
+                >
+                  <ChatBubbleIcon />
+                </button>
+              </IconTooltip>
+            )}
           </span>
-          <span className="terminal-action-group" data-kind="files">
+          <span className="terminal-action-group" data-kind="more">
             <input
               ref={fileInput}
               className="composer-file-input"
@@ -1235,15 +1248,6 @@ export function InteractiveTerminal({
                 event.currentTarget.value = "";
               }}
             />
-            <button
-              type="button"
-              aria-label="Insert image path"
-              title="Insert image path"
-              disabled={!canUploadImages}
-              onClick={() => fileInput.current?.click()}
-            >
-              <ImageIcon />
-            </button>
             <input
               ref={genericFileInput}
               className="composer-file-input"
@@ -1256,36 +1260,55 @@ export function InteractiveTerminal({
                 event.currentTarget.value = "";
               }}
             />
-            <button
-              type="button"
-              aria-label="Upload file and insert path"
-              title="Upload file and insert path"
-              disabled={!canUploadFiles}
-              onClick={() => genericFileInput.current?.click()}
-            >
-              <FilePlusIcon />
-            </button>
-          </span>
-          <span className="terminal-action-group" data-kind="session">
-            <button
-              type="button"
-              aria-label="Detach pane"
-              title="Detach pane"
-              onClick={openDetachedPane}
-            >
-              <OpenInNewWindowIcon />
-            </button>
-            {canPrompt && (
-              <button
-                type="button"
-                aria-label="Prompt Agent"
-                title="Prompt Agent"
-                disabled={!structuredActionsEnabled}
-                onClick={() => setPromptOpen(true)}
-              >
-                <ChatBubbleIcon />
-              </button>
-            )}
+            <DropdownMenu.Root>
+              <IconTooltip label="More terminal actions">
+                <DropdownMenu.Trigger asChild>
+                  <button type="button" aria-label="More terminal actions">
+                    <DotsHorizontalIcon />
+                  </button>
+                </DropdownMenu.Trigger>
+              </IconTooltip>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="terminal-actions-menu"
+                  align="end"
+                  sideOffset={6}
+                >
+                  <DropdownMenu.Item
+                    className="terminal-actions-menu-item"
+                    onSelect={() => setDiagnosticsOpen(true)}
+                  >
+                    <ActivityLogIcon aria-hidden="true" />
+                    Terminal diagnostics
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="terminal-actions-menu-separator" />
+                  <DropdownMenu.Item
+                    className="terminal-actions-menu-item"
+                    disabled={!canUploadImages}
+                    onSelect={() => fileInput.current?.click()}
+                  >
+                    <ImageIcon aria-hidden="true" />
+                    Insert image path
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className="terminal-actions-menu-item"
+                    disabled={!canUploadFiles}
+                    onSelect={() => genericFileInput.current?.click()}
+                  >
+                    <FilePlusIcon aria-hidden="true" />
+                    Upload file and insert path
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="terminal-actions-menu-separator" />
+                  <DropdownMenu.Item
+                    className="terminal-actions-menu-item"
+                    onSelect={openDetachedPane}
+                  >
+                    <OpenInNewWindowIcon aria-hidden="true" />
+                    Detach pane
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </span>
         </span>
       </div>

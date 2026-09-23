@@ -14,6 +14,7 @@ import {
   RowsIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button, DropdownMenu, IconButton } from "@radix-ui/themes";
 import {
   type CSSProperties,
@@ -27,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { compactBranchLabel } from "../branch-label";
 import {
   MAX_PROMPT_CHARACTERS,
   SUPPORTED_IMAGE_TYPES,
@@ -42,6 +44,7 @@ import type {
   Workspace,
 } from "../state";
 import { HerdrMutationError } from "../use-herdr-runtime";
+import { AgentProgressSummary } from "./AgentProgressSummary";
 import { IconTooltip } from "./IconTooltip";
 import { InteractiveTerminal } from "./InteractiveTerminal";
 import { clampPaneRatio, PaneResizeHandle } from "./PaneResizeHandle";
@@ -243,17 +246,19 @@ function TerminalPaneView({
             <span className="pane-active-label">Active</span>
           )}
           {canClose && (
-            <button
-              type="button"
-              className="pane-close"
-              aria-label={`Close ${pane.title} pane`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onClose();
-              }}
-            >
-              <Cross2Icon />
-            </button>
+            <IconTooltip label={`Close ${pane.title} pane`}>
+              <button
+                type="button"
+                className="pane-close"
+                aria-label={`Close ${pane.title} pane`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClose();
+                }}
+              >
+                <Cross2Icon />
+              </button>
+            </IconTooltip>
           )}
         </div>
       )}
@@ -692,31 +697,49 @@ export function TerminalWorkspace({
                 {compactPath(paneWorkingDirectory)}
               </span>
             </code>
-            <button
-              type="button"
-              className="workspace-copy-cwd"
-              aria-label={
+            <IconTooltip
+              label={
                 copiedCwdPaneId === pane.id
                   ? "Current working directory copied"
                   : "Copy current working directory"
               }
-              onClick={() =>
-                void copyWorkingDirectory(paneWorkingDirectory, pane.id)
-              }
             >
-              {copiedCwdPaneId === pane.id ? <CheckIcon /> : <CopyIcon />}
-            </button>
+              <button
+                type="button"
+                className="workspace-copy-cwd"
+                aria-label={
+                  copiedCwdPaneId === pane.id
+                    ? "Current working directory copied"
+                    : "Copy current working directory"
+                }
+                onClick={() =>
+                  void copyWorkingDirectory(paneWorkingDirectory, pane.id)
+                }
+              >
+                {copiedCwdPaneId === pane.id ? <CheckIcon /> : <CopyIcon />}
+              </button>
+            </IconTooltip>
           </span>
         )}
         {workspace.branch && (
-          <code className="terminal-toolbar-branch" title={workspace.branch}>
-            {workspace.branch}
-          </code>
+          <Tooltip.Root delayDuration={350}>
+            <Tooltip.Trigger asChild>
+              <button
+                type="button"
+                className="terminal-toolbar-branch"
+                aria-label={`Branch ${workspace.branch}`}
+              >
+                {compactBranchLabel(workspace.branch)}
+              </button>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content className="tooltip-content" sideOffset={7}>
+                Branch: {workspace.branch}
+                <Tooltip.Arrow className="tooltip-arrow" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
         )}
-        <span className="terminal-toolbar-title" title={pane.title}>
-          <CodeIcon aria-hidden="true" />
-          {pane.title}
-        </span>
       </>
     );
   };
@@ -749,22 +772,30 @@ export function TerminalWorkspace({
           </IconButton>
         </IconTooltip>
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <IconButton
-              type="button"
-              variant="ghost"
-              color="gray"
-              aria-label="Split pane"
-              title={
-                agent.panes.length >= 2
-                  ? "This session already has two panes."
-                  : "Split pane"
-              }
-              disabled={splitDisabled}
-            >
-              <ColumnsIcon />
-            </IconButton>
-          </DropdownMenu.Trigger>
+          <IconTooltip
+            label={
+              agent.panes.length >= 2
+                ? "This session already has two panes"
+                : "Split pane"
+            }
+          >
+            <DropdownMenu.Trigger>
+              <IconButton
+                type="button"
+                variant="ghost"
+                color="gray"
+                aria-label="Split pane"
+                title={
+                  agent.panes.length >= 2
+                    ? "This session already has two panes."
+                    : "Split pane"
+                }
+                disabled={splitDisabled}
+              >
+                <ColumnsIcon />
+              </IconButton>
+            </DropdownMenu.Trigger>
+          </IconTooltip>
           <DropdownMenu.Content align="end" sideOffset={6} size="1">
             <DropdownMenu.Item onSelect={() => split("right")}>
               <ColumnsIcon aria-hidden="true" />
@@ -803,12 +834,13 @@ export function TerminalWorkspace({
           <ExclamationTriangleIcon aria-hidden="true" />
           <div>
             <strong>{blockedInputTitle}</strong>
-            <span>{agent.currentStep || blockedInputGuidance}</span>
+            <span>{blockedInputGuidance}</span>
           </div>
         </section>
       )}
 
       <section className="terminal-shell" aria-label={`${agent.label} session`}>
+        <AgentProgressSummary agent={agent} />
         {!terminalStreaming && activePane && (
           <div className="interactive-terminal-tools terminal-fallback-tools">
             <span className="terminal-toolbar-context">
@@ -965,20 +997,22 @@ export function TerminalWorkspace({
                       : "will be stored in the configured upload directory"}
                   </small>
                 </span>
-                <button
-                  type="button"
-                  aria-label={`Remove ${draft.attachment.name}`}
-                  disabled={isSending}
-                  onClick={() =>
-                    updateDraft(agent.id, {
-                      attachment: undefined,
-                      attachmentError: "",
-                      uploadedPath: undefined,
-                    })
-                  }
-                >
-                  <Cross2Icon />
-                </button>
+                <IconTooltip label={`Remove ${draft.attachment.name}`}>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${draft.attachment.name}`}
+                    disabled={isSending}
+                    onClick={() =>
+                      updateDraft(agent.id, {
+                        attachment: undefined,
+                        attachmentError: "",
+                        uploadedPath: undefined,
+                      })
+                    }
+                  >
+                    <Cross2Icon />
+                  </button>
+                </IconTooltip>
               </div>
             )}
             {draft.attachmentError && (
@@ -1033,18 +1067,26 @@ export function TerminalWorkspace({
                 event.currentTarget.value = "";
               }}
             />
-            <button
-              type="button"
-              className="composer-attach"
-              aria-label="Attach image"
-              disabled={!actionsEnabled || isSending}
-              title={
-                !actionsEnabled ? "Reconnect to attach an image." : undefined
+            <IconTooltip
+              label={
+                !actionsEnabled
+                  ? "Reconnect to attach an image"
+                  : "Attach image"
               }
-              onClick={() => imageInput.current?.click()}
             >
-              <ImageIcon />
-            </button>
+              <button
+                type="button"
+                className="composer-attach"
+                aria-label="Attach image"
+                title={
+                  !actionsEnabled ? "Reconnect to attach an image." : undefined
+                }
+                disabled={!actionsEnabled || isSending}
+                onClick={() => imageInput.current?.click()}
+              >
+                <ImageIcon />
+              </button>
+            </IconTooltip>
             <textarea
               ref={messageInput}
               rows={1}

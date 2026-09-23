@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/App";
+import { compactBranchLabel } from "../src/branch-label";
 import { ViewerShareDialog } from "../src/components/ViewerShareDialog";
 import { WorkflowTemplatesDialog } from "../src/components/WorkflowTemplatesDialog";
 import { createDemoState } from "../src/state";
@@ -120,6 +121,28 @@ describe("herdr-web terminal-first workbench", () => {
       screen.getByRole("button", { name: "New agent" }),
     );
     expect(app.container.querySelector(".app-surface > .topbar")).toBeNull();
+  });
+
+  test("labels desktop icon actions on keyboard focus", async () => {
+    renderApp();
+
+    const inbox = screen.getByRole("button", {
+      name: /Open Attention Inbox/,
+    });
+    inbox.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Attention Inbox" }),
+    ).toBeVisible();
+
+    const lifecycle = screen.getByRole("button", {
+      name: "Session lifecycle actions",
+    });
+    lifecycle.focus();
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Session lifecycle actions",
+      }),
+    ).toBeVisible();
   });
 
   test("shows each workspace session in a keyboard-accessible tab bar", async () => {
@@ -318,6 +341,139 @@ describe("herdr-web terminal-first workbench", () => {
     );
     expect(
       within(nav).getByRole("group", { name: "herdr-web worktrees" }),
+    ).toBeVisible();
+  });
+
+  test("keeps similar long branches distinct and exposes exact values", async () => {
+    const state = createDemoState();
+    const user = userEvent.setup();
+    const branches = [
+      "narumi/feat/add-adjustable-spaces-agents-divider",
+      "narumi/feat/add-accessible-terminal-actions",
+    ];
+    state.workspaces.push(
+      {
+        accent: "blue",
+        ahead: 0,
+        behind: 0,
+        branch: branches[0] ?? "",
+        id: "long-branch-one",
+        name: "Divider work",
+        path: "/repo/divider-work",
+      },
+      {
+        accent: "grass",
+        ahead: 0,
+        behind: 0,
+        branch: branches[1] ?? "",
+        id: "long-branch-two",
+        name: "Terminal actions",
+        path: "/repo/terminal-actions",
+      },
+    );
+
+    render(<App initialState={state} live={false} />);
+
+    const first = screen.getByRole("button", {
+      name: "Open Divider work Space",
+    });
+    const second = screen.getByRole("button", {
+      name: "Open Terminal actions Space",
+    });
+    expect(
+      within(first).getByText(compactBranchLabel(branches[0] ?? "")),
+    ).toBeVisible();
+    expect(
+      within(second).getByText(compactBranchLabel(branches[1] ?? "")),
+    ).toBeVisible();
+    expect(first).toHaveAttribute(
+      "title",
+      expect.stringContaining(branches[0]),
+    );
+    expect(second).toHaveAttribute(
+      "title",
+      expect.stringContaining(branches[1]),
+    );
+
+    await user.hover(first);
+    expect(
+      await screen.findByRole("tooltip", { name: `Branch: ${branches[0]}` }),
+    ).toBeVisible();
+    await user.unhover(first);
+    second.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: `Branch: ${branches[1]}` }),
+    ).toBeVisible();
+  });
+
+  test("shows scannable Agent identity, task, Space, selection, and status", async () => {
+    const state = createDemoState();
+    const statuses = [
+      "blocked",
+      "working",
+      "done",
+      "failed",
+      "idle",
+      "unknown",
+    ] as const;
+    const base = state.agents[0];
+    if (!base) throw new Error("Demo state must include an Agent");
+    state.agents = statuses.map((status, index) => ({
+      ...structuredClone(base),
+      currentStep:
+        index === 0
+          ? "Review the complete compatibility contract and preserve the distinguishing outcome"
+          : `Current ${status} task`,
+      id: `agent-${status}`,
+      label: `${status}-agent`,
+      status,
+      tabNumber: index + 1,
+    }));
+    state.selectedAgentId = "agent-blocked";
+    state.selectedSessionByWorkspace = {
+      "herdr-core": "agent-blocked",
+    };
+    const user = userEvent.setup();
+
+    const { container } = render(<App initialState={state} live={false} />);
+    const agents = screen.getByRole("region", { name: "Agents" });
+    const rows = within(agents).getAllByRole("button");
+
+    expect(rows).toHaveLength(statuses.length);
+    for (const status of statuses) {
+      const row = within(agents).getByRole("button", {
+        name: new RegExp(`Open ${status}-agent Agent`),
+      });
+      expect(row.querySelector(".agent-identity")).toBeInTheDocument();
+      expect(row.querySelector(`.status-${status}`)).toBeInTheDocument();
+      expect(
+        within(row).getByText(
+          status === "blocked"
+            ? /Review the complete compatibility contract/
+            : `Current ${status} task`,
+        ),
+      ).toBeVisible();
+      expect(within(row).getByText("herdr")).toBeVisible();
+    }
+    expect(
+      within(agents).getByRole("button", { name: /Open blocked-agent Agent/ }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      container.querySelectorAll(".agent-item[data-active='true']"),
+    ).toHaveLength(1);
+
+    const blocked = within(agents).getByRole("button", {
+      name: /Open blocked-agent Agent/,
+    });
+    expect(blocked).toHaveAttribute(
+      "title",
+      expect.stringContaining("Review the complete compatibility contract"),
+    );
+    await user.hover(blocked);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: /Review the complete compatibility contract and preserve the distinguishing outcome/,
+      }),
     ).toBeVisible();
   });
 
@@ -889,6 +1045,12 @@ describe("herdr-web terminal-first workbench", () => {
     const dialog = screen.getByRole("dialog", { name: "Session details" });
     expect(within(dialog).getByText("Claude Code")).toBeVisible();
     expect(within(dialog).getByText("Sonnet 4.6")).toBeVisible();
+    expect(within(dialog).getByText("Current task")).toBeVisible();
+    expect(
+      within(dialog).getByText("Waiting for a compatibility decision"),
+    ).toBeVisible();
+    expect(within(dialog).getByText("Goal")).toBeVisible();
+    expect(within(dialog).getByText("Updated")).toBeVisible();
   });
 
   test("keeps the read-only terminal from looking like a second input", () => {

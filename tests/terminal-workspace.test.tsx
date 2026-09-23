@@ -203,6 +203,32 @@ describe("TerminalWorkspace snapshot frames", () => {
 });
 
 describe("TerminalWorkspace decision states", () => {
+  test("exposes branch and icon action labels on keyboard focus", async () => {
+    render(<Harness />);
+
+    const branch = screen.getByLabelText("Branch feat/web-bridge");
+    branch.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Branch: feat/web-bridge" }),
+    ).toBeVisible();
+
+    const copy = screen.getByRole("button", {
+      name: "Copy current working directory",
+    });
+    copy.focus();
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Copy current working directory",
+      }),
+    ).toBeVisible();
+
+    const split = screen.getByRole("button", { name: "Split pane" });
+    split.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Split pane" }),
+    ).toBeVisible();
+  });
+
   test("prefers clipboard files, falls back to items, and leaves text paste alone", () => {
     render(<Harness />);
     const first = new File(["png"], "first.png", { type: "image/png" });

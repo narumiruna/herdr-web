@@ -103,6 +103,9 @@
 }
 
 @media (max-width: 700px) {
+  .topbar-action-group {
+    display: contents;
+  }
   .topbar-actions .desktop-new-agent,
   .topbar-actions .desktop-details,
   .topbar-actions .desktop-appearance,
@@ -192,6 +195,17 @@
   }
   .attention-banner span {
     max-width: 75vw;
+  }
+  .agent-progress-summary summary {
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+  .agent-progress-copy small {
+    display: none;
+  }
+  .agent-progress-summary dl {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 33px 10px;
   }
   .terminal-shell {
     min-height: 0;
