@@ -82,9 +82,6 @@
   .worktree-item {
     min-height: 44px;
   }
-  .agent-panel {
-    min-height: 180px;
-  }
   .agent-panel-heading {
     min-height: 52px;
   }
@@ -106,6 +103,9 @@
 }
 
 @media (max-width: 700px) {
+  .topbar-action-group {
+    display: contents;
+  }
   .topbar-actions .desktop-new-agent,
   .topbar-actions .desktop-details,
   .topbar-actions .desktop-appearance,
@@ -196,6 +196,17 @@
   .attention-banner span {
     max-width: 75vw;
   }
+  .agent-progress-summary summary {
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+  .agent-progress-copy small {
+    display: none;
+  }
+  .agent-progress-summary dl {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 33px 10px;
+  }
   .terminal-shell {
     min-height: 0;
     border-radius: 6px;
@@ -242,6 +253,15 @@
   }
   .connection-form {
     flex-direction: column;
+  }
+}
+
+@media (max-height: 600px) {
+  .sidebar-sections {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .sidebar-section-resize-handle {
+    display: none;
   }
 }
 

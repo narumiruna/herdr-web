@@ -16,6 +16,70 @@ async function openSettings(page: Page) {
   return page.getByRole("dialog", { name: "Settings", exact: true });
 }
 
+test("all shipped themes keep primary and secondary text above 4.5:1", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  for (const { theme } of WORKBENCH_THEMES) {
+    await page.addInitScript(
+      (value) => localStorage.setItem("herdr-web-theme", value),
+      theme,
+    );
+    await page.goto("/");
+    const ratios = await page.locator(".herdr-web-theme").evaluate((root) => {
+      const probe = document.createElement("span");
+      root.append(probe);
+      const resolve = (token: string) => {
+        probe.style.color = `var(${token})`;
+        return getComputedStyle(probe).color;
+      };
+      const luminance = (color: string) => {
+        const channels = (color.match(/[\d.]+/g) ?? [])
+          .slice(0, 3)
+          .map(Number)
+          .map((value) => {
+            const channel = color.startsWith("color(") ? value : value / 255;
+            return channel <= 0.04045
+              ? channel / 12.92
+              : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+        return (
+          (channels[0] ?? 0) * 0.2126 +
+          (channels[1] ?? 0) * 0.7152 +
+          (channels[2] ?? 0) * 0.0722
+        );
+      };
+      const contrast = (left: string, right: string) => {
+        const [lighter, darker] = [luminance(left), luminance(right)].sort(
+          (a, b) => b - a,
+        );
+        return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+      };
+      const surfaces = [
+        "--canvas",
+        "--panel",
+        "--panel-raised",
+        "--panel-muted",
+      ];
+      const pairs = ["--ink", "--ink-secondary", "--ink-muted"].flatMap(
+        (text) =>
+          surfaces.map((surface) => contrast(resolve(text), resolve(surface))),
+      );
+      pairs.push(
+        contrast(resolve("--terminal-text"), resolve("--terminal")),
+        contrast(resolve("--terminal-muted"), resolve("--terminal")),
+      );
+      probe.remove();
+      return pairs;
+    });
+
+    for (const ratio of ratios) {
+      expect(ratio, `${theme} text contrast`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
 for (const { browserColor, label, theme } of cleanThemes) {
   test(`${label} supports cancel, save, reload, portals, and appearance toggle`, async ({
     page,

@@ -56,14 +56,14 @@
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-compact);
 }
 .session-tab:hover {
   background: var(--panel-muted);
   color: var(--ink-secondary);
 }
 .session-tab[data-state="active"] {
-  border-bottom-color: var(--amber-11);
+  border-bottom-color: var(--selection-accent);
   color: var(--ink);
   font-weight: 600;
 }
@@ -91,7 +91,7 @@
   gap: 3px;
   padding: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;

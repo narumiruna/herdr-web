@@ -362,7 +362,7 @@ test("desktop workbench gives the terminal priority", async ({
       redundantPaneTitles: document.querySelectorAll(".pane-titlebar").length,
       terminalContextCenters: [
         ".workspace-cwd",
-        ".terminal-toolbar-title",
+        ".terminal-toolbar-branch",
         ".interactive-terminal-state",
       ].map((selector) => {
         const rect = document.querySelector(selector)?.getBoundingClientRect();
@@ -747,27 +747,181 @@ test("compact Agent statuses leave names and metadata unobstructed", async ({
 
   const rows = await page.locator(".agent-item").evaluateAll((items) =>
     items.map((item) => {
-      const icon = item.querySelector('.status-pill[data-compact="true"]');
+      const identity = item.querySelector(".agent-identity");
       const copy = item.querySelector(".agent-item-copy");
       const title = item.querySelector("strong");
-      const meta = item.querySelector(".agent-item-meta");
-      if (!icon || !copy || !title || !meta)
+      const task = item.querySelector(".agent-item-task");
+      const space = item.querySelector("small");
+      const status = item.querySelector('.status-pill[data-compact="true"]');
+      if (!identity || !copy || !title || !task || !space || !status)
         throw new Error("Missing Agent metadata");
       return {
-        iconRight: icon.getBoundingClientRect().right,
         copyLeft: copy.getBoundingClientRect().left,
-        titleBottom: title.getBoundingClientRect().bottom,
-        metaTop: meta.getBoundingClientRect().top,
+        copyRight: copy.getBoundingClientRect().right,
+        identityRight: identity.getBoundingClientRect().right,
+        rowRight: item.getBoundingClientRect().right,
+        spaceTop: space.getBoundingClientRect().top,
+        statusLeft: status.getBoundingClientRect().left,
+        statusRight: status.getBoundingClientRect().right,
+        taskBottom: task.getBoundingClientRect().bottom,
         titleClipped: title.scrollWidth > title.clientWidth,
       };
     }),
   );
   expect(rows).toHaveLength(5);
   for (const row of rows) {
-    expect(row.iconRight).toBeLessThanOrEqual(row.copyLeft);
-    expect(row.titleBottom).toBeLessThanOrEqual(row.metaTop);
+    expect(row.identityRight).toBeLessThanOrEqual(row.copyLeft);
+    expect(row.copyRight).toBeLessThanOrEqual(row.statusLeft);
+    expect(row.statusRight).toBeLessThanOrEqual(row.rowRight);
+    expect(row.taskBottom).toBeLessThanOrEqual(row.spaceTop);
     expect(row.titleClipped).toBe(false);
   }
+});
+
+test("core workbench typography stays legible on desktop and mobile", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    if (viewport.width === 390) {
+      await page.getByRole("button", { name: "Open navigation" }).click();
+    }
+
+    const metrics = await page.evaluate(() => {
+      const fontSize = (selector: string) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        return Number.parseFloat(getComputedStyle(element).fontSize);
+      };
+      const lineHeight = (selector: string) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        return Number.parseFloat(getComputedStyle(element).lineHeight);
+      };
+      return {
+        actionable: [
+          ".workspace-item strong",
+          ".agent-item-copy strong",
+          ".session-tab",
+          ".agent-progress-copy strong",
+        ].map(fontSize),
+        supporting: [
+          ".section-label-row h2",
+          ".agent-item-task",
+          ".session-tab-status .status-pill",
+          ".interactive-terminal-tools",
+          ".agent-progress-copy small",
+          ".composer-hint",
+        ].map(fontSize),
+        taskFont: fontSize(".agent-item-task"),
+        taskLine: lineHeight(".agent-item-task"),
+      };
+    });
+
+    for (const size of metrics.supporting)
+      expect(size).toBeGreaterThanOrEqual(11);
+    for (const size of metrics.actionable)
+      expect(size).toBeGreaterThanOrEqual(12);
+    expect(metrics.taskLine / metrics.taskFont).toBeGreaterThanOrEqual(1.4);
+    expect(await hasNoPageOverflow(page)).toBe(true);
+    if (viewport.width === 390) {
+      await page
+        .getByRole("dialog", { name: "Navigate workbench" })
+        .getByRole("button", { name: "Close dialog" })
+        .click();
+    }
+  }
+});
+
+test("selection, statuses, progress, and desktop action groups have distinct hierarchy", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const audit = await page.evaluate(() => {
+    const root = document.querySelector(".herdr-web-theme") as HTMLElement;
+    const probe = document.createElement("span");
+    const worktree = document.createElement("button");
+    const dot = document.createElement("span");
+    worktree.className = "workspace-item worktree-item";
+    worktree.dataset.active = "true";
+    dot.className = "worktree-dot";
+    dot.dataset.active = "true";
+    worktree.append(dot);
+    root.append(probe, worktree);
+    const resolve = (token: string) => {
+      probe.style.color = `var(${token})`;
+      return getComputedStyle(probe).color;
+    };
+    const selected = resolve("--selection-accent");
+    const status = {
+      blocked: resolve("--amber-12"),
+      done: resolve("--grass-12"),
+      failed: resolve("--red-12"),
+      working: resolve("--blue-12"),
+    };
+    const actions = document.querySelector(".topbar-actions") as HTMLElement;
+    const actionBounds = [...actions.children]
+      .filter((element) => getComputedStyle(element).display !== "none")
+      .map((element) => element.getBoundingClientRect());
+    const result = {
+      actionBottoms: actionBounds.map(({ bottom }) => bottom),
+      actionTops: actionBounds.map(({ top }) => top),
+      actionsFit: actions.scrollWidth <= actions.clientWidth,
+      agentMarker: getComputedStyle(
+        document.querySelector('.agent-item[data-active="true"]') as Element,
+      ).borderLeftColor,
+      selected,
+      status,
+      tabMarker: getComputedStyle(
+        document.querySelector('.session-tab[data-state="active"]') as Element,
+      ).borderBottomColor,
+      worktreeFill: getComputedStyle(dot).backgroundColor,
+      worktreeMarker: getComputedStyle(dot).borderColor,
+      workspaceMarker: getComputedStyle(
+        document.querySelector(
+          '.workspace-item[data-active="true"]',
+        ) as Element,
+      ).borderLeftColor,
+    };
+    worktree.remove();
+    probe.remove();
+    return result;
+  });
+
+  expect(new Set(Object.values(audit.status)).size).toBe(4);
+  for (const color of Object.values(audit.status)) {
+    expect(audit.selected).not.toBe(color);
+  }
+  expect(audit.workspaceMarker).toBe(audit.selected);
+  expect(audit.agentMarker).toBe(audit.selected);
+  expect(audit.tabMarker).toBe(audit.selected);
+  expect(audit.worktreeMarker).toBe(audit.selected);
+  expect(audit.worktreeFill).toBe(audit.selected);
+  expect(audit.actionsFit).toBe(true);
+  expect(
+    Math.max(...audit.actionTops) - Math.min(...audit.actionTops),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.max(...audit.actionBottoms) - Math.min(...audit.actionBottoms),
+  ).toBeLessThanOrEqual(1);
+
+  const progress = page.locator(".agent-progress-summary");
+  await expect(progress).not.toHaveAttribute("open");
+  await progress.locator("summary").click();
+  await expect(progress).toHaveAttribute("open");
+  await expect(progress).toContainText("Goal");
+  await expect(progress).toContainText("Updated");
+  expect(
+    await page
+      .locator(".terminal-viewport")
+      .evaluate((element) => element.getBoundingClientRect().height > 100),
+  ).toBe(true);
 });
 
 for (const theme of [
@@ -977,12 +1131,18 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
         .bottom ?? 0,
     agentsTop:
       document.querySelector(".agent-panel")?.getBoundingClientRect().top ?? 0,
+    agentTitleBottom:
+      document.querySelector(".agent-panel-title")?.getBoundingClientRect()
+        .bottom ?? 0,
     agentTitleRight:
       document.querySelector(".agent-panel-title")?.getBoundingClientRect()
         .right ?? 0,
     agentSortLeft:
       document.querySelector(".agent-sort-control")?.getBoundingClientRect()
         .left ?? 0,
+    agentSortTop:
+      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
+        .top ?? 0,
     agentSortRight:
       document.querySelector(".agent-sort-control")?.getBoundingClientRect()
         .right ?? 0,
@@ -991,7 +1151,10 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
       0,
   }));
   expect(sections.actionsBottom).toBeLessThanOrEqual(sections.agentsTop + 1);
-  expect(sections.agentTitleRight).toBeLessThanOrEqual(sections.agentSortLeft);
+  expect(
+    sections.agentTitleRight <= sections.agentSortLeft ||
+      sections.agentTitleBottom <= sections.agentSortTop,
+  ).toBe(true);
   expect(sections.agentSortRight).toBeLessThanOrEqual(sections.agentPanelRight);
 
   const newSpace = page.getByRole("button", { name: "Create a new Space" });
@@ -1025,6 +1188,184 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
     page.getByRole("tab", { name: /agent-guide/i, selected: true }),
   ).toBeVisible();
   expect(await hasNoPageOverflow(page)).toBe(true);
+});
+
+test("short mobile navigation keeps both panels usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 320 });
+  await page.addInitScript(() => {
+    localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.2");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+
+  const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
+  await expect(navigation).toBeVisible();
+  const separator = navigation.locator(".sidebar-section-resize-handle");
+  await expect(separator).toHaveCount(1);
+  await expect(separator).toBeHidden();
+
+  const bounds = await navigation.evaluate((element) => {
+    const rect = (selector: string) => {
+      const target = element.querySelector(selector);
+      if (!target) throw new Error(`Missing ${selector}`);
+      return target.getBoundingClientRect();
+    };
+    const sections = rect(".sidebar-sections");
+    const spaces = rect(".spaces-panel");
+    const spacesViewport = rect(".sidebar-viewport");
+    const spacesActions = rect(".spaces-actions");
+    const agents = rect(".agent-panel");
+    const agentsHeading = rect(".agent-panel-heading");
+    const agentsViewport = rect(".agent-panel-viewport");
+    return {
+      agentsBottom: agents.bottom,
+      agentsHeight: agents.height,
+      agentsTop: agents.top,
+      agentsHeadingBottom: agentsHeading.bottom,
+      agentsViewportHeight: agentsViewport.height,
+      sectionsBottom: sections.bottom,
+      spacesActionsBottom: spacesActions.bottom,
+      spacesHeight: spaces.height,
+      spacesViewportHeight: spacesViewport.height,
+    };
+  });
+  const navigationBox = await navigation.boundingBox();
+  expect(navigationBox).not.toBeNull();
+  expect(
+    Math.abs(bounds.spacesHeight - bounds.agentsHeight),
+  ).toBeLessThanOrEqual(1);
+  expect(bounds.spacesActionsBottom).toBeLessThanOrEqual(bounds.agentsTop);
+  expect(bounds.agentsHeadingBottom).toBeLessThanOrEqual(bounds.agentsBottom);
+  expect(bounds.spacesViewportHeight).toBeGreaterThan(0);
+  expect(bounds.agentsViewportHeight).toBeGreaterThan(0);
+  expect(bounds.sectionsBottom).toBeLessThanOrEqual(
+    (navigationBox?.y ?? 0) + (navigationBox?.height ?? 0),
+  );
+});
+
+test("mouse resizing persists Spaces and Agents proportions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  const separator = page.getByRole("separator", {
+    name: "Resize Spaces and Agents panels",
+  });
+  const sections = page.locator(".desktop-sidebar .sidebar-sections");
+  const sectionBox = await sections.boundingBox();
+  const separatorBox = await separator.boundingBox();
+  if (!sectionBox || !separatorBox) {
+    throw new Error("Sidebar section separator is not visible");
+  }
+  const targetRatio = 0.55;
+  const targetY =
+    sectionBox.y +
+    (sectionBox.height - separatorBox.height) * targetRatio +
+    separatorBox.height / 2;
+  await page.mouse.move(
+    separatorBox.x + separatorBox.width / 2,
+    separatorBox.y + separatorBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(separatorBox.x + separatorBox.width / 2, targetY);
+  await page.mouse.up();
+
+  await expect(separator).toHaveAttribute("aria-valuenow", "55");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Number(localStorage.getItem("herdr-web-sidebar-spaces-ratio")),
+      ),
+    )
+    .toBeCloseTo(targetRatio, 2);
+  const panelHeights = await page.evaluate(() => ({
+    agents:
+      document
+        .querySelector(".desktop-sidebar .agent-panel")
+        ?.getBoundingClientRect().height ?? 0,
+    spaces:
+      document
+        .querySelector(".desktop-sidebar .spaces-panel")
+        ?.getBoundingClientRect().height ?? 0,
+  }));
+  expect(
+    panelHeights.spaces / (panelHeights.spaces + panelHeights.agents),
+  ).toBeCloseTo(targetRatio, 2);
+
+  await page.reload();
+  await expect(separator).toHaveAttribute("aria-valuenow", "55");
+});
+
+test("Agent rows remain separated at sidebar width and panel-ratio limits", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  for (const { ratio, width } of [
+    { ratio: 0.2, width: 180 },
+    { ratio: 0.8, width: 320 },
+  ]) {
+    await page.addInitScript(
+      ({ savedRatio, savedWidth }) => {
+        localStorage.setItem(
+          "herdr-web-sidebar-spaces-ratio",
+          String(savedRatio),
+        );
+        localStorage.setItem("herdr-web-sidebar-width", String(savedWidth));
+      },
+      { savedRatio: ratio, savedWidth: width },
+    );
+    await page.goto("/");
+    await expect(page.locator(".desktop-sidebar")).toHaveCSS(
+      "width",
+      `${width}px`,
+    );
+    await expect(
+      page.getByRole("separator", {
+        name: "Resize Spaces and Agents panels",
+      }),
+    ).toHaveAttribute("aria-valuenow", String(ratio * 100));
+
+    const bounds = await page.locator(".agent-item").evaluateAll((rows) => {
+      const items = rows.map((row) => {
+        const identity = row.querySelector(".agent-identity");
+        const copy = row.querySelector(".agent-item-copy");
+        const status = row.querySelector(".status-pill");
+        if (!identity || !copy || !status)
+          throw new Error("Missing Agent row content");
+        return {
+          bottom: row.getBoundingClientRect().bottom,
+          copyLeft: copy.getBoundingClientRect().left,
+          copyRight: copy.getBoundingClientRect().right,
+          identityRight: identity.getBoundingClientRect().right,
+          rowRight: row.getBoundingClientRect().right,
+          statusLeft: status.getBoundingClientRect().left,
+          statusRight: status.getBoundingClientRect().right,
+          top: row.getBoundingClientRect().top,
+        };
+      });
+      const viewport = document.querySelector(
+        ".agent-panel-viewport",
+      ) as HTMLElement;
+      return {
+        items,
+        scrollable: viewport.scrollHeight >= viewport.clientHeight,
+      };
+    });
+    expect(bounds.scrollable).toBe(true);
+    for (const [index, row] of bounds.items.entries()) {
+      expect(row.identityRight).toBeLessThanOrEqual(row.copyLeft);
+      expect(row.copyRight).toBeLessThanOrEqual(row.statusLeft);
+      expect(row.statusRight).toBeLessThanOrEqual(row.rowRight);
+      if (index > 0) {
+        expect(row.top).toBeGreaterThanOrEqual(
+          bounds.items[index - 1]?.bottom ?? 0,
+        );
+      }
+    }
+    expect(await hasNoPageOverflow(page)).toBe(true);
+  }
 });
 
 test("mouse resizing persists navigation width and updates pane proportions", async ({

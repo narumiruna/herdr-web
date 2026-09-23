@@ -19,8 +19,8 @@
   }
   .terminal-lines {
     padding: 13px 12px 24px;
-    font-size: 11px;
-    line-height: 1.5;
+    font-size: var(--text-compact);
+    line-height: var(--leading-body);
   }
   .pane-titlebar {
     min-height: 44px;
@@ -69,7 +69,7 @@
     background: var(--terminal-elevated);
     color: var(--terminal-text);
     font-family: "JetBrainsMono Nerd Font Mono", monospace;
-    font-size: 11px;
+    font-size: var(--text-caption);
   }
   .terminal-mobile-keys button[aria-pressed="true"] {
     border-color: var(--amber-8);

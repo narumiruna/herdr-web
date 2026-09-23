@@ -33,7 +33,19 @@
   min-width: 0;
   margin-left: auto;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+}
+.topbar-action-group {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+.topbar-action-group + .topbar-action-group,
+.command-button + .topbar-action-group {
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
 }
 .topbar-actions .rt-IconButton {
   background: transparent;
@@ -66,7 +78,7 @@
   background: color-mix(in srgb, currentColor 10%, transparent);
   color: var(--ink-secondary);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1;
 }
 .work-status-summary button:hover,
@@ -77,7 +89,7 @@
 .work-status-summary button strong {
   color: inherit;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 700;
 }
 .work-status-summary [data-kind="needs-input"] {
@@ -107,7 +119,7 @@
   color: var(--ink);
 }
 .command-button span {
-  font-size: 11px;
+  font-size: var(--text-caption);
 }
 kbd {
   display: inline-flex;
@@ -121,7 +133,7 @@ kbd {
   background: var(--panel-muted);
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 .connection-state {
   display: grid;
@@ -155,7 +167,8 @@ kbd {
   border-bottom: 1px solid var(--amber-6);
   background: var(--amber-3);
   color: var(--amber-12);
-  font-size: 11px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .reconnect-banner > span {
   display: flex;
@@ -249,7 +262,7 @@ kbd {
 .terminal-toolbar-title {
   overflow: hidden;
   font-family: "JetBrainsMono Nerd Font Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -284,7 +297,14 @@ kbd {
 .terminal-toolbar-branch {
   max-width: 22ch;
   flex: 0 1 auto;
-  color: var(--amber-11);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--terminal-muted);
+  cursor: help;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .terminal-toolbar-title {
   display: inline-flex;
@@ -326,12 +346,12 @@ kbd {
 .attention-banner strong {
   flex: 0 0 auto;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--text-compact);
   font-weight: 500;
 }
 .attention-banner span {
   overflow: hidden;
-  font-size: 11px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

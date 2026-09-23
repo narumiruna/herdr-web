@@ -2,6 +2,7 @@ import {
   BellIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CodeIcon,
   Component1Icon,
   CubeIcon,
   DashboardIcon,
@@ -15,10 +16,13 @@ import {
   StackIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { DropdownMenu, SegmentedControl } from "@radix-ui/themes";
-import { useId, useRef, useState } from "react";
+import { type CSSProperties, useId, useRef, useState } from "react";
+import { compactBranchLabel } from "../branch-label";
 import type { HerdrState, Workspace } from "../state";
 import { HerdrWebLogo } from "./HerdrWebLogo";
+import { SidebarSectionResizeHandle } from "./SidebarSectionResizeHandle";
 import { agentStatusLabel, StatusPill } from "./StatusPill";
 
 export type AgentSortMode = "grouped" | "priority";
@@ -27,7 +31,9 @@ interface SidebarProps {
   state: HerdrState;
   agentSort: AgentSortMode;
   canCreateSpace: boolean;
+  spacesRatio: number;
   onAgentSortChange: (sort: AgentSortMode) => void;
+  onSpacesRatioChange: (ratio: number) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onNewSpace: (returnFocus?: HTMLElement | null) => void;
@@ -101,7 +107,9 @@ export function Sidebar({
   state,
   agentSort,
   canCreateSpace,
+  spacesRatio,
   onAgentSortChange,
+  onSpacesRatioChange,
   onSelectWorkspace,
   onSelectAgent,
   onNewSpace,
@@ -181,10 +189,16 @@ export function Sidebar({
     const selected = workspace.id === state.selectedWorkspaceId;
     const isWorktree = variant === "worktree";
     const label = isWorktree ? worktreeLabel(workspace) : workspace.name;
+    const branch = workspace.branch || workspace.worktree?.branch || "";
     const detail = isWorktree
       ? workspaceAttentionDetail(workspace)
       : workspaceDetail(workspace);
-    return (
+    const displayLabel = isWorktree ? compactBranchLabel(label) : label;
+    const displayDetail =
+      detail && detail !== workspaceAttentionDetail(workspace)
+        ? compactBranchLabel(detail)
+        : detail;
+    const button = (
       <button
         className={
           isWorktree ? "workspace-item worktree-item" : "workspace-item"
@@ -198,7 +212,9 @@ export function Sidebar({
             ? `Open ${label} worktree Space`
             : `Open ${workspace.name} Space`
         }
-        title={`${label} — ${workspace.path}`}
+        title={[label, branch !== label ? branch : "", workspace.path]
+          .filter(Boolean)
+          .join(" — ")}
         onClick={() => selectWorkspace(workspace.id)}
       >
         {isWorktree ? (
@@ -212,13 +228,13 @@ export function Sidebar({
           </span>
         )}
         <span className="workspace-copy">
-          <strong title={label}>{label}</strong>
+          <strong title={label}>{displayLabel}</strong>
           {detail && (
             <small
               data-attention={Boolean(workspaceAttentionDetail(workspace))}
               title={detail}
             >
-              {detail}
+              {displayDetail}
             </small>
           )}
         </span>
@@ -226,6 +242,18 @@ export function Sidebar({
           <ChevronRightIcon className="workspace-chevron" aria-hidden="true" />
         )}
       </button>
+    );
+    if (!branch) return button;
+    return (
+      <Tooltip.Root key={workspace.id} delayDuration={350}>
+        <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content className="tooltip-content" sideOffset={7}>
+            Branch: {branch}
+            <Tooltip.Arrow className="tooltip-arrow" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
     );
   };
   const runMenuAction = (
@@ -242,268 +270,309 @@ export function Sidebar({
         <HerdrWebLogo />
       </div>
 
-      <div className="spaces-panel">
-        <ScrollArea.Root className="sidebar-scroll">
-          <ScrollArea.Viewport className="sidebar-viewport">
-            <nav aria-label="herdr-web navigation">
-              {attention.length > 0 && (
-                <section
-                  className="nav-section attention-section"
-                  aria-label="Needs input"
-                >
-                  <div className="section-label-row attention-label">
-                    <h2>Needs input</h2>
-                    <span>{attention.length}</span>
-                  </div>
-                  <div className="attention-list">
-                    {attention.map((agent) => (
-                      <button
-                        type="button"
-                        className="attention-item"
-                        data-active={agent.id === state.selectedAgentId}
-                        aria-label={`Open ${agent.label} Agent needing input`}
-                        key={agent.id}
-                        onClick={() => selectAgent(agent.id)}
-                      >
-                        <ExclamationTriangleIcon aria-hidden="true" />
-                        <span>
-                          <strong>{agent.label}</strong>
-                          <small>
-                            {state.workspaces.find(
-                              ({ id }) => id === agent.workspaceId,
-                            )?.name ?? "Unknown Space"}
-                          </small>
-                        </span>
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
+      <div
+        className="sidebar-sections"
+        style={
+          {
+            "--sidebar-agents-track": `${1 - spacesRatio}fr`,
+            "--sidebar-spaces-track": `${spacesRatio}fr`,
+          } as CSSProperties
+        }
+      >
+        <div className="spaces-panel">
+          <ScrollArea.Root className="sidebar-scroll">
+            <ScrollArea.Viewport className="sidebar-viewport">
+              <nav aria-label="herdr-web navigation">
+                {attention.length > 0 && (
+                  <section
+                    className="nav-section attention-section"
+                    aria-label="Needs input"
+                  >
+                    <div className="section-label-row attention-label">
+                      <h2>Needs input</h2>
+                      <span>{attention.length}</span>
+                    </div>
+                    <div className="attention-list">
+                      {attention.map((agent) => (
+                        <button
+                          type="button"
+                          className="attention-item"
+                          data-active={agent.id === state.selectedAgentId}
+                          aria-label={`Open ${agent.label} Agent needing input`}
+                          key={agent.id}
+                          onClick={() => selectAgent(agent.id)}
+                        >
+                          <ExclamationTriangleIcon aria-hidden="true" />
+                          <span>
+                            <strong>{agent.label}</strong>
+                            <small>
+                              {state.workspaces.find(
+                                ({ id }) => id === agent.workspaceId,
+                              )?.name ?? "Unknown Space"}
+                            </small>
+                          </span>
+                          <ChevronRightIcon aria-hidden="true" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
 
-              <section
-                className="nav-section"
-                aria-labelledby={spacesHeadingId}
-              >
-                <div className="section-label-row">
-                  <h2 id={spacesHeadingId}>Spaces</h2>
-                  <span>{state.workspaces.length}</span>
-                </div>
-                <div className="workspace-list">
-                  {workspaceRows.map(({ children, workspace }) => {
-                    const collapsed = collapsedWorkspaceIds.has(workspace.id);
-                    return (
-                      <div className="workspace-tree" key={workspace.id}>
-                        <div className="workspace-tree-heading">
-                          {renderWorkspaceButton(
-                            workspace,
-                            "space",
-                            children.length > 0,
-                          )}
-                          {children.length > 0 && (
-                            <button
-                              type="button"
-                              className="workspace-group-toggle"
-                              aria-expanded={!collapsed}
-                              aria-label={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
-                              title={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
-                              onClick={() =>
-                                setCollapsedWorkspaceIds((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(workspace.id)) {
-                                    next.delete(workspace.id);
-                                  } else {
-                                    next.add(workspace.id);
-                                  }
-                                  return next;
-                                })
-                              }
-                            >
-                              {collapsed ? (
-                                <ChevronRightIcon aria-hidden="true" />
-                              ) : (
-                                <ChevronDownIcon aria-hidden="true" />
+                <section
+                  className="nav-section"
+                  aria-labelledby={spacesHeadingId}
+                >
+                  <div className="section-label-row">
+                    <h2 id={spacesHeadingId}>Spaces</h2>
+                    <span>{state.workspaces.length}</span>
+                  </div>
+                  <div className="workspace-list">
+                    {workspaceRows.map(({ children, workspace }) => {
+                      const collapsed = collapsedWorkspaceIds.has(workspace.id);
+                      return (
+                        <div className="workspace-tree" key={workspace.id}>
+                          <div className="workspace-tree-heading">
+                            {renderWorkspaceButton(
+                              workspace,
+                              "space",
+                              children.length > 0,
+                            )}
+                            {children.length > 0 && (
+                              <button
+                                type="button"
+                                className="workspace-group-toggle"
+                                aria-expanded={!collapsed}
+                                aria-label={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
+                                title={`${collapsed ? "Expand" : "Collapse"} ${workspace.name} worktrees`}
+                                onClick={() =>
+                                  setCollapsedWorkspaceIds((current) => {
+                                    const next = new Set(current);
+                                    if (next.has(workspace.id)) {
+                                      next.delete(workspace.id);
+                                    } else {
+                                      next.add(workspace.id);
+                                    }
+                                    return next;
+                                  })
+                                }
+                              >
+                                {collapsed ? (
+                                  <ChevronRightIcon aria-hidden="true" />
+                                ) : (
+                                  <ChevronDownIcon aria-hidden="true" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          {children.length > 0 && !collapsed && (
+                            <fieldset className="worktree-list">
+                              <legend className="sr-only">
+                                {workspace.name} worktrees
+                              </legend>
+                              {children.map((child) =>
+                                renderWorkspaceButton(child, "worktree"),
                               )}
-                            </button>
+                            </fieldset>
                           )}
                         </div>
-                        {children.length > 0 && !collapsed && (
-                          <fieldset className="worktree-list">
-                            <legend className="sr-only">
-                              {workspace.name} worktrees
-                            </legend>
-                            {children.map((child) =>
-                              renderWorkspaceButton(child, "worktree"),
-                            )}
-                          </fieldset>
-                        )}
-                      </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </nav>
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">
+              <ScrollArea.Thumb className="scrollbar-thumb" />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
+
+          <fieldset className="spaces-actions">
+            <legend className="sr-only">Space actions</legend>
+            <button
+              type="button"
+              disabled={!canCreateSpace}
+              aria-label="Create a new Space"
+              onClick={(event) => startNewSpace(event.currentTarget)}
+            >
+              <PlusIcon aria-hidden="true" />
+              New
+            </button>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                <button ref={menuTrigger} type="button" aria-label="Open menu">
+                  <HamburgerMenuIcon aria-hidden="true" />
+                  Menu
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content
+                className="sidebar-menu"
+                align="end"
+                side="top"
+                sideOffset={6}
+                size="1"
+              >
+                <DropdownMenu.Label>Supervision</DropdownMenu.Label>
+                <DropdownMenu.Item
+                  onSelect={() => runMenuAction(onOpenAttention)}
+                >
+                  <BellIcon aria-hidden="true" />
+                  Attention Inbox
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => runMenuAction(onOpenMissionControl)}
+                >
+                  <DashboardIcon aria-hidden="true" />
+                  Mission Control
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => runMenuAction(onOpenWorkflows)}
+                >
+                  <StackIcon aria-hidden="true" />
+                  Workflow templates
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={!canCreateSpace}
+                  onSelect={() => runMenuAction(onOpenShares)}
+                >
+                  <Link2Icon aria-hidden="true" />
+                  Viewer shares
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Label>Workbench</DropdownMenu.Label>
+                <DropdownMenu.Item
+                  onSelect={() => runMenuAction(onOpenSettings)}
+                >
+                  <GearIcon aria-hidden="true" />
+                  Settings
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={!canCreateSpace}
+                  onSelect={() => runMenuAction(onOpenRuntime)}
+                >
+                  <CubeIcon aria-hidden="true" />
+                  Herdr runtime
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => runMenuAction(onOpenKeybindings)}
+                >
+                  <KeyboardIcon aria-hidden="true" />
+                  Keybindings
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    onDismiss?.();
+                    void onRefresh();
+                  }}
+                >
+                  <ReloadIcon aria-hidden="true" />
+                  Reload Herdr
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          </fieldset>
+        </div>
+
+        <SidebarSectionResizeHandle
+          ratio={spacesRatio}
+          onResize={onSpacesRatioChange}
+        />
+
+        <section className="agent-panel" aria-labelledby={agentsHeadingId}>
+          <div className="section-label-row agent-panel-heading">
+            <div className="agent-panel-title">
+              <h2 id={agentsHeadingId}>Agents</h2>
+              <span>{agents.length}</span>
+            </div>
+            <SegmentedControl.Root
+              className="agent-sort-control"
+              aria-label="Agent ordering"
+              size="1"
+              value={agentSort}
+              onValueChange={(value) => {
+                if (value === "grouped" || value === "priority") {
+                  onAgentSortChange(value);
+                }
+              }}
+            >
+              <SegmentedControl.Item value="grouped">
+                Grouped
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="priority">
+                Priority
+              </SegmentedControl.Item>
+            </SegmentedControl.Root>
+          </div>
+          <ScrollArea.Root className="agent-panel-scroll">
+            <ScrollArea.Viewport className="agent-panel-viewport">
+              {agents.length > 0 ? (
+                <nav className="agent-list" aria-label="Detected Agents">
+                  {agents.map((agent) => {
+                    const workspace = state.workspaces.find(
+                      ({ id }) => id === agent.workspaceId,
+                    );
+                    const selected = agent.id === state.selectedAgentId;
+                    const task = agent.currentStep || agent.summary;
+                    const tooltip = [
+                      agent.label,
+                      task,
+                      workspace?.name ?? "Unknown Space",
+                      agentStatusLabel(agent.status),
+                    ]
+                      .filter(Boolean)
+                      .join(" — ");
+                    return (
+                      <Tooltip.Root key={agent.id} delayDuration={350}>
+                        <Tooltip.Trigger asChild>
+                          <button
+                            type="button"
+                            className="agent-item"
+                            data-active={selected}
+                            aria-current={selected ? "page" : undefined}
+                            aria-label={`Open ${agent.label} Agent in ${workspace?.name ?? "unknown Space"}, ${agentStatusLabel(agent.status)}`}
+                            title={tooltip}
+                            onClick={() => selectAgent(agent.id)}
+                          >
+                            <span className="agent-identity" aria-hidden="true">
+                              <CodeIcon />
+                            </span>
+                            <span className="agent-item-copy">
+                              <strong title={agent.label}>{agent.label}</strong>
+                              {task && (
+                                <span className="agent-item-task" title={task}>
+                                  {task}
+                                </span>
+                              )}
+                              <small>
+                                {workspace?.name ?? "Unknown Space"}
+                              </small>
+                            </span>
+                            <StatusPill status={agent.status} compact />
+                          </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content
+                            className="tooltip-content"
+                            sideOffset={7}
+                          >
+                            {tooltip}
+                            <Tooltip.Arrow className="tooltip-arrow" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
                     );
                   })}
-                </div>
-              </section>
-            </nav>
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">
-            <ScrollArea.Thumb className="scrollbar-thumb" />
-          </ScrollArea.Scrollbar>
-        </ScrollArea.Root>
-
-        <fieldset className="spaces-actions">
-          <legend className="sr-only">Space actions</legend>
-          <button
-            type="button"
-            disabled={!canCreateSpace}
-            aria-label="Create a new Space"
-            onClick={(event) => startNewSpace(event.currentTarget)}
-          >
-            <PlusIcon aria-hidden="true" />
-            New
-          </button>
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              <button ref={menuTrigger} type="button" aria-label="Open menu">
-                <HamburgerMenuIcon aria-hidden="true" />
-                Menu
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content
-              className="sidebar-menu"
-              align="end"
-              side="top"
-              sideOffset={6}
-              size="1"
-            >
-              <DropdownMenu.Label>Supervision</DropdownMenu.Label>
-              <DropdownMenu.Item
-                onSelect={() => runMenuAction(onOpenAttention)}
-              >
-                <BellIcon aria-hidden="true" />
-                Attention Inbox
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => runMenuAction(onOpenMissionControl)}
-              >
-                <DashboardIcon aria-hidden="true" />
-                Mission Control
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => runMenuAction(onOpenWorkflows)}
-              >
-                <StackIcon aria-hidden="true" />
-                Workflow templates
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={!canCreateSpace}
-                onSelect={() => runMenuAction(onOpenShares)}
-              >
-                <Link2Icon aria-hidden="true" />
-                Viewer shares
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Label>Workbench</DropdownMenu.Label>
-              <DropdownMenu.Item onSelect={() => runMenuAction(onOpenSettings)}>
-                <GearIcon aria-hidden="true" />
-                Settings
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={!canCreateSpace}
-                onSelect={() => runMenuAction(onOpenRuntime)}
-              >
-                <CubeIcon aria-hidden="true" />
-                Herdr runtime
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => runMenuAction(onOpenKeybindings)}
-              >
-                <KeyboardIcon aria-hidden="true" />
-                Keybindings
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item
-                onSelect={() => {
-                  onDismiss?.();
-                  void onRefresh();
-                }}
-              >
-                <ReloadIcon aria-hidden="true" />
-                Reload Herdr
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-        </fieldset>
+                </nav>
+              ) : (
+                <p className="agent-panel-empty">No detected Agents</p>
+              )}
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">
+              <ScrollArea.Thumb className="scrollbar-thumb" />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
+        </section>
       </div>
-
-      <section className="agent-panel" aria-labelledby={agentsHeadingId}>
-        <div className="section-label-row agent-panel-heading">
-          <div className="agent-panel-title">
-            <h2 id={agentsHeadingId}>Agents</h2>
-            <span>{agents.length}</span>
-          </div>
-          <SegmentedControl.Root
-            className="agent-sort-control"
-            aria-label="Agent ordering"
-            size="1"
-            value={agentSort}
-            onValueChange={(value) => {
-              if (value === "grouped" || value === "priority") {
-                onAgentSortChange(value);
-              }
-            }}
-          >
-            <SegmentedControl.Item value="grouped">
-              Grouped
-            </SegmentedControl.Item>
-            <SegmentedControl.Item value="priority">
-              Priority
-            </SegmentedControl.Item>
-          </SegmentedControl.Root>
-        </div>
-        <ScrollArea.Root className="agent-panel-scroll">
-          <ScrollArea.Viewport className="agent-panel-viewport">
-            {agents.length > 0 ? (
-              <nav className="agent-list" aria-label="Detected Agents">
-                {agents.map((agent) => {
-                  const workspace = state.workspaces.find(
-                    ({ id }) => id === agent.workspaceId,
-                  );
-                  const selected = agent.id === state.selectedAgentId;
-                  return (
-                    <button
-                      type="button"
-                      className="agent-item"
-                      data-active={selected}
-                      aria-current={selected ? "page" : undefined}
-                      aria-label={`Open ${agent.label} Agent in ${workspace?.name ?? "unknown Space"}, ${agentStatusLabel(agent.status)}`}
-                      title={`${agent.label} — ${workspace?.name ?? "Unknown Space"} — ${agentStatusLabel(agent.status)}`}
-                      key={agent.id}
-                      onClick={() => selectAgent(agent.id)}
-                    >
-                      <StatusPill status={agent.status} compact />
-                      <span className="agent-item-copy">
-                        <strong title={agent.label}>{agent.label}</strong>
-                        <span className="agent-item-meta">
-                          <small>{workspace?.name ?? "Unknown Space"}</small>
-                          <span
-                            className={`agent-item-state agent-state-${agent.status}`}
-                          >
-                            {agentStatusLabel(agent.status)}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </nav>
-            ) : (
-              <p className="agent-panel-empty">No detected Agents</p>
-            )}
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar className="scrollbar" orientation="vertical">
-            <ScrollArea.Thumb className="scrollbar-thumb" />
-          </ScrollArea.Scrollbar>
-        </ScrollArea.Root>
-      </section>
     </aside>
   );
 }

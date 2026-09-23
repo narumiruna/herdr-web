@@ -21,7 +21,7 @@
   border-radius: 5px;
   background: var(--sand-12);
   color: var(--sand-1);
-  font-size: 10px;
+  font-size: var(--text-caption);
   box-shadow: var(--shadow-small);
 }
 .tooltip-arrow {
@@ -126,7 +126,7 @@
   margin: 11px 8px 5px;
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -201,7 +201,7 @@
   padding: 9px 13px;
   border-top: 1px solid var(--border);
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .command-footer span {
   display: flex;
@@ -304,7 +304,7 @@
   overflow: hidden;
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -335,7 +335,7 @@
 .launch-review dt,
 .launch-review dd {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .launch-review dt {
   color: var(--ink-muted);
@@ -414,7 +414,7 @@
 .space-review > span {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: var(--text-caption);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -426,7 +426,7 @@
   overflow: hidden;
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -476,8 +476,8 @@
 }
 .theme-options small {
   color: var(--ink-muted);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 .terminal-size-options {
   display: grid;
@@ -501,7 +501,7 @@
 .terminal-size-options legend small {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 400;
 }
 .terminal-size-options label {
@@ -531,7 +531,7 @@
 .terminal-size-options label small {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 .keybindings-heading {
   display: flex;
@@ -573,7 +573,8 @@
 .keybindings-content > p {
   margin: 10px 0 0;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--text-caption);
+  line-height: var(--leading-compact);
 }
 
 /* On-demand details */
@@ -787,7 +788,7 @@
 .connection-eyebrow {
   color: var(--amber-12);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -963,7 +964,7 @@
 .runtime-management-card small {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .runtime-management-card p {
   color: var(--ink-secondary);
@@ -998,7 +999,7 @@
   padding: 9px 10px;
   border: 1px solid var(--border);
   background: var(--panel);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .runtime-log-list article > span {
   color: var(--ink-muted);
