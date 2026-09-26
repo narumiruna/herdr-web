@@ -63,11 +63,11 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
         run: |
-          npm version "$BUMP" --no-git-tag-version
-          version=$(node --print "require('./package.json').version")
+          npm version "$BUMP" --workspace apps/web --no-git-tag-version
+          version=$(node --print "require('./apps/web/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          test "$(node --print "require('./package-lock.json').version")" = "$version"
+          test "$(node --print "require('./package-lock.json').packages['apps/web'].version")" = "$version"
 
       - name: Create signed commit and release tag
         id: release
@@ -91,7 +91,7 @@ jobs:
               if (error.status !== 404) throw error;
             }
 
-            const additions = ["package.json", "package-lock.json"].map((path) => ({
+            const additions = ["apps/web/package.json", "package-lock.json"].map((path) => ({
               path,
               contents: fs.readFileSync(path).toString("base64"),
             }));

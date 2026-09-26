@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
-const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+const rootManifest = JSON.parse(readFileSync("../../package.json", "utf8"));
+const lock = JSON.parse(readFileSync("../../package-lock.json", "utf8"));
+const lockedPackage = lock.packages?.["apps/web"];
 const requiredDependencies = [
   "@vitejs/plugin-react",
   "citty",
@@ -37,9 +39,23 @@ requireValue(
   manifest.publishConfig?.registry === "https://registry.npmjs.org",
   "Package must publish to the public npm registry",
 );
-requireValue(lock.name === manifest.name, "Lockfile package name is stale");
+requireValue(rootManifest.private === true, "Monorepo root must be private");
 requireValue(
-  lock.version === manifest.version,
+  rootManifest.workspaces?.includes("apps/web") &&
+    lock.packages?.[""]?.workspaces?.includes("apps/web"),
+  "Missing web workspace",
+);
+requireValue(
+  lock.packages?.["node_modules/herdr-web"]?.link === true &&
+    lock.packages["node_modules/herdr-web"].resolved === "apps/web",
+  "Lockfile web workspace link is stale",
+);
+requireValue(
+  lockedPackage?.name === manifest.name,
+  "Lockfile package name is stale",
+);
+requireValue(
+  lockedPackage?.version === manifest.version,
   "Lockfile package version is stale",
 );
 for (const dependency of requiredDependencies) {
@@ -58,6 +74,8 @@ const files = new Set(packed.files.map(({ path }) => path));
 for (const path of [
   "index.html",
   "justfile",
+  "LICENSE",
+  "README.md",
   "scripts/herdr-web.mjs",
   "scripts/start-workbench.mjs",
   "scripts/startup-environment.mjs",
@@ -68,6 +86,16 @@ for (const path of [
 ]) {
   requireValue(files.has(path), `Published package is missing ${path}`);
 }
+requireValue(
+  readFileSync("LICENSE", "utf8") === readFileSync("../../LICENSE", "utf8"),
+  "Published license differs from the repository license",
+);
+requireValue(
+  ![...files].some(
+    (path) => path.startsWith("apps/ios/") || path.startsWith("apps/android/"),
+  ),
+  "Published package includes a native app",
+);
 for (const path of [
   ".github/workflows/ci.yml",
   "e2e/herdr-web.e2e.ts",

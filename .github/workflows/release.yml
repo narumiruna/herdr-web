@@ -53,10 +53,10 @@ jobs:
           fi
 
           version=${GITHUB_REF_NAME#v}
-          package_version=$(node --print "require('./package.json').version")
-          lock_version=$(node --print "require('./package-lock.json').version")
+          package_version=$(node --print "require('./apps/web/package.json').version")
+          lock_version=$(node --print "require('./package-lock.json').packages['apps/web'].version")
           if [ "$version" != "$package_version" ] || [ "$version" != "$lock_version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json and package-lock.json." >&2
+            echo "Tag $GITHUB_REF_NAME does not match apps/web/package.json and the web lockfile entry." >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
