@@ -22,6 +22,11 @@
 
 - Compare `realpath`-canonicalized paths in CLI tests because macOS temporary-directory paths can differ between `/var` and `/private/var`.
 
+## Repository structure
+
+- [UNREVIEWED] Keep the published `herdr-web` package, CLI, bridge, browser sources, and tests in `apps/web/`; use the private root npm workspace and root `package-lock.json` for development.
+- [UNREVIEWED] Run repository checks from the root (`npm run ci`, `npm run test:e2e`), but pack, version, and publish only the `apps/web` workspace; never publish the private root package.
+
 ## Workbench UI
 
 - Use an H monogram with a terminal cursor for the herdr-web brand mark.

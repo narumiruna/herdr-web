@@ -4,11 +4,16 @@
 node_modules
 dist
 dist-server
+apps/web/dist
+apps/web/dist-server
+apps/ios
+apps/android
 coverage
 test-results
 playwright-report
 docs
 e2e
+apps/web/e2e
 *.log
 *.tsbuildinfo
 .env

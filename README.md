@@ -239,6 +239,8 @@ Treat every printed or shared URL like a password. Use direct LAN access only on
 
 ## Development
 
+This repository is a monorepo. `apps/web/` contains the browser workbench, Node bridge, published `herdr-web` CLI, and their tests. The root package is private and uses npm workspaces with a single root lockfile; run the commands below and the `just` recipes from the repository root. npm publishes only the `apps/web` workspace. Native apps can live under `apps/` with their own platform toolchains; they are not npm workspaces.
+
 Run the repository checks:
 
 ```sh
@@ -256,7 +258,7 @@ Install Playwright's Chromium once if needed:
 npx playwright install chromium
 ```
 
-Visual baselines are platform-specific. After an intentional UI change, update and inspect all baseline images on Linux and macOS, then rerun the browser suite without snapshot updates:
+Visual baselines under `apps/web/e2e/` are platform-specific. After an intentional UI change, update and inspect all baseline images on Linux and macOS, then rerun the browser suite without snapshot updates:
 
 ```sh
 npm run test:e2e -- --grep 'visual baseline' --update-snapshots=all
@@ -268,22 +270,22 @@ CI runs on Linux, macOS, and Windows. Browser failure evidence is retained as a 
 
 | Area | Main implementation |
 | --- | --- |
-| Herdr socket transport | `server/herdr-client.ts` |
-| Snapshot, events, and mutations | `server/herdr-service.ts` |
-| Approved Agent launch presets | `server/agent-runtimes.ts` |
-| HTTP authentication and API validation | `server/http-app.ts` |
-| Terminal process and WebSocket bridge | `server/terminal-session.ts`, `server/terminal-websocket.ts` |
-| Snapshot-to-workbench mapping | `src/live-state.ts` |
-| Client synchronization and recovery | `src/use-herdr-runtime.ts` |
-| Interactive terminal | `src/components/InteractiveTerminal.tsx` |
-| Remote machine summaries | `server/machine-service.ts` |
-| Viewer shares | `server/share-store.ts`, `server/share-projection.ts` |
-| Workflow templates | `server/workflow-template-store.ts`, `src/workflow-templates.ts` |
-| Push notifications and PWA | `server/push-notifications.ts`, `public/sw.js` |
+| Herdr socket transport | `apps/web/server/herdr-client.ts` |
+| Snapshot, events, and mutations | `apps/web/server/herdr-service.ts` |
+| Approved Agent launch presets | `apps/web/server/agent-runtimes.ts` |
+| HTTP authentication and API validation | `apps/web/server/http-app.ts` |
+| Terminal process and WebSocket bridge | `apps/web/server/terminal-session.ts`, `apps/web/server/terminal-websocket.ts` |
+| Snapshot-to-workbench mapping | `apps/web/src/live-state.ts` |
+| Client synchronization and recovery | `apps/web/src/use-herdr-runtime.ts` |
+| Interactive terminal | `apps/web/src/components/InteractiveTerminal.tsx` |
+| Remote machine summaries | `apps/web/server/machine-service.ts` |
+| Viewer shares | `apps/web/server/share-store.ts`, `apps/web/server/share-projection.ts` |
+| Workflow templates | `apps/web/server/workflow-template-store.ts`, `apps/web/src/workflow-templates.ts` |
+| Push notifications and PWA | `apps/web/server/push-notifications.ts`, `apps/web/public/sw.js` |
 
-Browser/server-shared runtime presets and notification presentation live in dependency-free modules under `server/`. Notification delivery remains separate in `src/attention-center.ts` and `server/push-notifications.ts`. Store-specific queues call `server/private-json-file.ts` for atomic private writes; file and image policies share only directory checks in `server/upload-directory.ts`. Startup scripts share token and network helpers in `scripts/startup-environment.mjs`.
+Browser/server-shared runtime presets and notification presentation live in dependency-free modules under `apps/web/server/`. Notification delivery remains separate in `apps/web/src/attention-center.ts` and `apps/web/server/push-notifications.ts`. Store-specific queues call `apps/web/server/private-json-file.ts` for atomic private writes; file and image policies share only directory checks in `apps/web/server/upload-directory.ts`. Startup scripts share token and network helpers in `apps/web/scripts/startup-environment.mjs`.
 
-The front end uses React, Vite, xterm.js, and Radix Colors, Icons, Themes, and Primitives. Interactive terminals use the bundled JetBrainsMono Nerd Font Mono; see [`public/fonts/README.md`](public/fonts/README.md) for its source and licenses.
+The front end uses React, Vite, xterm.js, and Radix Colors, Icons, Themes, and Primitives. Interactive terminals use the bundled JetBrainsMono Nerd Font Mono; see [`apps/web/public/fonts/README.md`](apps/web/public/fonts/README.md) for its source and licenses.
 
 The deterministic demo state is available only through explicit test injection and `VITE_DEMO_MODE=true` for browser tests. The production interface does not fabricate lifecycle history, runtime metadata, or settings that Herdr does not expose.
 
@@ -291,7 +293,7 @@ The deterministic demo state is available only through explicit test injection a
 
 Release automation requires a repository secret named `PAT_TOKEN` with permission to update repository contents. npm publishing uses Trusted Publishing for package `herdr-web`, workflow `publish.yml`, and environment `release`; no npm token is stored in GitHub.
 
-Run **Bump version** from `main` and choose `patch`, `minor`, or `major`. The workflow creates a GitHub-signed version commit and matching `vX.Y.Z` tag. The tag independently starts release and publish workflows, which verify the version and commit before creating the GitHub Release or publishing to npm.
+Run **Bump version** from `main` and choose `patch`, `minor`, or `major`. The workflow updates `apps/web/package.json` and the root `package-lock.json`, then creates a GitHub-signed version commit and matching `vX.Y.Z` tag. The tag independently starts release and publish workflows, which verify the version and commit before creating the GitHub Release or publishing to npm.
 
 If the version commit succeeds but tag creation fails, create the reported tag at that commit instead of running another version bump.
 

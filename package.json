@@ -1,98 +1,21 @@
 {
-  "name": "herdr-web",
-  "version": "1.1.3",
-  "description": "Browser workbench for Herdr coding-agent sessions",
-  "license": "MIT",
-  "type": "module",
-  "bin": {
-    "herdr-web": "scripts/herdr-web.mjs"
-  },
-  "files": [
-    "index.html",
-    "justfile",
-    "public",
-    "scripts/access-token.mjs",
-    "scripts/find-port.mjs",
-    "scripts/herdr-web.mjs",
-    "scripts/lan-address.mjs",
-    "scripts/start-workbench.d.mts",
-    "scripts/start-workbench.mjs",
-    "scripts/startup-environment.d.mts",
-    "scripts/startup-environment.mjs",
-    "server",
-    "src",
-    "tsconfig.json",
-    "tsconfig.server.json",
-    "vite.config.ts"
+  "name": "herdr-web-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/web"
   ],
-  "engines": {
-    "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/narumiruna/herdr-web.git"
-  },
-  "homepage": "https://github.com/narumiruna/herdr-web#readme",
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org"
-  },
   "scripts": {
-    "dev": "concurrently --kill-others --names web,bridge \"vite\" \"tsx watch server/index.ts\"",
-    "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
-    "start": "node dist-server/index.js",
-    "preview": "npm start",
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "start": "npm run start --workspace apps/web",
+    "preview": "npm run preview --workspace apps/web",
     "check": "biome ci .",
-    "check:package": "node scripts/check-package.mjs",
-    "check:font-assets": "node scripts/check-font-assets.mjs",
-    "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:watch": "vitest",
+    "check:package": "npm run check:package --workspace apps/web",
+    "check:font-assets": "npm run check:font-assets --workspace apps/web",
+    "test": "npm run test --workspace apps/web --",
+    "test:e2e": "npm run test:e2e --workspace apps/web --",
+    "test:watch": "npm run test:watch --workspace apps/web --",
     "ci": "npm run check && npm run check:package && npm test && npm run build && npm run check:font-assets",
     "prepare": "husky"
-  },
-  "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
-    "@fontsource/ibm-plex-mono": "^5.3.0",
-    "@fontsource/zen-old-mincho": "^5.3.0",
-    "@radix-ui/colors": "^3.0.0",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-icons": "^1.3.2",
-    "@radix-ui/react-scroll-area": "^1.2.10",
-    "@radix-ui/react-tabs": "^1.1.21",
-    "@radix-ui/react-tooltip": "^1.2.8",
-    "@radix-ui/themes": "^3.3.0",
-    "@vitejs/plugin-react": "^6.0.1",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/addon-search": "^0.16.0",
-    "@xterm/addon-unicode11": "^0.9.0",
-    "@xterm/addon-webgl": "^0.19.0",
-    "@xterm/xterm": "^6.0.0",
-    "citty": "^0.2.2",
-    "concurrently": "^10.0.4",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tsx": "^4.23.12",
-    "vite": "^8.2.1",
-    "web-push": "^3.6.7",
-    "ws": "^8.21.3"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.7",
-    "@playwright/test": "^1.62.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.2.0",
-    "@types/pngjs": "^6.0.5",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/web-push": "^3.6.4",
-    "@types/ws": "^8.18.1",
-    "husky": "^9.1.7",
-    "jsdom": "^29.0.1",
-    "pngjs": "^7.0.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
   }
 }
