@@ -239,7 +239,7 @@ Treat every printed or shared URL like a password. Use direct LAN access only on
 
 ## Development
 
-This repository is a monorepo. `apps/web/` contains the browser workbench, Node bridge, published `herdr-web` CLI, and their tests. The root package is private and uses npm workspaces with a single root lockfile; run the commands below and the `just` recipes from the repository root. npm publishes only the `apps/web` workspace. Native apps can live under `apps/` with their own platform toolchains; they are not npm workspaces.
+This repository is a monorepo. `apps/web/` contains the browser workbench, Node bridge, published `herdr-web` CLI, and their tests. The root package is private and uses npm workspaces with a single root lockfile; run the commands below and the `just` recipes from the repository root. npm publishes only the `apps/web` workspace. The native iPhone supervisor is in [`apps/ios/`](apps/ios/README.md) and is not an npm workspace. It connects to a directly reachable herdr-web bridge using a separate token field (not a browser token URL). See its README for Xcode/Simulator setup, HTTPS and LAN safety, signing, build/test commands, and v1 limits.
 
 Run the repository checks:
 
@@ -264,7 +264,7 @@ Visual baselines under `apps/web/e2e/` are platform-specific. After an intention
 npm run test:e2e -- --grep 'visual baseline' --update-snapshots=all
 ```
 
-CI runs on Linux, macOS, and Windows. Browser failure evidence is retained as a GitHub Actions artifact for seven days.
+CI runs web checks on Linux, macOS, and Windows, and builds/tests iOS on macOS with an available iPhone Simulator; web checks do not need Xcode. Browser failure evidence is retained as a GitHub Actions artifact for seven days.
 
 ## Architecture
 

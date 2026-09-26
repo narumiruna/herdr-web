@@ -1,0 +1,630 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		088896691A5DAF7094695A02 /* JetBrainsMonoNerdFontMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 025D18F63B54CD8D26C8908E /* JetBrainsMonoNerdFontMono-Regular.ttf */; };
+		0AEE3404973172B690407E72 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE006F295DB96BBCC80A8265 /* ConnectionView.swift */; };
+		0DC08F2A48D51D1123FFD778 /* PaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C525B60B990D168AD9891BC1 /* PaneView.swift */; };
+		16ABA155C05BBA8A405815A9 /* BridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77759DBD1A1D04260CBCA03E /* BridgeTests.swift */; };
+		1BF1C9C44CDDC24FEBBEA40A /* state.json in Resources */ = {isa = PBXBuildFile; fileRef = B53FA27B36D5D57F13FDF8CA /* state.json */; };
+		1E1F8B5FB8FC65DF439C5413 /* BridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38960E2F385F3B0DA334296B /* BridgeClient.swift */; };
+		34169A99B8EDB67DD41D2094 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B20B2464BBBD742C9E5505A2 /* Assets.xcassets */; };
+		383EE06520E5927F5E7E1912 /* WorkbenchStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B7DF3F2C98BF19F4202978 /* WorkbenchStore.swift */; };
+		4920960F4B4F13CFAFE4EFDE /* NERD-FONTS-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = F3C0E74D7E97DE81B66FC3E0 /* NERD-FONTS-LICENSE.txt */; };
+		5C11679427B3613886983797 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5591C743E5EF88E56AAC32F /* SmokeTests.swift */; };
+		6EEEB55C7B7770B2E8E99279 /* JETBRAINS-MONO-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = A1B6223684A661DD2BAE25A8 /* JETBRAINS-MONO-OFL.txt */; };
+		829E9F59F32F04CBAA2B9D50 /* JETBRAINS-MONO-NERD-FONTS-README.md in Resources */ = {isa = PBXBuildFile; fileRef = CE0109FDC36E57114D6711D6 /* JETBRAINS-MONO-NERD-FONTS-README.md */; };
+		A3DF323AB22B8B5B27009321 /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459879E5AB7DDEF7C6D5E157 /* Credentials.swift */; };
+		A4C58DC975C8C97131ADD7A4 /* HerdrWebApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DDFC2A5694035A43506B433 /* HerdrWebApp.swift */; };
+		B3D022AD6CB8452815D969C7 /* OutputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F9DBBDDDB9CAC4BF6C3DE2 /* OutputView.swift */; };
+		D14C2727D32218658C0E2D73 /* StoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2499D38EED4A636C0CE2E4 /* StoreTests.swift */; };
+		D2FE43E5C96A473329A75A9F /* BridgeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE5194AA6210FAA92D1CFA8 /* BridgeModels.swift */; };
+		E45B5F2F131688D7B47A35B9 /* WorkspacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5CF5F999917E1CD8C10DCC /* WorkspacesView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		77D5BEF061E49CFDB5E2494E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C700F2C92E9546E42C2DB63 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0EDD7D8D2A62580E8090639C;
+			remoteInfo = HerdrWeb;
+		};
+		DA54BC0F7AB71E4532E71525 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C700F2C92E9546E42C2DB63 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0EDD7D8D2A62580E8090639C;
+			remoteInfo = HerdrWeb;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		025D18F63B54CD8D26C8908E /* JetBrainsMonoNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMonoNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
+		1F2499D38EED4A636C0CE2E4 /* StoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreTests.swift; sourceTree = "<group>"; };
+		27B7DF3F2C98BF19F4202978 /* WorkbenchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchStore.swift; sourceTree = "<group>"; };
+		37E7A5A5C3E3517BBAFF74E4 /* HerdrWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HerdrWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		38960E2F385F3B0DA334296B /* BridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeClient.swift; sourceTree = "<group>"; };
+		459879E5AB7DDEF7C6D5E157 /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
+		4FE5194AA6210FAA92D1CFA8 /* BridgeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeModels.swift; sourceTree = "<group>"; };
+		59F9DBBDDDB9CAC4BF6C3DE2 /* OutputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputView.swift; sourceTree = "<group>"; };
+		77759DBD1A1D04260CBCA03E /* BridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeTests.swift; sourceTree = "<group>"; };
+		8DDFC2A5694035A43506B433 /* HerdrWebApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HerdrWebApp.swift; sourceTree = "<group>"; };
+		A1B6223684A661DD2BAE25A8 /* JETBRAINS-MONO-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "JETBRAINS-MONO-OFL.txt"; sourceTree = "<group>"; };
+		AD246E5E8CEAFB9A06A68B51 /* HerdrWebUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HerdrWebUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20B2464BBBD742C9E5505A2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B5233641BEF64EA760B75C6B /* HerdrWebTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HerdrWebTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B53FA27B36D5D57F13FDF8CA /* state.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = state.json; sourceTree = "<group>"; };
+		C525B60B990D168AD9891BC1 /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
+		C5591C743E5EF88E56AAC32F /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		CE0109FDC36E57114D6711D6 /* JETBRAINS-MONO-NERD-FONTS-README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "JETBRAINS-MONO-NERD-FONTS-README.md"; sourceTree = "<group>"; };
+		EC5CF5F999917E1CD8C10DCC /* WorkspacesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacesView.swift; sourceTree = "<group>"; };
+		EE006F295DB96BBCC80A8265 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
+		F3C0E74D7E97DE81B66FC3E0 /* NERD-FONTS-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NERD-FONTS-LICENSE.txt"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1B2A4D697CBFB3E1D8D80B81 = {
+			isa = PBXGroup;
+			children = (
+				C7B5308903435D8488A7043F /* HerdrWeb */,
+				E12048066878D96574E7E435 /* HerdrWebTests */,
+				6255F1DA35266E48BB4CC0E7 /* HerdrWebUITests */,
+				3B814B0E834E6B2C7DA9A51A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3B814B0E834E6B2C7DA9A51A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				37E7A5A5C3E3517BBAFF74E4 /* HerdrWeb.app */,
+				B5233641BEF64EA760B75C6B /* HerdrWebTests.xctest */,
+				AD246E5E8CEAFB9A06A68B51 /* HerdrWebUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3F97E54C357B270603F9598D /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8DDFC2A5694035A43506B433 /* HerdrWebApp.swift */,
+				27B7DF3F2C98BF19F4202978 /* WorkbenchStore.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		4425DD2BC4249F746061C105 /* Connection */ = {
+			isa = PBXGroup;
+			children = (
+				EE006F295DB96BBCC80A8265 /* ConnectionView.swift */,
+				459879E5AB7DDEF7C6D5E157 /* Credentials.swift */,
+			);
+			path = Connection;
+			sourceTree = "<group>";
+		};
+		5878C1F905589956BF65C64B /* Workspaces */ = {
+			isa = PBXGroup;
+			children = (
+				EC5CF5F999917E1CD8C10DCC /* WorkspacesView.swift */,
+			);
+			path = Workspaces;
+			sourceTree = "<group>";
+		};
+		6255F1DA35266E48BB4CC0E7 /* HerdrWebUITests */ = {
+			isa = PBXGroup;
+			children = (
+				C5591C743E5EF88E56AAC32F /* SmokeTests.swift */,
+			);
+			path = HerdrWebUITests;
+			sourceTree = "<group>";
+		};
+		7EE7E0F958C050A4365D3DCD /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B20B2464BBBD742C9E5505A2 /* Assets.xcassets */,
+				CE0109FDC36E57114D6711D6 /* JETBRAINS-MONO-NERD-FONTS-README.md */,
+				A1B6223684A661DD2BAE25A8 /* JETBRAINS-MONO-OFL.txt */,
+				025D18F63B54CD8D26C8908E /* JetBrainsMonoNerdFontMono-Regular.ttf */,
+				F3C0E74D7E97DE81B66FC3E0 /* NERD-FONTS-LICENSE.txt */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		7F709F3CC33348DA627B862E /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				B53FA27B36D5D57F13FDF8CA /* state.json */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		8C126DE7E2B6168AD53923F2 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				38960E2F385F3B0DA334296B /* BridgeClient.swift */,
+				4FE5194AA6210FAA92D1CFA8 /* BridgeModels.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		A0D9151F11367E6F4957C2C7 /* Composer */ = {
+			isa = PBXGroup;
+			children = (
+				C525B60B990D168AD9891BC1 /* PaneView.swift */,
+			);
+			path = Composer;
+			sourceTree = "<group>";
+		};
+		C7B5308903435D8488A7043F /* HerdrWeb */ = {
+			isa = PBXGroup;
+			children = (
+				8C126DE7E2B6168AD53923F2 /* API */,
+				3F97E54C357B270603F9598D /* App */,
+				A0D9151F11367E6F4957C2C7 /* Composer */,
+				4425DD2BC4249F746061C105 /* Connection */,
+				7EE7E0F958C050A4365D3DCD /* Resources */,
+				D1D5C626E197E5D66A40D871 /* Terminal */,
+				5878C1F905589956BF65C64B /* Workspaces */,
+			);
+			path = HerdrWeb;
+			sourceTree = "<group>";
+		};
+		D1D5C626E197E5D66A40D871 /* Terminal */ = {
+			isa = PBXGroup;
+			children = (
+				59F9DBBDDDB9CAC4BF6C3DE2 /* OutputView.swift */,
+			);
+			path = Terminal;
+			sourceTree = "<group>";
+		};
+		E12048066878D96574E7E435 /* HerdrWebTests */ = {
+			isa = PBXGroup;
+			children = (
+				77759DBD1A1D04260CBCA03E /* BridgeTests.swift */,
+				1F2499D38EED4A636C0CE2E4 /* StoreTests.swift */,
+				7F709F3CC33348DA627B862E /* Fixtures */,
+			);
+			path = HerdrWebTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0EDD7D8D2A62580E8090639C /* HerdrWeb */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0BC4C81EF5AF0F58E0B2DC41 /* Build configuration list for PBXNativeTarget "HerdrWeb" */;
+			buildPhases = (
+				A7CB0E6415C3E7C6E9DC21CB /* Sources */,
+				745E3B1227DDC2C79B20CD23 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HerdrWeb;
+			packageProductDependencies = (
+			);
+			productName = HerdrWeb;
+			productReference = 37E7A5A5C3E3517BBAFF74E4 /* HerdrWeb.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1D27621875967473C5A94A90 /* HerdrWebUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 734E909E8BC2B7E45D98F732 /* Build configuration list for PBXNativeTarget "HerdrWebUITests" */;
+			buildPhases = (
+				D02CF1B0BF29B5F019036954 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				59F4117627262811FB73CCB3 /* PBXTargetDependency */,
+			);
+			name = HerdrWebUITests;
+			packageProductDependencies = (
+			);
+			productName = HerdrWebUITests;
+			productReference = AD246E5E8CEAFB9A06A68B51 /* HerdrWebUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		ECE6B1A3D7F4EF373EBEBE5F /* HerdrWebTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4F05921830A114746C395D89 /* Build configuration list for PBXNativeTarget "HerdrWebTests" */;
+			buildPhases = (
+				93171F1D7B9C1AF0F64D9EA2 /* Sources */,
+				E860D448EA06623EACC67938 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F2170243F410BC47750407D2 /* PBXTargetDependency */,
+			);
+			name = HerdrWebTests;
+			packageProductDependencies = (
+			);
+			productName = HerdrWebTests;
+			productReference = B5233641BEF64EA760B75C6B /* HerdrWebTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0C700F2C92E9546E42C2DB63 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1D27621875967473C5A94A90 = {
+						TestTargetID = 0EDD7D8D2A62580E8090639C;
+					};
+				};
+			};
+			buildConfigurationList = 593B8E78FD8336CFEFB62D60 /* Build configuration list for PBXProject "HerdrWeb" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 1B2A4D697CBFB3E1D8D80B81;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3B814B0E834E6B2C7DA9A51A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0EDD7D8D2A62580E8090639C /* HerdrWeb */,
+				1D27621875967473C5A94A90 /* HerdrWebUITests */,
+				ECE6B1A3D7F4EF373EBEBE5F /* HerdrWebTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		745E3B1227DDC2C79B20CD23 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34169A99B8EDB67DD41D2094 /* Assets.xcassets in Resources */,
+				829E9F59F32F04CBAA2B9D50 /* JETBRAINS-MONO-NERD-FONTS-README.md in Resources */,
+				6EEEB55C7B7770B2E8E99279 /* JETBRAINS-MONO-OFL.txt in Resources */,
+				088896691A5DAF7094695A02 /* JetBrainsMonoNerdFontMono-Regular.ttf in Resources */,
+				4920960F4B4F13CFAFE4EFDE /* NERD-FONTS-LICENSE.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E860D448EA06623EACC67938 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1BF1C9C44CDDC24FEBBEA40A /* state.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		93171F1D7B9C1AF0F64D9EA2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				16ABA155C05BBA8A405815A9 /* BridgeTests.swift in Sources */,
+				D14C2727D32218658C0E2D73 /* StoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A7CB0E6415C3E7C6E9DC21CB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1E1F8B5FB8FC65DF439C5413 /* BridgeClient.swift in Sources */,
+				D2FE43E5C96A473329A75A9F /* BridgeModels.swift in Sources */,
+				0AEE3404973172B690407E72 /* ConnectionView.swift in Sources */,
+				A3DF323AB22B8B5B27009321 /* Credentials.swift in Sources */,
+				A4C58DC975C8C97131ADD7A4 /* HerdrWebApp.swift in Sources */,
+				B3D022AD6CB8452815D969C7 /* OutputView.swift in Sources */,
+				0DC08F2A48D51D1123FFD778 /* PaneView.swift in Sources */,
+				383EE06520E5927F5E7E1912 /* WorkbenchStore.swift in Sources */,
+				E45B5F2F131688D7B47A35B9 /* WorkspacesView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D02CF1B0BF29B5F019036954 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C11679427B3613886983797 /* SmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		59F4117627262811FB73CCB3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0EDD7D8D2A62580E8090639C /* HerdrWeb */;
+			targetProxy = 77D5BEF061E49CFDB5E2494E /* PBXContainerItemProxy */;
+		};
+		F2170243F410BC47750407D2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0EDD7D8D2A62580E8090639C /* HerdrWeb */;
+			targetProxy = DA54BC0F7AB71E4532E71525 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		29066ABF5DD4E68581F89F09 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HerdrWeb/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3B15E879C5BDB9E3496390DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4DFFF301C3AF53FB2EDEBD80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HerdrWeb/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		66BCEECBB07D55CA29134EDE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HerdrWeb;
+			};
+			name = Debug;
+		};
+		91D02452C46DFCF500FDA3FC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		95CD2A0839C8A327037C9353 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HerdrWeb.app/HerdrWeb";
+			};
+			name = Debug;
+		};
+		BEC01366201D3B07306D3B65 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HerdrWeb.app/HerdrWeb";
+			};
+			name = Release;
+		};
+		F770D609495174A202E028EC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.narumiruna.herdrweb.ios.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HerdrWeb;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0BC4C81EF5AF0F58E0B2DC41 /* Build configuration list for PBXNativeTarget "HerdrWeb" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29066ABF5DD4E68581F89F09 /* Debug */,
+				4DFFF301C3AF53FB2EDEBD80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4F05921830A114746C395D89 /* Build configuration list for PBXNativeTarget "HerdrWebTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				95CD2A0839C8A327037C9353 /* Debug */,
+				BEC01366201D3B07306D3B65 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		593B8E78FD8336CFEFB62D60 /* Build configuration list for PBXProject "HerdrWeb" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B15E879C5BDB9E3496390DD /* Debug */,
+				91D02452C46DFCF500FDA3FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		734E909E8BC2B7E45D98F732 /* Build configuration list for PBXNativeTarget "HerdrWebUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				66BCEECBB07D55CA29134EDE /* Debug */,
+				F770D609495174A202E028EC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0C700F2C92E9546E42C2DB63 /* Project object */;
+}
