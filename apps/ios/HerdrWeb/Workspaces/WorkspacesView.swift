@@ -4,6 +4,7 @@ struct WorkspacesView: View {
     @EnvironmentObject private var store: WorkbenchStore
     @State private var settings = false
     @State private var actions = false
+    @State private var search = ""
 
     var body: some View {
         NavigationStack {
@@ -15,24 +16,44 @@ struct WorkspacesView: View {
                                 .foregroundStyle(store.reconnecting ? .orange : store.noticeIsSuccess ? .green : .red)
                                 .accessibilityIdentifier("connectionNotice")
                         }
-                        Section("Workspaces") {
-                            if state.snapshot.workspaces.isEmpty {
-                                ContentUnavailableView("No workspaces", systemImage: "rectangle.stack")
+                        if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Section("Workspaces") {
+                                if state.snapshot.workspaces.isEmpty {
+                                    ContentUnavailableView("No workspaces", systemImage: "rectangle.stack")
+                                }
+                                ForEach(state.snapshot.workspaces) { space in
+                                    NavigationLink {
+                                        TabsView(spaceID: space.id)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(space.label)
+                                            if let cwd = state.directory(for: space) {
+                                                Text(cwd).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            ForEach(state.snapshot.workspaces) { space in
-                                NavigationLink {
-                                    TabsView(spaceID: space.id)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(space.label)
-                                        if let cwd = state.directory(for: space) {
-                                            Text(cwd).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        } else {
+                            Section("Search results") {
+                                let results = state.search(search)
+                                if results.isEmpty { ContentUnavailableView("No matches", systemImage: "magnifyingglass") }
+                                ForEach(results) { result in
+                                    NavigationLink {
+                                        TabsView(spaceID: result.spaceID, initialTabID: result.tabID,
+                                            initialSessionID: result.sessionID)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(result.title)
+                                            Text(result.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                    .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Find workspaces, tabs, Agents")
                     .refreshable { await store.refresh() }
                 } else {
                     ContentUnavailableView("Connect to your bridge", systemImage: "network", description: Text(store.notice ?? "Enter your bridge URL and access token."))
@@ -62,8 +83,8 @@ struct WorkspacesView: View {
                 }
             }
             .task {
-                await store.restore()
-                if store.connected { settings = false }
+                let restored = await store.restore()
+                if restored { settings = false }
             }
             .onAppear { if !store.connected { settings = true } }
         }
@@ -76,6 +97,12 @@ struct TabsView: View {
     @State private var selectedTabID: String?
     @State private var selectedSessionID: String?
 
+    init(spaceID: String, initialTabID: String? = nil, initialSessionID: String? = nil) {
+        self.spaceID = spaceID
+        _selectedTabID = State(initialValue: initialTabID)
+        _selectedSessionID = State(initialValue: initialSessionID)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let state = store.state {
@@ -85,7 +112,8 @@ struct TabsView: View {
                     if let sessionID = selectedSessionID, state.sessions(in: tab).contains(where: { $0.id == sessionID }) {
                         PaneView(sessionID: sessionID, tabID: tab.id)
                     } else {
-                        SessionsView(tabID: tab.id, selectedSessionID: $selectedSessionID)
+                        SessionsView(tabID: tab.id, selectedTabID: $selectedTabID,
+                            selectedSessionID: $selectedSessionID)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -107,6 +135,8 @@ struct TabsView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityIdentifier("tab-\(item.id)")
+                                .accessibilityValue(item.id == state.snapshot.workspaces.first(where: { $0.id == spaceID })?.activeTabID
+                                    ? "Focused in Herdr" : "Not focused in Herdr")
                             }
                         }
                         .padding(.horizontal)
@@ -126,13 +156,26 @@ struct TabsView: View {
                 }
             }
         }
-        .onChange(of: spaceID) { _, _ in selectedTabID = nil; selectedSessionID = nil }
+        .onAppear { pinCurrentTab() }
+        .onChange(of: spaceID) { _, _ in
+            selectedTabID = nil
+            selectedSessionID = nil
+            pinCurrentTab()
+        }
+    }
+
+    private func pinCurrentTab() {
+        guard selectedTabID == nil, let state = store.state else { return }
+        let tabs = state.snapshot.tabs.filter { $0.workspaceID == spaceID }
+        let active = state.snapshot.workspaces.first(where: { $0.id == spaceID })?.activeTabID
+        selectedTabID = tabs.first(where: { $0.id == active })?.id ?? tabs.first?.id
     }
 }
 
 struct SessionsView: View {
     @EnvironmentObject private var store: WorkbenchStore
     let tabID: String
+    @Binding var selectedTabID: String?
     @Binding var selectedSessionID: String?
 
     var body: some View {
@@ -141,7 +184,7 @@ struct SessionsView: View {
                 let sessions = state.sessions(in: tab)
                 if sessions.isEmpty { ContentUnavailableView("No panes", systemImage: "terminal") }
                 ForEach(sessions) { session in
-                    Button { selectedSessionID = session.id } label: {
+                    Button { selectedTabID = tab.id; selectedSessionID = session.id } label: {
                         Label {
                             VStack(alignment: .leading) {
                                 Text(session.pane.name)

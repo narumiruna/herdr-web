@@ -24,6 +24,17 @@ const server = createServer(async (request, response) => {
     response.writeHead(200).end();
     return;
   }
+  if (
+    request.method === "POST" &&
+    ["/smoke/focus/t1", "/smoke/focus/t2"].includes(request.url)
+  ) {
+    state.snapshot.workspaces[0].active_tab_id = request.url.slice(
+      "/smoke/focus/".length,
+    );
+    for (const stream of streams) stream.write('{"event":"tab.updated"}\n');
+    response.writeHead(200).end();
+    return;
+  }
   if (request.method === "POST" && request.url?.startsWith("/smoke/output/")) {
     const mode = request.url.slice("/smoke/output/".length);
     if (!["short", "long", "updated"].includes(mode)) {

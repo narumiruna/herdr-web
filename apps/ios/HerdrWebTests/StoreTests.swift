@@ -80,6 +80,13 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(bridge.prompts.count, 1)
         XCTAssertEqual(store.drafts[agent.id], " hello ")
         XCTAssertTrue(store.notice?.contains("unknown") == true)
+        XCTAssertTrue(store.uncertainPrompts.contains(agent.id))
+        await store.refresh()
+        XCTAssertTrue(store.uncertainPrompts.contains(agent.id))
+        await store.send(to: agent)
+        XCTAssertEqual(bridge.prompts.count, 1) // No silent duplicate after a refresh.
+        store.acknowledgeUnknownResult(for: agent.id)
+        XCTAssertFalse(store.uncertainPrompts.contains(agent.id))
         store.drafts[agent.id] = String(repeating: "x", count: 20_001)
         await store.send(to: agent)
         XCTAssertEqual(bridge.prompts.count, 1)
@@ -259,6 +266,48 @@ final class StoreTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: "bridgeURL"))
         XCTAssertEqual(credentials.token, "secret") // Warn; do not claim the token was deleted.
         XCTAssertTrue(store.notice?.contains("may remain in Keychain") == true)
+    }
+
+    func testLatestStateRequestWinsOverOlderConcurrentSnapshot() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        store.background()
+        var pending: [CheckedContinuation<BridgeState, Error>] = []
+        bridge.stateHandler = {
+            try await withCheckedThrowingContinuation { pending.append($0) }
+        }
+        store.foreground() // Older sync request starts first.
+        for _ in 0..<30 where pending.count < 1 { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(pending.count, 1)
+        let manual = Task { await store.refresh() }
+        for _ in 0..<30 where pending.count < 2 { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(pending.count, 2)
+        pending[1].resume(returning: try state(role: "viewer"))
+        await manual.value
+        XCTAssertEqual(store.role, .viewer)
+        pending[0].resume(returning: try state(role: "controller"))
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(store.role, .viewer) // Older state must not overwrite newer access or output.
+        store.background()
+    }
+
+    func testOfflineRestoreReusesSavedKeychainToken() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, credentials, defaults) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        store.background()
+        let reopened = WorkbenchStore(credentials: credentials, defaults: defaults, makeClient: { _ in bridge })
+        bridge.stateResult = .failure(BridgeError.offline)
+        let failed = await reopened.restore()
+        XCTAssertFalse(failed)
+        XCTAssertTrue(reopened.canRetrySavedConnection)
+        bridge.stateResult = .success(try state())
+        let restored = await reopened.restore()
+        XCTAssertTrue(restored)
+        XCTAssertEqual(reopened.role, .controller)
+        XCTAssertEqual(credentials.token, "secret")
+        reopened.background()
     }
 
     func testBackoffBounded() { XCTAssertEqual((1...8).map { WorkbenchStore.backoff(attempt: $0) }, [1, 2, 4, 8, 16, 30, 30, 30]) }

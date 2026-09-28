@@ -33,25 +33,34 @@ struct ConnectionView: View {
                 }
                 Section {
                     Button(connecting ? "Connecting…" : "Connect") {
-                        connectionError = nil
-                        connecting = true
-                        pendingTask = Task {
-                            let succeeded = await store.connect(url: address, token: token, allowLocalHTTP: localHTTP)
-                            guard !Task.isCancelled else { return }
-                            connecting = false
-                            pendingTask = nil
-                            if succeeded { token = ""; isPresented = false }
-                            else { connectionError = store.connectionError ?? store.notice }
-                        }
+                        attempt { await store.connect(url: address, token: token, allowLocalHTTP: localHTTP) }
                     }
                     .disabled(connecting || store.isSending)
                     .accessibilityIdentifier("connectButton")
+                    if store.canRetrySavedConnection {
+                        Button("Retry saved connection") { attempt { await store.restore() } }
+                            .disabled(connecting)
+                            .accessibilityIdentifier("retrySavedConnection")
+                    }
                 }
             }
             .navigationTitle("Connection")
             .toolbar { if store.connected { Button("Cancel") { cancelPending(); isPresented = false } } }
             .onAppear { address = store.savedURL; localHTTP = store.localHTTP }
             .onDisappear { cancelPending() }
+        }
+    }
+
+    private func attempt(_ operation: @escaping () async -> Bool) {
+        connectionError = nil
+        connecting = true
+        pendingTask = Task {
+            let succeeded = await operation()
+            guard !Task.isCancelled else { return }
+            connecting = false
+            pendingTask = nil
+            if succeeded { token = ""; isPresented = false }
+            else { connectionError = store.connectionError ?? store.notice }
         }
     }
 

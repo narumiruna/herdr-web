@@ -25,6 +25,7 @@
 		D14C2727D32218658C0E2D73 /* StoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2499D38EED4A636C0CE2E4 /* StoreTests.swift */; };
 		D2FE43E5C96A473329A75A9F /* BridgeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE5194AA6210FAA92D1CFA8 /* BridgeModels.swift */; };
 		E45B5F2F131688D7B47A35B9 /* WorkspacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5CF5F999917E1CD8C10DCC /* WorkspacesView.swift */; };
+		E79DE64E919BC155D32041A4 /* SearchResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9242680C2B59EFB2C0E54D /* SearchResults.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +51,7 @@
 		27B7DF3F2C98BF19F4202978 /* WorkbenchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchStore.swift; sourceTree = "<group>"; };
 		37E7A5A5C3E3517BBAFF74E4 /* HerdrWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HerdrWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		38960E2F385F3B0DA334296B /* BridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeClient.swift; sourceTree = "<group>"; };
+		3A9242680C2B59EFB2C0E54D /* SearchResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResults.swift; sourceTree = "<group>"; };
 		459879E5AB7DDEF7C6D5E157 /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		4FE5194AA6210FAA92D1CFA8 /* BridgeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeModels.swift; sourceTree = "<group>"; };
 		59F9DBBDDDB9CAC4BF6C3DE2 /* OutputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputView.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 		5878C1F905589956BF65C64B /* Workspaces */ = {
 			isa = PBXGroup;
 			children = (
+				3A9242680C2B59EFB2C0E54D /* SearchResults.swift */,
 				EC5CF5F999917E1CD8C10DCC /* WorkspacesView.swift */,
 			);
 			path = Workspaces;
@@ -329,6 +332,7 @@
 				A4C58DC975C8C97131ADD7A4 /* HerdrWebApp.swift in Sources */,
 				B3D022AD6CB8452815D969C7 /* OutputView.swift in Sources */,
 				0DC08F2A48D51D1123FFD778 /* PaneView.swift in Sources */,
+				E79DE64E919BC155D32041A4 /* SearchResults.swift in Sources */,
 				383EE06520E5927F5E7E1912 /* WorkbenchStore.swift in Sources */,
 				E45B5F2F131688D7B47A35B9 /* WorkspacesView.swift in Sources */,
 			);

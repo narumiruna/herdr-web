@@ -44,6 +44,15 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(state.directory(for: state.snapshot.workspaces[0]), "/work/alpha")
     }
 
+    func testSearchFindsWorkspacesTabsAndDetectedSessions() throws {
+        let state = try JSONDecoder().decode(BridgeState.self, from: fixture())
+        XCTAssertTrue(state.search(" alpha ").map(\.id).contains("space:w1"))
+        XCTAssertEqual(state.search("shell").map(\.id), ["tab:t2"])
+        XCTAssertEqual(state.search("Claude").map(\.id), ["session:p1"])
+        XCTAssertEqual(state.search("terminal").map(\.id), ["session:p3"])
+        XCTAssertTrue(state.search("missing").isEmpty)
+    }
+
     func testBundledNerdFontLoadsOnSimulator() {
         XCTAssertNotNil(UIFont(name: "JetBrainsMonoNFM-Regular", size: 12))
     }

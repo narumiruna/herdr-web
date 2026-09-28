@@ -8,6 +8,13 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
     }
 
+    private func setActiveTab(_ tabID: String) async throws {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:18997/smoke/focus/\(tabID)")!)
+        request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    }
+
     private func setOutput(_ mode: String) async throws {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:18997/smoke/output/\(mode)")!)
         request.httpMethod = "POST"
@@ -56,6 +63,15 @@ final class SmokeTests: XCTestCase {
         let recovered = expectation(for: gone, evaluatedWith: notice)
         await fulfillment(of: [recovered], timeout: 20)
         XCTAssertTrue(app.staticTexts["Alpha"].exists)
+        try await setAvailability(false)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["The bridge rejected the request (HTTP 503)."].waitForExistence(timeout: 15))
+        let retry = app.buttons["retrySavedConnection"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        try await setAvailability(true)
+        retry.tap() // The stored Keychain token is reused; it is not exposed to the UI.
+        XCTAssertTrue(app.staticTexts["Alpha"].waitForExistence(timeout: 15))
     }
 
     @MainActor
@@ -94,6 +110,10 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Other panes · Read-only"].exists)
         app.staticTexts["Agent · working"].tap()
         XCTAssertTrue(app.staticTexts["\u{e0b0} agent output"].waitForExistence(timeout: 10))
+        try await setActiveTab("t2") // Runtime focus moves elsewhere, but the supervised pane stays pinned.
+        let focusedShell = app.buttons["tab-t2"]
+        let focused = expectation(for: NSPredicate(format: "value == %@", "Focused in Herdr"), evaluatedWith: focusedShell)
+        await fulfillment(of: [focused], timeout: 10)
         let draft = app.descendants(matching: .any)["agentDraft"]
         XCTAssertTrue(draft.exists)
         draft.tap()
@@ -104,6 +124,7 @@ final class SmokeTests: XCTestCase {
         app.buttons["tab-t1"].tap()
         app.staticTexts["Agent · working"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["agentDraft"].value as? String == "hello from simulator")
+        try await setActiveTab("t1")
         app.buttons["sendPrompt"].tap()
         XCTAssertTrue(app.staticTexts["Prompt accepted."].waitForExistence(timeout: 10))
         app.terminate()
@@ -159,9 +180,12 @@ final class SmokeTests: XCTestCase {
             app.buttons["connectButton"].tap()
             XCTAssertTrue(app.staticTexts["Alpha"].waitForExistence(timeout: 15))
         }
-        app.staticTexts["Alpha"].tap()
-        app.buttons["tab-t1"].tap()
-        app.staticTexts["Agent · working"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("Claude")
+        XCTAssertTrue(app.staticTexts["Claude"].waitForExistence(timeout: 10))
+        app.staticTexts["Claude"].tap() // Jump directly to the Agent from a workspace-wide search.
         let output = app.scrollViews["outputPreview"]
         XCTAssertTrue(output.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Latest"].exists)

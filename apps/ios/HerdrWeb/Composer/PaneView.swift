@@ -23,6 +23,16 @@ struct PaneView: View {
                         Text(notice).font(.caption).foregroundStyle(store.noticeIsSuccess ? .green : .red).padding(6)
                     }
                     OutputView(paneID: sessionID)
+                    if store.uncertainPrompts.contains(sessionID) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Prompt result unknown. Inspect the Agent before sending again.")
+                            Button("I checked the Agent") { store.acknowledgeUnknownResult(for: sessionID) }
+                                .accessibilityIdentifier("acknowledgeUnknownPrompt")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal)
+                    }
                     if session.kind == .agent && state.access.role == .controller && session.pane.agent != nil {
                         if session.pane.agentStatus == "blocked" && state.snapshot.protocolVersion >= 20 {
                             Text("This Agent cannot accept a prompt in its current state.").font(.footnote).padding()
@@ -36,6 +46,7 @@ struct PaneView: View {
                                     .accessibilityIdentifier("agentDraft")
                                 Button("Send") { Task { await store.send(to: session) } }
                                     .disabled(store.reconnecting || store.sending.contains(sessionID) ||
+                                              store.uncertainPrompts.contains(sessionID) ||
                                               WorkbenchStore.promptValidationError(store.drafts[sessionID] ?? "") != nil)
                                     .accessibilityIdentifier("sendPrompt")
                             }

@@ -8,6 +8,7 @@ final class WorkbenchStore: ObservableObject {
     @Published private(set) var noticeIsSuccess = false
     @Published private(set) var reconnecting = false
     @Published private(set) var sending: Set<String> = []
+    @Published private(set) var uncertainPrompts: Set<String> = []
     @Published var drafts: [String: String] = [:]
 
     private(set) var savedURL: String = ""
@@ -20,6 +21,7 @@ final class WorkbenchStore: ObservableObject {
     private let makeClient: (Connection) -> BridgeServing
     private var syncTask: Task<Void, Never>?
     private var generation = 0
+    private var stateRequestRevision = 0
 
     init(credentials: CredentialStoring = KeychainCredentials(), defaults: UserDefaults = .standard,
          makeClient: @escaping (Connection) -> BridgeServing = { BridgeClient(connection: $0) }) {
@@ -33,10 +35,12 @@ final class WorkbenchStore: ObservableObject {
     var connected: Bool { client != nil }
     var role: BridgeState.Role? { state?.access.role }
     var isSending: Bool { !sending.isEmpty }
+    var canRetrySavedConnection: Bool { !connected && !savedURL.isEmpty && credentials.load() != nil }
 
-    func restore() async {
-        guard let token = credentials.load(), !savedURL.isEmpty else { return }
-        await connect(url: savedURL, token: token, allowLocalHTTP: localHTTP)
+    @discardableResult
+    func restore() async -> Bool {
+        guard let token = credentials.load(), !savedURL.isEmpty else { return false }
+        return await connect(url: savedURL, token: token, allowLocalHTTP: localHTTP)
     }
 
     @discardableResult
@@ -69,7 +73,7 @@ final class WorkbenchStore: ObservableObject {
             defaults.set(allowLocalHTTP, forKey: "localHTTP")
             savedURL = proposed.url.absoluteString
             localHTTP = allowLocalHTTP
-            if connection != proposed { drafts = [:] }
+            if connection != proposed { drafts = [:]; uncertainPrompts = [] }
             connection = proposed
             client = candidate
             state = initial
@@ -113,6 +117,7 @@ final class WorkbenchStore: ObservableObject {
         client = nil
         state = nil
         drafts = [:]
+        uncertainPrompts = []
         notice = removalError.map { "Disconnected, but the saved token may remain in Keychain: \($0.localizedDescription)" }
         noticeIsSuccess = false
         reconnecting = false
@@ -131,8 +136,12 @@ final class WorkbenchStore: ObservableObject {
         guard let client else { return }
         let current = generation
         do {
-            let latest = try await client.state()
-            if current == generation { state = latest; notice = nil; noticeIsSuccess = false; reconnecting = false }
+            if let latest = try await loadState(from: client, generation: current) {
+                state = latest
+                notice = nil
+                noticeIsSuccess = false
+                reconnecting = false
+            }
         } catch {
             if current == generation {
                 notice = error.localizedDescription
@@ -145,6 +154,7 @@ final class WorkbenchStore: ObservableObject {
 
     func send(to session: Session) async {
         guard session.kind == .agent, role == .controller, !reconnecting,
+              !uncertainPrompts.contains(session.id),
               session.pane.agent != nil,
               !(session.pane.agentStatus == "blocked" && (state?.snapshot.protocolVersion ?? 0) >= 20),
               let client, !sending.contains(session.id) else { return }
@@ -157,13 +167,20 @@ final class WorkbenchStore: ObservableObject {
             try await client.prompt(paneID: session.id, message: text)
             // Keep edits made while a request was in flight.
             if drafts[session.id] == originalDraft { drafts[session.id] = "" }
+            uncertainPrompts.remove(session.id)
             await refresh()
             if !reconnecting { notice = "Prompt accepted."; noticeIsSuccess = true }
         } catch {
             notice = error.localizedDescription
             noticeIsSuccess = false
+            if error as? BridgeError == .unknownResult { uncertainPrompts.insert(session.id) }
             // No automatic retry: a timeout or disconnection can occur after the bridge acts.
         }
+    }
+
+    func acknowledgeUnknownResult(for sessionID: String) {
+        uncertainPrompts.remove(sessionID)
+        if notice == BridgeError.unknownResult.localizedDescription { notice = nil }
     }
 
     static func promptValidationError(_ draft: String) -> String? {
@@ -175,6 +192,18 @@ final class WorkbenchStore: ObservableObject {
             return "This message exceeds the bridge's 16,384-byte request limit."
         }
         return nil
+    }
+
+    private func loadState(from client: BridgeServing, generation current: Int) async throws -> BridgeState? {
+        stateRequestRevision += 1
+        let revision = stateRequestRevision
+        do {
+            let latest = try await client.state()
+            return current == generation && revision == stateRequestRevision ? latest : nil
+        } catch {
+            guard current == generation && revision == stateRequestRevision else { return nil }
+            throw error
+        }
     }
 
     private func startSync() {
@@ -190,12 +219,14 @@ final class WorkbenchStore: ObservableObject {
         while !Task.isCancelled && current == generation {
             let started = Date()
             do {
-                let latest = try await client.state()
+                let latest = try await loadState(from: client, generation: current)
                 guard !Task.isCancelled && current == generation else { return }
-                state = latest
-                notice = nil
-                noticeIsSuccess = false
-                reconnecting = false
+                if let latest {
+                    state = latest
+                    notice = nil
+                    noticeIsSuccess = false
+                    reconnecting = false
+                }
                 let events = try await client.events()
                 var lastRefresh = Date.distantPast
                 var trailingRefresh: Task<Void, Never>?
@@ -217,9 +248,9 @@ final class WorkbenchStore: ObservableObject {
                     trailingRefresh?.cancel()
                     trailingRefresh = nil
                     lastRefresh = Date()
-                    let refreshed = try await client.state()
+                    let refreshed = try await loadState(from: client, generation: current)
                     guard !Task.isCancelled && current == generation else { return }
-                    state = refreshed
+                    if let refreshed { state = refreshed }
                 }
                 throw BridgeError.offline
             } catch {
