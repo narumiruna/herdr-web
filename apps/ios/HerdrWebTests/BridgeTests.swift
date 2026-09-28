@@ -85,6 +85,9 @@ final class BridgeTests: XCTestCase {
         XCTAssertThrowsError(try Connection("http://[::1]:8787", token: "secret"))
         XCTAssertThrowsError(try Connection("http://[::2]:8787", token: "secret", allowLocalHTTP: true))
         XCTAssertThrowsError(try Connection("http://bridge.local:8787", token: "secret"))
+        let canonical = try Connection("https://example.com", token: "secret")
+        XCTAssertEqual(canonical, try Connection("HTTPS://EXAMPLE.COM:443/", token: "secret"))
+        XCTAssertEqual(canonical, try Connection("https://EXAMPLE.com:443/", token: "secret"))
     }
 
     func testStateAuthenticationAndInvalidJSON() async throws {
@@ -155,6 +158,15 @@ final class BridgeTests: XCTestCase {
             let stream = try await client().events()
             for try await _ in stream { count += 1 }
         } catch { XCTAssertEqual(error as? BridgeError, .offline) }
-        XCTAssertEqual(count, 2)
+        XCTAssertTrue((1...2).contains(count)) // Refresh signals may coalesce.
+        StubProtocol.handler = { _ in
+            (200, Data(String(repeating: "{\"event\":\"pane.updated\"}\n", count: 500).utf8), "application/x-ndjson")
+        }
+        let burst = try await client().events()
+        try await Task.sleep(for: .milliseconds(100)) // Allow the producer to outpace the consumer.
+        count = 0
+        do { for try await _ in burst { count += 1 } }
+        catch { XCTAssertEqual(error as? BridgeError, .offline) }
+        XCTAssertTrue((1...2).contains(count), "Only the newest refresh signal should be buffered")
     }
 }

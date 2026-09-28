@@ -18,7 +18,14 @@ struct Connection: Equatable {
               !token.contains(where: { $0.isNewline || $0.isWhitespace }) else {
             throw BridgeError.invalidConnection
         }
-        self.url = url
+        var origin = components
+        origin.scheme = scheme
+        origin.host = host
+        origin.port = (scheme == "https" && components.port == 443) || (scheme == "http" && components.port == 80)
+            ? nil : components.port
+        origin.path = ""
+        guard let canonical = origin.url else { throw BridgeError.invalidConnection }
+        self.url = canonical
         self.token = token
     }
 }
@@ -134,7 +141,7 @@ final class BridgeClient: BridgeServing {
     func events() async throws -> AsyncThrowingStream<Void, Error> {
         var eventRequest = request("/api/herdr/events")
         eventRequest.timeoutInterval = 45 // server keepalive every 15 seconds
-        return AsyncThrowingStream { continuation in
+        return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let task = Task {
                 do {
                     let (bytes, response) = try await session.bytes(for: eventRequest)

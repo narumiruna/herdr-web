@@ -16,6 +16,7 @@ private final class FakeBridge: BridgeServing {
     var stateResult: Result<BridgeState, Error>
     var stateHandler: (() async throws -> BridgeState)?
     var promptResult: Result<Void, Error> = .success(())
+    var promptHandler: (() async throws -> Void)?
     var prompts: [(String, String)] = []
     var continuation: AsyncThrowingStream<Void, Error>.Continuation?
     var stateCalls = 0
@@ -30,7 +31,8 @@ private final class FakeBridge: BridgeServing {
     }
     func prompt(paneID: String, message: String) async throws {
         prompts.append((paneID, message))
-        try promptResult.get()
+        if let promptHandler { try await promptHandler() }
+        else { try promptResult.get() }
     }
 }
 
@@ -220,13 +222,99 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(first)
         store.background()
         store.drafts["p1"] = "unsent"
-        let same = await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        let same = await store.connect(url: "HTTPS://EXAMPLE.TEST:443/", token: "secret", allowLocalHTTP: false)
         XCTAssertTrue(same)
+        XCTAssertEqual(store.savedURL, "https://example.test")
         XCTAssertEqual(store.drafts["p1"], "unsent")
         store.background()
         let switched = await store.connect(url: "https://other.test", token: "secret", allowLocalHTTP: false)
         XCTAssertTrue(switched)
         XCTAssertTrue(store.drafts.isEmpty)
+        store.background()
+    }
+
+    func testActiveTransitionDoesNotCancelPendingConnectionSwitch() async throws {
+        let original = FakeBridge(try state())
+        let candidate = FakeBridge(try state(role: "viewer"))
+        var pending: CheckedContinuation<BridgeState, Error>?
+        let ready = expectation(description: "Switch is pending")
+        candidate.stateHandler = {
+            try await withCheckedThrowingContinuation { continuation in
+                pending = continuation
+                ready.fulfill()
+            }
+        }
+        let credentials = MemoryCredentials()
+        let store = WorkbenchStore(credentials: credentials,
+            defaults: UserDefaults(suiteName: UUID().uuidString)!, makeClient: { connection in
+                connection.url.host == "other.test" ? candidate : original
+            })
+        let connected = await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        XCTAssertTrue(connected)
+        let switched = Task { await store.connect(url: "https://other.test", token: "new-secret", allowLocalHTTP: false) }
+        await fulfillment(of: [ready], timeout: 3)
+        store.foreground() // Inactive → active, without an intervening background.
+        candidate.stateHandler = nil // Subsequent stream refreshes are no longer suspended.
+        pending?.resume(returning: try state(role: "viewer"))
+        let installed = await switched.value
+        XCTAssertTrue(installed)
+        XCTAssertEqual(store.savedURL, "https://other.test")
+        XCTAssertEqual(store.role, .viewer)
+        store.background()
+    }
+
+    func testPromptFinishingInBackgroundDoesNotRestartSynchronization() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        let session = try XCTUnwrap(store.state?.sessions(in: store.state!.snapshot.tabs[0]).first)
+        store.drafts[session.id] = "hello"
+        let ready = expectation(description: "Prompt is pending")
+        var pending: CheckedContinuation<Void, Error>?
+        bridge.promptHandler = {
+            try await withCheckedThrowingContinuation { continuation in
+                pending = continuation
+                ready.fulfill()
+            }
+        }
+        let send = Task { await store.send(to: session) }
+        await fulfillment(of: [ready], timeout: 3)
+        store.background()
+        bridge.stateResult = .failure(BridgeError.offline)
+        let calls = bridge.stateCalls
+        pending?.resume(returning: ())
+        await send.value
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(bridge.stateCalls, calls)
+        XCTAssertFalse(store.reconnecting)
+        XCTAssertEqual(store.drafts[session.id], "")
+    }
+
+    func testExpiredTokenStopsRetryingUntilExplicitRevalidation() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge, safetyRefreshInterval: .milliseconds(100))
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        for _ in 0..<30 where bridge.continuation == nil { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertNotNil(bridge.continuation)
+        bridge.continuation?.finish(throwing: BridgeError.unauthorized)
+        for _ in 0..<30 where !store.authenticationFailed { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertTrue(store.authenticationFailed)
+        XCTAssertTrue(store.reconnecting) // Stale controller permissions cannot enable Send.
+        let calls = bridge.stateCalls
+        try await Task.sleep(for: .milliseconds(220))
+        XCTAssertEqual(bridge.stateCalls, calls)
+        store.background()
+        store.foreground()
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertEqual(bridge.stateCalls, calls)
+        let session = try XCTUnwrap(store.state?.sessions(in: store.state!.snapshot.tabs[0]).first)
+        store.drafts[session.id] = "should not send"
+        await store.send(to: session)
+        XCTAssertTrue(bridge.prompts.isEmpty)
+        bridge.stateResult = .success(try state(role: "viewer"))
+        await store.refresh() // An explicit verification can resume event synchronization.
+        XCTAssertFalse(store.authenticationFailed)
+        XCTAssertEqual(store.role, .viewer)
         store.background()
     }
 

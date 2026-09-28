@@ -12,8 +12,8 @@ struct WorkspacesView: View {
                 if let state = store.state {
                     List {
                         if let notice = store.notice {
-                            Label(notice, systemImage: store.reconnecting ? "wifi.slash" : store.noticeIsSuccess ? "checkmark.circle" : "exclamationmark.triangle")
-                                .foregroundStyle(store.reconnecting ? .orange : store.noticeIsSuccess ? .green : .red)
+                            Label(notice, systemImage: store.reconnecting && !store.authenticationFailed ? "wifi.slash" : store.noticeIsSuccess ? "checkmark.circle" : "exclamationmark.triangle")
+                                .foregroundStyle(store.authenticationFailed ? .red : store.reconnecting ? .orange : store.noticeIsSuccess ? .green : .red)
                                 .accessibilityIdentifier("connectionNotice")
                         }
                         if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

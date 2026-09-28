@@ -7,6 +7,7 @@ final class WorkbenchStore: ObservableObject {
     @Published private(set) var notice: String?
     @Published private(set) var noticeIsSuccess = false
     @Published private(set) var reconnecting = false
+    @Published private(set) var authenticationFailed = false
     @Published private(set) var sending: Set<String> = []
     @Published private(set) var uncertainPrompts: Set<String> = []
     @Published var drafts: [String: String] = [:]
@@ -23,6 +24,7 @@ final class WorkbenchStore: ObservableObject {
     private var syncTask: Task<Void, Never>?
     private var generation = 0
     private var stateRequestRevision = 0
+    private var isForeground = true
 
     init(credentials: CredentialStoring = KeychainCredentials(), defaults: UserDefaults = .standard,
          makeClient: @escaping (Connection) -> BridgeServing = { BridgeClient(connection: $0) },
@@ -84,14 +86,15 @@ final class WorkbenchStore: ObservableObject {
             notice = nil
             noticeIsSuccess = false
             reconnecting = false
-            startSync()
+            authenticationFailed = false
+            if isForeground { startSync() }
             return true
         } catch {
             if current == generation {
                 connectionError = error.localizedDescription
                 notice = connectionError
                 noticeIsSuccess = false
-                if connected { startSync() } // Keep the previous verified connection live.
+                if connected && isForeground { startSync() } // Keep the previous verified connection live.
             }
             return false
         }
@@ -100,7 +103,7 @@ final class WorkbenchStore: ObservableObject {
     func cancelConnectionAttempt() {
         generation += 1 // Reject a response even if the transport ignores task cancellation.
         connectionError = nil
-        if connected { startSync() }
+        if connected && isForeground { startSync() }
     }
 
     func disconnect() {
@@ -124,16 +127,22 @@ final class WorkbenchStore: ObservableObject {
         notice = removalError.map { "Disconnected, but the saved token may remain in Keychain: \($0.localizedDescription)" }
         noticeIsSuccess = false
         reconnecting = false
+        authenticationFailed = false
     }
 
     func background() {
+        isForeground = false
         generation += 1
         syncTask?.cancel()
         syncTask = nil
         reconnecting = false
     }
 
-    func foreground() { if connected { startSync() } }
+    func foreground() {
+        guard !isForeground else { return } // Inactive → active does not invalidate a pending switch.
+        isForeground = true
+        if connected && !authenticationFailed { startSync() }
+    }
 
     func refresh() async {
         guard let client else { return }
@@ -144,19 +153,28 @@ final class WorkbenchStore: ObservableObject {
                 notice = nil
                 noticeIsSuccess = false
                 reconnecting = false
+                let wasUnauthorized = authenticationFailed
+                authenticationFailed = false
+                if wasUnauthorized && isForeground { startSync() } // Only explicit refresh/revalidation may resume.
             }
         } catch {
             if current == generation {
                 notice = error.localizedDescription
                 noticeIsSuccess = false
                 reconnecting = true
-                startSync() // A failed manual refresh must also reconnect a stalled stream.
+                if error as? BridgeError == .unauthorized {
+                    authenticationFailed = true
+                    syncTask?.cancel()
+                    syncTask = nil
+                } else if isForeground && !authenticationFailed {
+                    startSync() // A failed manual refresh must also reconnect a stalled stream.
+                }
             }
         }
     }
 
     func send(to session: Session) async {
-        guard session.kind == .agent, role == .controller, !reconnecting,
+        guard session.kind == .agent, role == .controller, !reconnecting, !authenticationFailed,
               !uncertainPrompts.contains(session.id),
               session.pane.agent != nil,
               !(session.pane.agentStatus == "blocked" && (state?.snapshot.protocolVersion ?? 0) >= 20),
@@ -171,7 +189,7 @@ final class WorkbenchStore: ObservableObject {
             // Keep edits made while a request was in flight.
             if drafts[session.id] == originalDraft { drafts[session.id] = "" }
             uncertainPrompts.remove(session.id)
-            await refresh()
+            if isForeground { await refresh() }
             if !reconnecting { notice = "Prompt accepted."; noticeIsSuccess = true }
         } catch {
             notice = error.localizedDescription
@@ -210,6 +228,7 @@ final class WorkbenchStore: ObservableObject {
     }
 
     private func startSync() {
+        guard isForeground && !authenticationFailed else { return }
         generation += 1
         let current = generation
         syncTask?.cancel()
@@ -269,6 +288,7 @@ final class WorkbenchStore: ObservableObject {
                 notice = error.localizedDescription
                 noticeIsSuccess = false
                 reconnecting = true
+                if error as? BridgeError == .unauthorized { authenticationFailed = true; return }
                 if Date().timeIntervalSince(started) > 30 { attempt = 0 }
                 attempt += 1
                 let delay = Self.backoff(attempt: attempt)

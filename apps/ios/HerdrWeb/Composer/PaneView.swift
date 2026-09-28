@@ -45,7 +45,7 @@ struct PaneView: View {
                                     .lineLimit(1...5)
                                     .accessibilityIdentifier("agentDraft")
                                 Button("Send") { Task { await store.send(to: session) } }
-                                    .disabled(store.reconnecting || store.sending.contains(sessionID) ||
+                                    .disabled(store.reconnecting || store.authenticationFailed || store.sending.contains(sessionID) ||
                                               store.uncertainPrompts.contains(sessionID) ||
                                               WorkbenchStore.promptValidationError(store.drafts[sessionID] ?? "") != nil)
                                     .accessibilityIdentifier("sendPrompt")
