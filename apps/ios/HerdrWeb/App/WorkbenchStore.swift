@@ -163,9 +163,7 @@ final class WorkbenchStore: ObservableObject {
                 noticeIsSuccess = false
                 reconnecting = true
                 if error as? BridgeError == .unauthorized {
-                    authenticationFailed = true
-                    syncTask?.cancel()
-                    syncTask = nil
+                    failAuthentication()
                 } else if isForeground && !authenticationFailed {
                     startSync() // A failed manual refresh must also reconnect a stalled stream.
                 }
@@ -195,6 +193,7 @@ final class WorkbenchStore: ObservableObject {
             notice = error.localizedDescription
             noticeIsSuccess = false
             if error as? BridgeError == .unknownResult { uncertainPrompts.insert(session.id) }
+            if error as? BridgeError == .unauthorized { failAuthentication() }
             // No automatic retry: a timeout or disconnection can occur after the bridge acts.
         }
     }
@@ -213,6 +212,13 @@ final class WorkbenchStore: ObservableObject {
             return "This message exceeds the bridge's 16,384-byte request limit."
         }
         return nil
+    }
+
+    private func failAuthentication() {
+        authenticationFailed = true
+        reconnecting = true
+        syncTask?.cancel()
+        syncTask = nil
     }
 
     private func loadState(from client: BridgeServing, generation current: Int) async throws -> BridgeState? {
@@ -288,7 +294,7 @@ final class WorkbenchStore: ObservableObject {
                 notice = error.localizedDescription
                 noticeIsSuccess = false
                 reconnecting = true
-                if error as? BridgeError == .unauthorized { authenticationFailed = true; return }
+                if error as? BridgeError == .unauthorized { failAuthentication(); return }
                 if Date().timeIntervalSince(started) > 30 { attempt = 0 }
                 attempt += 1
                 let delay = Self.backoff(attempt: attempt)

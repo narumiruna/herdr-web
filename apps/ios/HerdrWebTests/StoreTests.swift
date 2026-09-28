@@ -318,6 +318,24 @@ final class StoreTests: XCTestCase {
         store.background()
     }
 
+    func testUnauthorizedPromptBlocksFurtherSendsAcrossBackground() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        let session = try XCTUnwrap(store.state?.sessions(in: store.state!.snapshot.tabs[0]).first)
+        store.drafts[session.id] = "hello"
+        bridge.promptResult = .failure(BridgeError.unauthorized)
+        await store.send(to: session)
+        XCTAssertTrue(store.authenticationFailed)
+        XCTAssertEqual(store.notice, BridgeError.unauthorized.localizedDescription)
+        store.background()
+        store.foreground()
+        await store.send(to: session)
+        XCTAssertEqual(bridge.prompts.count, 1)
+        XCTAssertEqual(store.drafts[session.id], "hello")
+        store.background()
+    }
+
     func testPromptBodyLimitAndWhitespaceSuccess() async throws {
         let bridge = FakeBridge(try state())
         let (store, _, _) = setup(bridge)

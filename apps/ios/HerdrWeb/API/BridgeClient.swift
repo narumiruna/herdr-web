@@ -146,7 +146,10 @@ final class BridgeClient: BridgeServing {
                 do {
                     let (bytes, response) = try await session.bytes(for: eventRequest)
                     try checked(response)
-                    guard (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")?.contains("application/x-ndjson") == true else {
+                    let mediaType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")?
+                        .split(separator: ";", maxSplits: 1).first?
+                        .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    guard mediaType == "application/x-ndjson" else {
                         throw BridgeError.invalidResponse
                     }
                     var line = Data()

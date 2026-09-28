@@ -109,6 +109,17 @@ struct BridgePane: Decodable, Identifiable {
         case cwd, foregroundCwd = "foreground_cwd", label, title
         case terminalTitleStripped = "terminal_title_stripped", stateLabels = "state_labels"
     }
+
+    func addingMissingDetails(from pane: BridgePane?) -> BridgePane {
+        guard let pane else { return self }
+        return BridgePane(paneID: paneID, tabID: tabID, workspaceID: workspaceID,
+            agent: agent ?? pane.agent, displayAgent: displayAgent ?? pane.displayAgent,
+            agentStatus: agentStatus, cwd: cwd ?? pane.cwd,
+            foregroundCwd: foregroundCwd ?? pane.foregroundCwd,
+            label: label ?? pane.label, title: title ?? pane.title,
+            terminalTitleStripped: terminalTitleStripped ?? pane.terminalTitleStripped,
+            stateLabels: stateLabels ?? pane.stateLabels)
+    }
 }
 
 struct Session: Identifiable {
@@ -123,7 +134,8 @@ extension BridgeState {
         let detected = snapshot.agents.filter { $0.tabID == tab.tabID && $0.workspaceID == tab.workspaceID }
         if !detected.isEmpty {
             return detected.map { agent in
-                return Session(pane: agent, kind: .agent)
+                let details = snapshot.panes.first(where: { $0.id == agent.id && $0.tabID == agent.tabID && $0.workspaceID == agent.workspaceID })
+                return Session(pane: agent.addingMissingDetails(from: details), kind: .agent)
             }
         }
         guard let pane = snapshot.panes.first(where: { $0.tabID == tab.tabID && $0.workspaceID == tab.workspaceID }) else { return [] }

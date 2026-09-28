@@ -53,6 +53,21 @@ final class BridgeTests: XCTestCase {
         XCTAssertTrue(state.search("missing").isEmpty)
     }
 
+    func testDetectedAgentUsesMatchingPaneDetails() throws {
+        let raw = try XCTUnwrap(String(data: fixture(), encoding: .utf8))
+        let lean = raw.replacingOccurrences(of: "\"agent\": \"claude\",\n        \"display_agent\": \"Claude\",",
+            with: "\"terminal_title_stripped\": \"  Agent session  \",")
+        XCTAssertNotEqual(lean, raw)
+        let state = try JSONDecoder().decode(BridgeState.self, from: Data(lean.utf8))
+        let tab = try XCTUnwrap(state.snapshot.tabs.first { $0.id == "t1" })
+        let agent = try XCTUnwrap(state.sessions(in: tab).first)
+        XCTAssertEqual(agent.kind, .agent)
+        XCTAssertEqual(agent.pane.agent, "claude") // Composer eligibility is retained.
+        XCTAssertEqual(agent.pane.name, "Agent session")
+        XCTAssertEqual(state.directory(for: agent.pane), "/work/alpha")
+        XCTAssertEqual(state.search("Agent session").map(\.id), ["session:p1"])
+    }
+
     func testTerminalTitleDecodingAndSearch() throws {
         let raw = try XCTUnwrap(String(data: fixture(), encoding: .utf8))
         let titled = raw.replacingOccurrences(of: "\"pane_id\": \"p3\",",
@@ -159,6 +174,14 @@ final class BridgeTests: XCTestCase {
             for try await _ in stream { count += 1 }
         } catch { XCTAssertEqual(error as? BridgeError, .offline) }
         XCTAssertTrue((1...2).contains(count)) // Refresh signals may coalesce.
+        StubProtocol.handler = { _ in
+            (200, Data("{\"event\":\"pane.updated\"}\n".utf8), "Application/X-NDJSON; Charset=UTF-8")
+        }
+        let mixedCase = try await client().events()
+        count = 0
+        do { for try await _ in mixedCase { count += 1 } }
+        catch { XCTAssertEqual(error as? BridgeError, .offline) }
+        XCTAssertEqual(count, 1)
         StubProtocol.handler = { _ in
             (200, Data(String(repeating: "{\"event\":\"pane.updated\"}\n", count: 500).utf8), "application/x-ndjson")
         }
