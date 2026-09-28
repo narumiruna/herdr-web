@@ -11,8 +11,8 @@ struct WorkspacesView: View {
                 if let state = store.state {
                     List {
                         if let notice = store.notice {
-                            Label(notice, systemImage: store.reconnecting ? "wifi.slash" : "exclamationmark.triangle")
-                                .foregroundStyle(store.reconnecting ? .orange : .red)
+                            Label(notice, systemImage: store.reconnecting ? "wifi.slash" : store.noticeIsSuccess ? "checkmark.circle" : "exclamationmark.triangle")
+                                .foregroundStyle(store.reconnecting ? .orange : store.noticeIsSuccess ? .green : .red)
                                 .accessibilityIdentifier("connectionNotice")
                         }
                         Section("Workspaces") {
@@ -61,7 +61,6 @@ struct WorkspacesView: View {
                     .disabled(store.isSending)
                 }
             }
-            .onChange(of: store.state?.access.role) { _, role in if role != nil { settings = false } }
             .task {
                 await store.restore()
                 if store.connected { settings = false }
@@ -74,38 +73,67 @@ struct WorkspacesView: View {
 struct TabsView: View {
     @EnvironmentObject private var store: WorkbenchStore
     let spaceID: String
+    @State private var selectedTabID: String?
+    @State private var selectedSessionID: String?
 
     var body: some View {
-        List {
+        VStack(spacing: 0) {
             if let state = store.state {
                 let tabs = state.snapshot.tabs.filter { $0.workspaceID == spaceID }
-                if tabs.isEmpty { ContentUnavailableView("No tabs", systemImage: "rectangle.on.rectangle") }
-                ForEach(tabs) { tab in
-                    NavigationLink {
-                        SessionsView(tabID: tab.id)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(tab.label)
-                                Text("Tab \(tab.number ?? 0)").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            ForEach(state.sessions(in: tab)) { session in
-                                StatusDot(status: session.pane.agentStatus)
+                let preferred = selectedTabID ?? state.snapshot.workspaces.first(where: { $0.id == spaceID })?.activeTabID
+                if let tab = tabs.first(where: { $0.id == preferred }) ?? tabs.first {
+                    if let sessionID = selectedSessionID, state.sessions(in: tab).contains(where: { $0.id == sessionID }) {
+                        PaneView(sessionID: sessionID, tabID: tab.id)
+                    } else {
+                        SessionsView(tabID: tab.id, selectedSessionID: $selectedSessionID)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(tabs) { item in
+                                Button {
+                                    selectedTabID = item.id
+                                    selectedSessionID = nil
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Text(item.label).lineLimit(1)
+                                        ForEach(state.sessions(in: item)) { session in
+                                            StatusDot(status: session.pane.agentStatus)
+                                        }
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(item.id == tab.id ? Color.blue.opacity(0.15) : Color.clear, in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("tab-\(item.id)")
                             }
                         }
+                        .padding(.horizontal)
                     }
+                    .padding(.vertical, 5)
+                    .background(.bar)
+                } else {
+                    ContentUnavailableView("No tabs", systemImage: "rectangle.on.rectangle")
                 }
             }
         }
         .navigationTitle(store.state?.snapshot.workspaces.first(where: { $0.id == spaceID })?.label ?? "Workspace")
-        .refreshable { await store.refresh() }
+        .toolbar {
+            if selectedSessionID != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Sessions", systemImage: "list.bullet") { selectedSessionID = nil }
+                }
+            }
+        }
+        .onChange(of: spaceID) { _, _ in selectedTabID = nil; selectedSessionID = nil }
     }
 }
 
 struct SessionsView: View {
     @EnvironmentObject private var store: WorkbenchStore
     let tabID: String
+    @Binding var selectedSessionID: String?
 
     var body: some View {
         List {
@@ -113,9 +141,7 @@ struct SessionsView: View {
                 let sessions = state.sessions(in: tab)
                 if sessions.isEmpty { ContentUnavailableView("No panes", systemImage: "terminal") }
                 ForEach(sessions) { session in
-                    NavigationLink {
-                        PaneView(sessionID: session.id, tabID: tabID)
-                    } label: {
+                    Button { selectedSessionID = session.id } label: {
                         Label {
                             VStack(alignment: .leading) {
                                 Text(session.pane.name)
@@ -124,22 +150,11 @@ struct SessionsView: View {
                             }
                         } icon: { StatusDot(status: session.pane.agentStatus) }
                     }
-                }
-                if !sessions.isEmpty {
-                    let extra = state.snapshot.panes.filter { pane in
-                        pane.tabID == tabID && !sessions.contains(where: { $0.id == pane.id })
-                    }
-                    if !extra.isEmpty {
-                        Section("Other panes · Read-only") {
-                            ForEach(extra) { pane in
-                                NavigationLink(pane.name) { OutputView(paneID: pane.id) }
-                            }
-                        }
-                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("session-\(session.id)")
                 }
             }
         }
-        .navigationTitle(store.state?.snapshot.tabs.first(where: { $0.id == tabID })?.label ?? "Tab")
         .refreshable { await store.refresh() }
     }
 }

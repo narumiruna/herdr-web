@@ -5,13 +5,16 @@ import Combine
 final class WorkbenchStore: ObservableObject {
     @Published private(set) var state: BridgeState?
     @Published private(set) var notice: String?
+    @Published private(set) var noticeIsSuccess = false
     @Published private(set) var reconnecting = false
     @Published private(set) var sending: Set<String> = []
     @Published var drafts: [String: String] = [:]
 
     private(set) var savedURL: String = ""
+    private(set) var connectionError: String?
     private(set) var localHTTP = false
     private var client: BridgeServing?
+    private var connection: Connection?
     private let credentials: CredentialStoring
     private let defaults: UserDefaults
     private let makeClient: (Connection) -> BridgeServing
@@ -36,11 +39,23 @@ final class WorkbenchStore: ObservableObject {
         await connect(url: savedURL, token: token, allowLocalHTTP: localHTTP)
     }
 
-    func connect(url: String, token: String, allowLocalHTTP: Bool) async {
-        guard !isSending else { notice = "Wait for the current prompt result before switching connections."; return }
+    @discardableResult
+    func connect(url: String, token: String, allowLocalHTTP: Bool) async -> Bool {
+        guard !isSending else {
+            connectionError = "Wait for the current prompt result before switching connections."
+            notice = connectionError
+            noticeIsSuccess = false
+            return false
+        }
         let proposed: Connection
         do { proposed = try Connection(url, token: token, allowLocalHTTP: allowLocalHTTP) }
-        catch { notice = error.localizedDescription; return }
+        catch {
+            connectionError = error.localizedDescription
+            notice = connectionError
+            noticeIsSuccess = false
+            return false
+        }
+        connectionError = nil
         generation += 1
         let current = generation
         syncTask?.cancel()
@@ -48,29 +63,44 @@ final class WorkbenchStore: ObservableObject {
         let candidate = makeClient(proposed)
         do {
             let initial = try await candidate.state()
-            guard current == generation else { return }
+            guard !Task.isCancelled && current == generation else { return false }
             try credentials.save(token)
             defaults.set(proposed.url.absoluteString, forKey: "bridgeURL")
             defaults.set(allowLocalHTTP, forKey: "localHTTP")
             savedURL = proposed.url.absoluteString
             localHTTP = allowLocalHTTP
+            if connection != proposed { drafts = [:] }
+            connection = proposed
             client = candidate
-            drafts = [:]
             state = initial
+            connectionError = nil
             notice = nil
+            noticeIsSuccess = false
+            reconnecting = false
             startSync()
+            return true
         } catch {
             if current == generation {
-                notice = error.localizedDescription
+                connectionError = error.localizedDescription
+                notice = connectionError
+                noticeIsSuccess = false
                 if connected { startSync() } // Keep the previous verified connection live.
             }
+            return false
         }
     }
 
+    func cancelConnectionAttempt() {
+        generation += 1 // Reject a response even if the transport ignores task cancellation.
+        connectionError = nil
+        if connected { startSync() }
+    }
+
     func disconnect() {
-        guard !isSending else { notice = "Wait for the current prompt result before switching connections."; return }
+        guard !isSending else { notice = "Wait for the current prompt result before switching connections."; noticeIsSuccess = false; return }
+        var removalError: Error?
         do { try credentials.clear() }
-        catch { notice = error.localizedDescription; return }
+        catch { removalError = error }
         generation += 1
         syncTask?.cancel()
         syncTask = nil
@@ -78,10 +108,13 @@ final class WorkbenchStore: ObservableObject {
         defaults.removeObject(forKey: "localHTTP")
         savedURL = ""
         localHTTP = false
+        connection = nil
+        connectionError = nil
         client = nil
         state = nil
         drafts = [:]
-        notice = nil
+        notice = removalError.map { "Disconnected, but the saved token may remain in Keychain: \($0.localizedDescription)" }
+        noticeIsSuccess = false
         reconnecting = false
     }
 
@@ -99,10 +132,11 @@ final class WorkbenchStore: ObservableObject {
         let current = generation
         do {
             let latest = try await client.state()
-            if current == generation { state = latest; notice = nil }
+            if current == generation { state = latest; notice = nil; noticeIsSuccess = false; reconnecting = false }
         } catch {
             if current == generation {
                 notice = error.localizedDescription
+                noticeIsSuccess = false
                 reconnecting = true
                 startSync() // A failed manual refresh must also reconnect a stalled stream.
             }
@@ -114,21 +148,33 @@ final class WorkbenchStore: ObservableObject {
               session.pane.agent != nil,
               !(session.pane.agentStatus == "blocked" && (state?.snapshot.protocolVersion ?? 0) >= 20),
               let client, !sending.contains(session.id) else { return }
-        let text = (drafts[session.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { notice = "Enter a message before sending."; return }
-        guard text.count <= 20_000 else { notice = "Messages must be at most 20,000 characters."; return }
+        let originalDraft = drafts[session.id] ?? ""
+        let text = originalDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let error = Self.promptValidationError(originalDraft) { notice = error; noticeIsSuccess = false; return }
         sending.insert(session.id)
         defer { sending.remove(session.id) }
         do {
             try await client.prompt(paneID: session.id, message: text)
             // Keep edits made while a request was in flight.
-            if drafts[session.id] == text { drafts[session.id] = "" }
+            if drafts[session.id] == originalDraft { drafts[session.id] = "" }
             await refresh()
-            if !reconnecting { notice = "Prompt accepted." }
+            if !reconnecting { notice = "Prompt accepted."; noticeIsSuccess = true }
         } catch {
             notice = error.localizedDescription
+            noticeIsSuccess = false
             // No automatic retry: a timeout or disconnection can occur after the bridge acts.
         }
+    }
+
+    static func promptValidationError(_ draft: String) -> String? {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return "Enter a message before sending." }
+        if text.count > 20_000 { return "Messages must be at most 20,000 characters." }
+        // The bridge rejects JSON bodies over 16,384 bytes, including escaping and the message key.
+        if ((try? JSONEncoder().encode(["message": text]).count) ?? Int.max) > 16_384 {
+            return "This message exceeds the bridge's 16,384-byte request limit."
+        }
+        return nil
     }
 
     private func startSync() {
@@ -148,6 +194,7 @@ final class WorkbenchStore: ObservableObject {
                 guard !Task.isCancelled && current == generation else { return }
                 state = latest
                 notice = nil
+                noticeIsSuccess = false
                 reconnecting = false
                 let events = try await client.events()
                 var lastRefresh = Date.distantPast
@@ -178,6 +225,7 @@ final class WorkbenchStore: ObservableObject {
             } catch {
                 guard !Task.isCancelled && current == generation else { return }
                 notice = error.localizedDescription
+                noticeIsSuccess = false
                 reconnecting = true
                 if Date().timeIntervalSince(started) > 30 { attempt = 0 }
                 attempt += 1

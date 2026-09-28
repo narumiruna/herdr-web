@@ -8,6 +8,13 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
     }
 
+    private func setOutput(_ mode: String) async throws {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:18997/smoke/output/\(mode)")!)
+        request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    }
+
     @MainActor
     func testBadTokenAndOfflineRecovery() async throws {
         try await setAvailability(true)
@@ -84,13 +91,17 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["smoke-controller"].exists)
         app.staticTexts["Alpha"].tap()
         app.staticTexts["Code"].tap()
+        XCTAssertFalse(app.staticTexts["Other panes · Read-only"].exists)
         app.staticTexts["Agent · working"].tap()
         XCTAssertTrue(app.staticTexts["\u{e0b0} agent output"].waitForExistence(timeout: 10))
         let draft = app.descendants(matching: .any)["agentDraft"]
         XCTAssertTrue(draft.exists)
         draft.tap()
         draft.typeText("hello from simulator")
-        app.navigationBars.buttons["Code"].tap()
+        XCTAssertTrue(app.buttons["tab-t2"].exists) // Tabs remain available while supervising a pane.
+        app.buttons["tab-t2"].tap()
+        XCTAssertTrue(app.staticTexts["Terminal · Read-only"].waitForExistence(timeout: 10))
+        app.buttons["tab-t1"].tap()
         app.staticTexts["Agent · working"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["agentDraft"].value as? String == "hello from simulator")
         app.buttons["sendPrompt"].tap()
@@ -102,9 +113,16 @@ final class SmokeTests: XCTestCase {
         menu.tap()
         app.buttons["Connection"].tap()
         XCTAssertTrue(app.textFields["bridgeURL"].waitForExistence(timeout: 15))
+        let badSwitchToken = app.secureTextFields["bridgeToken"]
+        badSwitchToken.tap()
+        badSwitchToken.typeText("wrongpass")
+        app.staticTexts["Connection"].tap()
+        app.buttons["connectButton"].tap()
+        XCTAssertTrue(app.staticTexts["Invalid or expired token. Check the connection settings."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["bridgeURL"].exists) // A failed switch must not dismiss the sheet.
         let viewerToken = app.secureTextFields["bridgeToken"]
         viewerToken.tap()
-        viewerToken.typeText("smoke-viewer")
+        viewerToken.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + "smoke-viewer")
         app.staticTexts["Connection"].tap()
         let viewerHTTP = app.switches["Allow local HTTP for development"]
         if (viewerHTTP.value as? String) != "1" {
@@ -117,5 +135,44 @@ final class SmokeTests: XCTestCase {
         app.staticTexts["Agent · working"].tap()
         XCTAssertFalse(app.buttons["sendPrompt"].exists)
         XCTAssertTrue(app.staticTexts["\u{e0b0} agent output"].exists)
+    }
+
+    @MainActor
+    func testOutputFollowsUntilIntentionalScrollback() async throws {
+        try await setAvailability(true)
+        try await setOutput("long")
+        let app = XCUIApplication()
+        app.launch()
+        if !app.staticTexts["Alpha"].waitForExistence(timeout: 5) {
+            let address = app.textFields["bridgeURL"]
+            XCTAssertTrue(address.waitForExistence(timeout: 15))
+            address.tap()
+            address.typeText("http://localhost:18997")
+            let token = app.secureTextFields["bridgeToken"]
+            token.tap()
+            token.typeText("smoke-viewer")
+            app.staticTexts["Connection"].tap()
+            let localHTTP = app.switches["Allow local HTTP for development"]
+            if (localHTTP.value as? String) != "1" {
+                localHTTP.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            }
+            app.buttons["connectButton"].tap()
+            XCTAssertTrue(app.staticTexts["Alpha"].waitForExistence(timeout: 15))
+        }
+        app.staticTexts["Alpha"].tap()
+        app.buttons["tab-t1"].tap()
+        app.staticTexts["Agent · working"].tap()
+        let output = app.scrollViews["outputPreview"]
+        XCTAssertTrue(output.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Latest"].exists)
+        output.swipeDown() // Intentionally scroll back, rather than losing position on an update.
+        XCTAssertTrue(app.buttons["Latest"].waitForExistence(timeout: 10))
+        try await setOutput("updated")
+        let updated = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "new tail")).firstMatch
+        XCTAssertTrue(updated.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Latest"].exists)
+        app.buttons["Latest"].tap()
+        XCTAssertFalse(app.buttons["Latest"].exists)
+        try await setOutput("short")
     }
 }

@@ -3,13 +3,18 @@ import XCTest
 
 private final class MemoryCredentials: CredentialStoring {
     var token: String?
+    var clearError: Error?
     func load() -> String? { token }
     func save(_ token: String) throws { self.token = token }
-    func clear() throws { token = nil }
+    func clear() throws {
+        if let clearError { throw clearError }
+        token = nil
+    }
 }
 
 private final class FakeBridge: BridgeServing {
     var stateResult: Result<BridgeState, Error>
+    var stateHandler: (() async throws -> BridgeState)?
     var promptResult: Result<Void, Error> = .success(())
     var prompts: [(String, String)] = []
     var continuation: AsyncThrowingStream<Void, Error>.Continuation?
@@ -17,6 +22,7 @@ private final class FakeBridge: BridgeServing {
     init(_ state: BridgeState) { stateResult = .success(state) }
     func state() async throws -> BridgeState {
         stateCalls += 1
+        if let stateHandler { return try await stateHandler() }
         return try stateResult.get()
     }
     func events() async throws -> AsyncThrowingStream<Void, Error> {
@@ -144,6 +150,115 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.drafts[session.id], "hello")
         XCTAssertTrue(store.notice?.contains("Read-only") == true)
         store.disconnect()
+    }
+
+    func testCancelledSwitchCannotInstallLateResponseOrDiscardDrafts() async throws {
+        let original = FakeBridge(try state())
+        let candidate = FakeBridge(try state(role: "viewer"))
+        let ready = expectation(description: "Candidate state is pending")
+        var continuation: CheckedContinuation<BridgeState, Error>?
+        candidate.stateHandler = {
+            try await withCheckedThrowingContinuation { suspended in
+                continuation = suspended
+                ready.fulfill()
+            }
+        }
+        let credentials = MemoryCredentials()
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = WorkbenchStore(credentials: credentials, defaults: defaults, makeClient: { connection in
+            connection.url.host == "other.test" ? candidate : original
+        })
+        let initiallyConnected = await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        XCTAssertTrue(initiallyConnected)
+        store.background()
+        store.drafts["p1"] = "unsent draft"
+        let pending = Task { await store.connect(url: "https://other.test", token: "new-token", allowLocalHTTP: false) }
+        await fulfillment(of: [ready], timeout: 3)
+        pending.cancel()
+        store.cancelConnectionAttempt()
+        continuation?.resume(returning: try state(role: "viewer")) // A server may complete despite cancellation.
+        let installed = await pending.value
+        XCTAssertFalse(installed)
+        XCTAssertEqual(store.savedURL, "https://example.test")
+        XCTAssertEqual(credentials.token, "secret")
+        XCTAssertEqual(store.drafts["p1"], "unsent draft")
+        store.background()
+    }
+
+    func testFailedSwitchKeepsErrorVisibleEvenWhenOldBridgeResumes() async throws {
+        let original = FakeBridge(try state())
+        let candidate = FakeBridge(try state())
+        candidate.stateResult = .failure(BridgeError.unauthorized)
+        let credentials = MemoryCredentials()
+        let store = WorkbenchStore(credentials: credentials,
+            defaults: UserDefaults(suiteName: UUID().uuidString)!, makeClient: { connection in
+                connection.url.host == "other.test" ? candidate : original
+            })
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        let switched = await store.connect(url: "https://other.test", token: "wrongpass", allowLocalHTTP: false)
+        XCTAssertFalse(switched)
+        for _ in 0..<20 where original.stateCalls < 2 { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(store.connectionError, BridgeError.unauthorized.localizedDescription)
+        XCTAssertEqual(store.savedURL, "https://example.test")
+        XCTAssertEqual(credentials.token, "secret")
+        store.background()
+    }
+
+    func testSuccessfulRevalidationPreservesDraftsButSwitchClearsThem() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge)
+        let first = await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        XCTAssertTrue(first)
+        store.background()
+        store.drafts["p1"] = "unsent"
+        let same = await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        XCTAssertTrue(same)
+        XCTAssertEqual(store.drafts["p1"], "unsent")
+        store.background()
+        let switched = await store.connect(url: "https://other.test", token: "secret", allowLocalHTTP: false)
+        XCTAssertTrue(switched)
+        XCTAssertTrue(store.drafts.isEmpty)
+        store.background()
+    }
+
+    func testPromptBodyLimitAndWhitespaceSuccess() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        store.background()
+        let agent = try XCTUnwrap(store.state?.sessions(in: store.state!.snapshot.tabs[0]).first)
+        store.drafts[agent.id] = String(repeating: "🔥", count: 5_000)
+        XCTAssertNotNil(WorkbenchStore.promptValidationError(store.drafts[agent.id]!))
+        await store.send(to: agent)
+        XCTAssertTrue(bridge.prompts.isEmpty)
+        store.drafts[agent.id] = " hello "
+        await store.send(to: agent)
+        XCTAssertEqual(bridge.prompts.last?.1, "hello")
+        XCTAssertEqual(store.drafts[agent.id], "")
+        XCTAssertEqual(store.notice, "Prompt accepted.")
+        XCTAssertTrue(store.noticeIsSuccess)
+        store.background()
+    }
+
+    func testManualRefreshEndsReconnectingAndFailedKeychainDeletionStillDisconnects() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, credentials, defaults) = setup(bridge)
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        for _ in 0..<30 where bridge.continuation == nil { try await Task.sleep(for: .milliseconds(50)) }
+        bridge.continuation?.finish(throwing: BridgeError.offline)
+        for _ in 0..<30 where !store.reconnecting { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(store.reconnecting)
+        await store.refresh()
+        XCTAssertFalse(store.reconnecting)
+        XCTAssertNil(store.notice)
+        credentials.clearError = BridgeError.offline
+        store.disconnect()
+        XCTAssertFalse(store.connected)
+        XCTAssertNil(store.state)
+        XCTAssertTrue(store.drafts.isEmpty)
+        XCTAssertNil(defaults.string(forKey: "bridgeURL"))
+        XCTAssertEqual(credentials.token, "secret") // Warn; do not claim the token was deleted.
+        XCTAssertTrue(store.notice?.contains("may remain in Keychain") == true)
     }
 
     func testBackoffBounded() { XCTAssertEqual((1...8).map { WorkbenchStore.backoff(attempt: $0) }, [1, 2, 4, 8, 16, 30, 30, 30]) }

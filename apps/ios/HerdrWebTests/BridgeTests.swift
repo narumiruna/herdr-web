@@ -62,6 +62,9 @@ final class BridgeTests: XCTestCase {
         }
         XCTAssertThrowsError(try Connection("https://example.com", token: "bad\nheader"))
         XCTAssertNoThrow(try Connection("http://bridge.local:8787", token: "secret", allowLocalHTTP: true))
+        XCTAssertNoThrow(try Connection("http://[::1]:8787", token: "secret", allowLocalHTTP: true))
+        XCTAssertThrowsError(try Connection("http://[::1]:8787", token: "secret"))
+        XCTAssertThrowsError(try Connection("http://[::2]:8787", token: "secret", allowLocalHTTP: true))
         XCTAssertThrowsError(try Connection("http://bridge.local:8787", token: "secret"))
     }
 

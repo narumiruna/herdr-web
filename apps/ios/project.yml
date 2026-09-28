@@ -7,7 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    CODE_SIGNING_ALLOWED: 'NO'
+    CODE_SIGNING_ALLOWED: 'YES'
+    'CODE_SIGN_IDENTITY[sdk=iphonesimulator*]': '-'
 targets:
   HerdrWeb:
     type: application
@@ -19,6 +20,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.narumiruna.herdrweb.ios
+        TARGETED_DEVICE_FAMILY: '1'
+        'CODE_SIGN_IDENTITY[sdk=iphonesimulator*]': '-'
         GENERATE_INFOPLIST_FILE: 'NO'
         INFOPLIST_FILE: HerdrWeb/Resources/Info.plist
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: 'NO'

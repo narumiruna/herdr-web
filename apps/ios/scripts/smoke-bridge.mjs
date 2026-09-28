@@ -7,6 +7,12 @@ const state = JSON.parse(
   ),
 );
 let offline = false;
+const streams = new Set();
+const originalOutput = state.previews.p1.text;
+const longOutput = Array.from(
+  { length: 150 },
+  (_, index) => `line ${index + 1}`,
+).join("\n");
 const server = createServer(async (request, response) => {
   if (request.url === "/smoke/offline" && request.method === "POST") {
     offline = true;
@@ -15,6 +21,20 @@ const server = createServer(async (request, response) => {
   }
   if (request.url === "/smoke/online" && request.method === "POST") {
     offline = false;
+    response.writeHead(200).end();
+    return;
+  }
+  if (request.method === "POST" && request.url?.startsWith("/smoke/output/")) {
+    const mode = request.url.slice("/smoke/output/".length);
+    if (!["short", "long", "updated"].includes(mode)) {
+      response.writeHead(404).end();
+      return;
+    }
+    state.previews.p1.text =
+      mode === "short"
+        ? originalOutput
+        : `${longOutput}\n${mode === "updated" ? "new tail" : "old tail"}`;
+    for (const stream of streams) stream.write('{"event":"pane.updated"}\n');
     response.writeHead(200).end();
     return;
   }
@@ -46,8 +66,12 @@ const server = createServer(async (request, response) => {
   if (request.url === "/api/herdr/events" && request.method === "GET") {
     response.writeHead(200, { "content-type": "application/x-ndjson" });
     response.write("\n");
+    streams.add(response);
     const keepalive = setInterval(() => response.write("\n"), 15_000);
-    response.on("close", () => clearInterval(keepalive));
+    response.on("close", () => {
+      streams.delete(response);
+      clearInterval(keepalive);
+    });
     return;
   }
   if (

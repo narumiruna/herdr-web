@@ -9,7 +9,7 @@ struct Connection: Equatable {
               let url = components.url, let scheme = components.scheme?.lowercased(),
               let host = components.host?.lowercased(), !host.isEmpty,
               (scheme == "https" || (allowLocalHTTP && scheme == "http" &&
-                (host == "localhost" || host == "127.0.0.1" || host == "::1" || host.hasSuffix(".local")))),
+                (host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host.hasSuffix(".local")))),
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil,
               components.path.isEmpty || components.path == "/",

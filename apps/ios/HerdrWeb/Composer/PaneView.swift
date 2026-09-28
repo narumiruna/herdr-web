@@ -19,7 +19,9 @@ struct PaneView: View {
                     }
                     .font(.subheadline).padding()
                     if let cwd = state.directory(for: session.pane) { Text(cwd).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                    if let notice = store.notice { Text(notice).font(.caption).foregroundStyle(.red).padding(6) }
+                    if let notice = store.notice {
+                        Text(notice).font(.caption).foregroundStyle(store.noticeIsSuccess ? .green : .red).padding(6)
+                    }
                     OutputView(paneID: sessionID)
                     if session.kind == .agent && state.access.role == .controller && session.pane.agent != nil {
                         if session.pane.agentStatus == "blocked" && state.snapshot.protocolVersion >= 20 {
@@ -34,11 +36,14 @@ struct PaneView: View {
                                     .accessibilityIdentifier("agentDraft")
                                 Button("Send") { Task { await store.send(to: session) } }
                                     .disabled(store.reconnecting || store.sending.contains(sessionID) ||
-                                              (store.drafts[sessionID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                                              (store.drafts[sessionID] ?? "").count > 20_000)
+                                              WorkbenchStore.promptValidationError(store.drafts[sessionID] ?? "") != nil)
                                     .accessibilityIdentifier("sendPrompt")
                             }
-                            .padding()
+                            .padding(.horizontal)
+                            if let draft = store.drafts[sessionID], !draft.isEmpty,
+                               let error = WorkbenchStore.promptValidationError(draft) {
+                                Text(error).font(.caption).foregroundStyle(.red).padding(.horizontal)
+                            }
                         }
                     }
                 }

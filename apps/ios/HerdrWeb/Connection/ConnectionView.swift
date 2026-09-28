@@ -7,6 +7,8 @@ struct ConnectionView: View {
     @State private var token = ""
     @State private var localHTTP = false
     @State private var connecting = false
+    @State private var connectionError: String?
+    @State private var pendingTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -26,16 +28,20 @@ struct ConnectionView: View {
                     Text("Only localhost and .local hosts are allowed over HTTP. On a real iPhone, localhost is the phone, not your computer. Use trusted HTTPS for other addresses.")
                         .font(.footnote)
                 }
-                if let notice = store.notice {
+                if let notice = connectionError ?? (store.noticeIsSuccess ? nil : store.notice) {
                     Section { Text(notice).foregroundStyle(.red) }
                 }
                 Section {
                     Button(connecting ? "Connecting…" : "Connect") {
+                        connectionError = nil
                         connecting = true
-                        Task {
-                            await store.connect(url: address, token: token, allowLocalHTTP: localHTTP)
+                        pendingTask = Task {
+                            let succeeded = await store.connect(url: address, token: token, allowLocalHTTP: localHTTP)
+                            guard !Task.isCancelled else { return }
                             connecting = false
-                            if store.connected { token = ""; isPresented = false }
+                            pendingTask = nil
+                            if succeeded { token = ""; isPresented = false }
+                            else { connectionError = store.connectionError ?? store.notice }
                         }
                     }
                     .disabled(connecting || store.isSending)
@@ -43,8 +49,17 @@ struct ConnectionView: View {
                 }
             }
             .navigationTitle("Connection")
-            .toolbar { if store.connected { Button("Cancel") { isPresented = false } } }
+            .toolbar { if store.connected { Button("Cancel") { cancelPending(); isPresented = false } } }
             .onAppear { address = store.savedURL; localHTTP = store.localHTTP }
+            .onDisappear { cancelPending() }
         }
+    }
+
+    private func cancelPending() {
+        guard let pendingTask else { return }
+        pendingTask.cancel()
+        self.pendingTask = nil
+        store.cancelConnectionAttempt()
+        connecting = false
     }
 }
