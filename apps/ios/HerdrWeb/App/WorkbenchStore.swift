@@ -19,15 +19,18 @@ final class WorkbenchStore: ObservableObject {
     private let credentials: CredentialStoring
     private let defaults: UserDefaults
     private let makeClient: (Connection) -> BridgeServing
+    private let safetyRefreshInterval: Duration
     private var syncTask: Task<Void, Never>?
     private var generation = 0
     private var stateRequestRevision = 0
 
     init(credentials: CredentialStoring = KeychainCredentials(), defaults: UserDefaults = .standard,
-         makeClient: @escaping (Connection) -> BridgeServing = { BridgeClient(connection: $0) }) {
+         makeClient: @escaping (Connection) -> BridgeServing = { BridgeClient(connection: $0) },
+         safetyRefreshInterval: Duration = .seconds(30)) {
         self.credentials = credentials
         self.defaults = defaults
         self.makeClient = makeClient
+        self.safetyRefreshInterval = safetyRefreshInterval
         savedURL = defaults.string(forKey: "bridgeURL") ?? ""
         localHTTP = defaults.bool(forKey: "localHTTP")
     }
@@ -228,9 +231,17 @@ final class WorkbenchStore: ObservableObject {
                     reconnecting = false
                 }
                 let events = try await client.events()
+                let safetyRefresh = Task {
+                    while !Task.isCancelled && current == generation {
+                        do { try await Task.sleep(for: safetyRefreshInterval) }
+                        catch { return }
+                        guard !Task.isCancelled && current == generation else { return }
+                        await refresh() // Covers missed subscribe-window events and capped Agent subscriptions.
+                    }
+                }
                 var lastRefresh = Date.distantPast
                 var trailingRefresh: Task<Void, Never>?
-                defer { trailingRefresh?.cancel() }
+                defer { trailingRefresh?.cancel(); safetyRefresh.cancel() }
                 for try await _ in events {
                     guard !Task.isCancelled && current == generation else { return }
                     let remaining = 0.5 - Date().timeIntervalSince(lastRefresh)

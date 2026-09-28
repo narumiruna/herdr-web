@@ -93,16 +93,21 @@ struct BridgePane: Decodable, Identifiable {
     let foregroundCwd: String?
     let label: String?
     let title: String?
+    let terminalTitleStripped: String?
     let stateLabels: [String: String]?
     var id: String { paneID }
     var directory: String? { foregroundCwd ?? cwd }
-    var name: String { label ?? title ?? displayAgent ?? agent ?? "Terminal" }
+    var name: String {
+        [label, title, terminalTitleStripped, displayAgent, agent]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty }) ?? "Terminal"
+    }
 
     enum CodingKeys: String, CodingKey {
         case paneID = "pane_id", tabID = "tab_id", workspaceID = "workspace_id"
         case agent, displayAgent = "display_agent", agentStatus = "agent_status"
         case cwd, foregroundCwd = "foreground_cwd", label, title
-        case stateLabels = "state_labels"
+        case terminalTitleStripped = "terminal_title_stripped", stateLabels = "state_labels"
     }
 }
 

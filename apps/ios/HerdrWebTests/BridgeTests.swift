@@ -53,6 +53,16 @@ final class BridgeTests: XCTestCase {
         XCTAssertTrue(state.search("missing").isEmpty)
     }
 
+    func testTerminalTitleDecodingAndSearch() throws {
+        let raw = try XCTUnwrap(String(data: fixture(), encoding: .utf8))
+        let titled = raw.replacingOccurrences(of: "\"pane_id\": \"p3\",",
+            with: "\"pane_id\": \"p3\", \"terminal_title_stripped\": \"  zsh workspace  \",")
+        let state = try JSONDecoder().decode(BridgeState.self, from: Data(titled.utf8))
+        let tab = try XCTUnwrap(state.snapshot.tabs.first { $0.id == "t2" })
+        XCTAssertEqual(state.sessions(in: tab).first?.pane.name, "zsh workspace")
+        XCTAssertEqual(state.search("zsh workspace").map(\.id), ["session:p3"])
+    }
+
     func testBundledNerdFontLoadsOnSimulator() {
         XCTAssertNotNil(UIFont(name: "JetBrainsMonoNFM-Regular", size: 12))
     }

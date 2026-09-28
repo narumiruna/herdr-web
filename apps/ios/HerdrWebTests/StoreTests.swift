@@ -42,10 +42,12 @@ final class StoreTests: XCTestCase {
         return try JSONDecoder().decode(BridgeState.self, from: Data(text.utf8))
     }
 
-    private func setup(_ bridge: FakeBridge) -> (WorkbenchStore, MemoryCredentials, UserDefaults) {
+    private func setup(_ bridge: FakeBridge, safetyRefreshInterval: Duration = .seconds(30))
+        -> (WorkbenchStore, MemoryCredentials, UserDefaults) {
         let credentials = MemoryCredentials()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let store = WorkbenchStore(credentials: credentials, defaults: defaults, makeClient: { _ in bridge })
+        let store = WorkbenchStore(credentials: credentials, defaults: defaults, makeClient: { _ in bridge },
+            safetyRefreshInterval: safetyRefreshInterval)
         return (store, credentials, defaults)
     }
 
@@ -266,6 +268,21 @@ final class StoreTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: "bridgeURL"))
         XCTAssertEqual(credentials.token, "secret") // Warn; do not claim the token was deleted.
         XCTAssertTrue(store.notice?.contains("may remain in Keychain") == true)
+    }
+
+    func testHealthySilentEventStreamRefreshesAndStopsInBackground() async throws {
+        let bridge = FakeBridge(try state())
+        let (store, _, _) = setup(bridge, safetyRefreshInterval: .milliseconds(100))
+        await store.connect(url: "https://example.test", token: "secret", allowLocalHTTP: false)
+        for _ in 0..<30 where bridge.continuation == nil { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertNotNil(bridge.continuation)
+        bridge.stateResult = .success(try state(role: "viewer")) // No event is emitted.
+        for _ in 0..<30 where store.role != .viewer { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(store.role, .viewer)
+        store.background()
+        let calls = bridge.stateCalls
+        try await Task.sleep(for: .milliseconds(220))
+        XCTAssertEqual(bridge.stateCalls, calls)
     }
 
     func testLatestStateRequestWinsOverOlderConcurrentSnapshot() async throws {
