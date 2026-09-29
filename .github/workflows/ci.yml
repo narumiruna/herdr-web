@@ -77,6 +77,39 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  ios:
+    name: Build and test iPhone Simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js for the UI smoke fixture
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      - name: Build iOS app without signing
+        run: xcodebuild -project apps/ios/HerdrWeb.xcodeproj -scheme HerdrWeb -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+      - name: Test on available iPhone Simulator
+        run: |
+          device=$(xcrun simctl list devices available --json | node -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const devices=Object.values(JSON.parse(s).devices).flat();const phone=devices.find(d=>d.name.startsWith("iPhone "));if(!phone)process.exit(1);console.log(phone.udid)})')
+          test -n "$device" || { echo 'No available iPhone Simulator runtime' >&2; exit 1; }
+          node apps/ios/scripts/smoke-bridge.mjs &
+          bridge=$!
+          trap 'kill "$bridge" 2>/dev/null || true' EXIT
+          for attempt in 1 2 3 4 5; do
+            if curl --silent --output /dev/null http://127.0.0.1:18997/api/herdr/state; then break; fi
+            sleep 1
+          done
+          kill -0 "$bridge"
+          # Ad-hoc Simulator signing is required for Keychain integration; no team or provisioning profile.
+          xcodebuild -project apps/ios/HerdrWeb.xcodeproj -scheme HerdrWeb -destination "platform=iOS Simulator,id=$device" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
+
   windows:
     name: Check native Windows startup
     runs-on: windows-latest
