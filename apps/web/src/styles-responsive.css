@@ -34,12 +34,14 @@
     flex: 0 0 auto;
   }
   .spaces-actions button,
+  .agent-sort-toggle,
   .sidebar-menu .rt-DropdownMenuItem {
     min-width: 44px;
     min-height: 44px;
   }
   .workspace-item,
-  .worktree-item {
+  .worktree-item,
+  .agent-item {
     min-height: 44px;
   }
   .workspace-tree-heading {
@@ -209,7 +211,27 @@
   }
 }
 
+@media (max-height: 480px) {
+  .sidebar-sections {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .sidebar-section-resize-handle {
+    display: none;
+  }
+  .agent-panel {
+    border-top: 1px solid var(--border);
+  }
+  .sidebar-viewport,
+  .agent-panel-viewport {
+    padding-block: 4px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-viewport,
+  .agent-panel-viewport {
+    scroll-behavior: auto;
+  }
   .dialog-overlay,
   .dialog-content,
   .connection-spinner,

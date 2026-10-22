@@ -39,12 +39,16 @@ import { RadixDialog } from "./components/RadixDialog";
 import { RuntimeManagementDialog } from "./components/RuntimeManagementDialog";
 import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
-import { Sidebar } from "./components/Sidebar";
+import { type AgentSortMode, Sidebar } from "./components/Sidebar";
 import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR_WIDTH,
   SidebarResizeHandle,
 } from "./components/SidebarResizeHandle";
+import {
+  clampSidebarSpacesRatio,
+  DEFAULT_SIDEBAR_SPACES_RATIO,
+} from "./components/SidebarSectionResizeHandle";
 import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
@@ -161,6 +165,23 @@ export function App({
     } catch {
       return [];
     }
+  });
+  const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
+    const saved =
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "agent-sort")
+        : null;
+    return saved === "priority" ? "priority" : "grouped";
+  });
+  const [sidebarSpacesRatio, setSidebarSpacesRatio] = useState(() => {
+    const stored =
+      typeof window.localStorage?.getItem === "function"
+        ? readProductStorage(window.localStorage, "sidebar-spaces-ratio")
+        : null;
+    const saved = stored?.trim() ? Number(stored) : Number.NaN;
+    return Number.isFinite(saved)
+      ? clampSidebarSpacesRatio(saved)
+      : DEFAULT_SIDEBAR_SPACES_RATIO;
   });
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored =
@@ -506,6 +527,17 @@ export function App({
       );
     }
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.setItem === "function") {
+      writeProductStorage(window.localStorage, "agent-sort", agentSort);
+      writeProductStorage(
+        window.localStorage,
+        "sidebar-spaces-ratio",
+        String(sidebarSpacesRatio),
+      );
+    }
+  }, [agentSort, sidebarSpacesRatio]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -1408,6 +1440,10 @@ export function App({
           <div className="desktop-sidebar">
             <Sidebar
               state={state}
+              agentSort={agentSort}
+              onAgentSortChange={setAgentSort}
+              spacesRatio={sidebarSpacesRatio}
+              onSpacesRatioChange={setSidebarSpacesRatio}
               attentionCount={
                 attention.groups.needsInput.length +
                 attention.groups.failed.length +
@@ -1760,11 +1796,15 @@ export function App({
           open={mobileNavOpen}
           onOpenChange={setMobileNavOpen}
           title="Navigate workbench"
-          description="Choose work that needs input or a Space. Use the tab bar for Agents and Terminals."
+          description="Choose a Space or an Agent. Use Menu for attention and the tab bar for Terminals."
           className="mobile-navigation-dialog"
         >
           <Sidebar
             state={state}
+            agentSort={agentSort}
+            onAgentSortChange={setAgentSort}
+            spacesRatio={sidebarSpacesRatio}
+            onSpacesRatioChange={setSidebarSpacesRatio}
             attentionCount={
               attention.groups.needsInput.length +
               attention.groups.failed.length +

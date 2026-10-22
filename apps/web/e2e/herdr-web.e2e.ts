@@ -315,8 +315,8 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Open Attention Inbox, 2 items" }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "Open menu" }),
+  ).toHaveAccessibleDescription("Attention Inbox, 2 items");
   await expect(page.getByRole("heading", { name: "Activity" })).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "claude · API review terminal" }),
@@ -330,8 +330,12 @@ test("desktop workbench gives the terminal priority", async ({
     "Needs input",
   );
   await expect(page.locator(".workspace-cwd")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Agents" })).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "herdr Agents" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Detected Agents" })
+      .getByRole("button"),
+  ).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Terminals" })).toHaveCount(0);
   expect(await hasNoPageOverflow(page)).toBe(true);
 
@@ -679,11 +683,7 @@ async function assertWorkbenchVisual(page: Page) {
   await expect(
     page.getByRole("dialog", { name: "Execution details" }),
   ).toHaveCount(0);
-  await expect(
-    page.locator(
-      ".workspace-cwd, .agent-panel, .sidebar-section-resize-handle",
-    ),
-  ).toHaveCount(0);
+  await expect(page.locator(".workspace-cwd")).toHaveCount(0);
   await expect(
     page.locator(".agent-progress-summary .status-pill"),
   ).toHaveCount(0);
@@ -808,17 +808,16 @@ test("compact Agent statuses leave names and metadata unobstructed", async ({
 
   const rows = await page.locator(".agent-item").evaluateAll((items) =>
     items.map((item) => {
-      const identity = item.querySelector(".agent-identity");
+      const runtime = item.querySelector("small");
       const copy = item.querySelector(".agent-item-copy");
       const title = item.querySelector("strong");
-      const task = item.querySelector(".agent-item-task");
+      const task = item.querySelector("small");
       const status = item.querySelector('.status-pill[data-compact="true"]');
-      if (!identity || !copy || !title || !task || !status)
+      if (!runtime || !copy || !title || !task || !status)
         throw new Error("Missing Agent metadata");
       return {
         copyLeft: copy.getBoundingClientRect().left,
         copyRight: copy.getBoundingClientRect().right,
-        identityRight: identity.getBoundingClientRect().right,
         rowRight: item.getBoundingClientRect().right,
         titleBottom: title.getBoundingClientRect().bottom,
         taskTop: task.getBoundingClientRect().top,
@@ -829,11 +828,10 @@ test("compact Agent statuses leave names and metadata unobstructed", async ({
       };
     }),
   );
-  expect(rows).toHaveLength(3);
+  expect(rows).toHaveLength(5);
   for (const row of rows) {
-    expect(row.identityRight).toBeLessThanOrEqual(row.copyLeft);
-    expect(row.copyRight).toBeLessThanOrEqual(row.statusLeft);
-    expect(row.statusRight).toBeLessThanOrEqual(row.rowRight);
+    expect(row.statusRight).toBeLessThanOrEqual(row.copyLeft);
+    expect(row.copyRight).toBeLessThanOrEqual(row.rowRight);
     expect(row.titleBottom).toBeLessThanOrEqual(row.taskTop);
     expect(row.titleClipped).toBe(false);
   }
@@ -872,7 +870,7 @@ test("core workbench typography stays legible on desktop and mobile", async ({
         ].map(fontSize),
         supporting: [
           ".section-label-row h2",
-          ".agent-item-task",
+          ".agent-item-copy small",
           ".interactive-terminal-tools",
           ".agent-progress-disclosure",
           ".composer-hint",
@@ -882,8 +880,8 @@ test("core workbench typography stays legible on desktop and mobile", async ({
           document
             .querySelector(".session-tab-status svg")
             ?.getBoundingClientRect().height ?? 0,
-        taskFont: fontSize(".agent-item-task"),
-        taskLine: lineHeight(".agent-item-task"),
+        taskFont: fontSize(".agent-item-copy small"),
+        taskLine: lineHeight(".agent-item-copy small"),
       };
     });
 
@@ -997,7 +995,10 @@ for (const theme of [
     page,
   }) => {
     await prepareVisual(page, theme);
-    const badge = page.locator(".sidebar-attention-count");
+    const badge = page.locator(".sidebar-menu-attention-dot");
+    await expect(
+      page.getByRole("button", { name: "Open menu" }),
+    ).toHaveAccessibleDescription("Attention Inbox, 2 items");
     await expect(badge).toBeVisible();
     const badgeColors = await badge.evaluate((element) => {
       const styles = getComputedStyle(element);
@@ -1017,7 +1018,7 @@ for (const theme of [
           (values[2] ?? 0) * 0.0722
         );
       };
-      let background: Element | null = element;
+      let background: Element | null = element.parentElement;
       while (
         background &&
         getComputedStyle(background).backgroundColor === "rgba(0, 0, 0, 0)"
@@ -1026,7 +1027,7 @@ for (const theme of [
       }
       if (!background) throw new Error("Missing opaque attention background");
       const [lighter, darker] = [
-        luminance(styles.color),
+        luminance(styles.backgroundColor),
         luminance(getComputedStyle(background).backgroundColor),
       ].sort((a, b) => b - a);
       return {
@@ -1045,7 +1046,7 @@ for (const theme of [
     for (const selector of [
       '.workspace-item[data-active="true"]',
       '.agent-item[data-active="true"]',
-      ".sidebar-attention",
+      ".spaces-actions",
       '.session-tab[data-state="active"]',
       ".workspace-glyph",
       ".command-button",
@@ -1168,33 +1169,19 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
     name: "herdr-web navigation",
   });
   await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Agents" })).toHaveCount(0);
+  const agents = page.getByRole("navigation", { name: "Detected Agents" });
+  await expect(page.getByRole("region", { name: "Agents" })).toBeVisible();
+  await expect(agents.getByRole("button")).toHaveCount(5);
   await expect(
-    navigation.getByRole("list", { name: "herdr Agents" }).getByRole("button"),
-  ).toHaveCount(3);
-  await expect(
-    navigation.getByRole("button", { name: /Open agent-guide Agent/ }),
-  ).toHaveCount(0);
-  const expand = navigation.getByRole("button", {
-    name: "Expand herdr.dev Space",
-  });
-  await expand.focus();
-  await page.keyboard.press("Enter");
-  await expect(
-    navigation.getByRole("button", { name: "Collapse herdr.dev Space" }),
-  ).toHaveAttribute("aria-expanded", "true");
+    agents.getByRole("button", { name: /agent-guide/ }),
+  ).toBeVisible();
+  await expect(navigation.locator(".agent-list")).toHaveCount(0);
+  await expect(navigation.locator(".workspace-group-toggle")).toHaveCount(0);
   await expect(
     navigation.getByRole("button", { name: "Open herdr Space" }),
   ).toHaveAttribute("aria-current", "page");
-  await expect(
-    navigation
-      .getByRole("list", { name: "herdr.dev Agents" })
-      .getByRole("button"),
-  ).toHaveCount(1);
-
-  const newSpace = page.getByRole("button", { name: "Open menu" });
+  const newSpace = page.getByRole("button", { name: "Create a new Space" });
   await newSpace.click();
-  await page.getByRole("menuitem", { name: "New Space" }).click();
   await page
     .getByRole("textbox", { name: "Directory", exact: true })
     .fill("/repo/cancelled");
@@ -1217,16 +1204,14 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   );
   await page.getByRole("button", { name: "Close dialog" }).click();
 
-  await navigation
-    .getByRole("button", { name: /agent-guide.*herdr\.dev/i })
-    .click();
+  await agents.getByRole("button", { name: /agent-guide/i }).click();
   await expect(
     page.getByRole("tab", { name: /agent-guide/i, selected: true }),
   ).toBeVisible();
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
-test("short mobile navigation keeps one scrollable tree and menu usable", async ({
+test("short mobile navigation keeps both lists and menu usable", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 320 });
@@ -1238,27 +1223,35 @@ test("short mobile navigation keeps one scrollable tree and menu usable", async 
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
   await expect(
     navigation.locator(".sidebar-section-resize-handle"),
-  ).toHaveCount(0);
+  ).toBeHidden();
   await expect(
     navigation.getByRole("button", { name: "Open menu" }),
   ).toBeVisible();
   const bounds = await navigation.evaluate((element) => {
     const viewport = element.querySelector(".sidebar-viewport");
     const menu = element.querySelector(".spaces-actions");
-    if (!viewport || !menu) throw new Error("Missing sidebar tree or menu");
+    const agents = element.querySelector(".agent-panel-viewport");
+    const heading = element.querySelector(".agent-panel-heading");
+    if (!viewport || !menu || !agents || !heading)
+      throw new Error("Missing sidebar panels");
     return {
       height: viewport.getBoundingClientRect().height,
       scrollable: viewport.scrollHeight > viewport.clientHeight,
+      agentsHeight: agents.getBoundingClientRect().height,
+      agentsScrollable: agents.scrollHeight > agents.clientHeight,
+      headingHeight: heading.getBoundingClientRect().height,
+      agentsBottom: agents.getBoundingClientRect().bottom,
       menuBottom: menu.getBoundingClientRect().bottom,
       dialogBottom: element.getBoundingClientRect().bottom,
     };
   });
   expect(bounds.height).toBeGreaterThan(0);
   expect(bounds.scrollable).toBe(true);
+  expect(bounds.agentsHeight).toBeGreaterThan(0);
+  expect(bounds.agentsScrollable).toBe(true);
+  expect(bounds.headingHeight).toBeGreaterThanOrEqual(32);
+  expect(bounds.agentsBottom).toBeLessThanOrEqual(bounds.dialogBottom);
   expect(bounds.menuBottom).toBeLessThanOrEqual(bounds.dialogBottom);
-  await navigation
-    .getByRole("button", { name: "Expand herdr.dev Space" })
-    .click();
   await navigation
     .getByRole("button", { name: /Open agent-guide Agent/ })
     .click();
@@ -1267,11 +1260,11 @@ test("short mobile navigation keeps one scrollable tree and menu usable", async 
   ).toBeVisible();
   await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(
-    navigation.getByRole("button", { name: "Collapse herdr.dev Space" }),
-  ).toHaveAttribute("aria-expanded", "true");
+    navigation.getByRole("button", { name: /Open agent-guide Agent/ }),
+  ).toHaveAttribute("aria-current", "page");
 });
 
-test("obsolete sidebar preferences do not affect tree navigation or unrelated storage", async ({
+test("saved sidebar preferences restore sorting and preserve unrelated storage", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1283,18 +1276,17 @@ test("obsolete sidebar preferences do not affect tree navigation or unrelated st
   await page.goto("/");
   await expect(
     page.getByRole("separator", { name: "Resize Spaces and Agents panels" }),
-  ).toHaveCount(0);
+  ).toHaveAttribute("aria-valuenow", "55");
   await expect(page.getByRole("radio", { name: "Priority" })).toHaveCount(0);
   await expect(
     page
-      .getByRole("list", { name: "herdr Agents" })
+      .getByRole("navigation", { name: "Detected Agents" })
       .getByRole("button")
       .first(),
-  ).toHaveAccessibleName(/web-bridge/);
-  await page.getByRole("button", { name: "Collapse herdr Space" }).click();
-  await expect(page.getByRole("list", { name: "herdr Agents" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand herdr Space" }).click();
-  await expect(page.getByRole("list", { name: "herdr Agents" })).toBeVisible();
+  ).toHaveAccessibleName(/api-review/);
+  await expect(
+    page.getByRole("button", { name: "Agent ordering: Priority" }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => [
       localStorage.getItem("herdr-web-sidebar-spaces-ratio"),
@@ -1304,14 +1296,14 @@ test("obsolete sidebar preferences do not affect tree navigation or unrelated st
   ).toEqual(["0.55", "priority", "keep"]);
 });
 
-test("Agent rows remain separated at sidebar width limits despite obsolete ratios", async ({
+test("Agent rows remain separated at sidebar width and split limits", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 
   for (const { ratio, width } of [
-    { ratio: 0.2, width: 180 },
-    { ratio: 0.8, width: 320 },
+    { ratio: 0.1, width: 180 },
+    { ratio: 0.9, width: 320 },
   ]) {
     await page.addInitScript(
       ({ savedRatio, savedWidth }) => {
@@ -1332,20 +1324,17 @@ test("Agent rows remain separated at sidebar width limits despite obsolete ratio
       page.getByRole("separator", {
         name: "Resize Spaces and Agents panels",
       }),
-    ).toHaveCount(0);
+    ).toBeVisible();
 
     const bounds = await page.locator(".agent-item").evaluateAll((rows) => {
       const items = rows.map((row) => {
-        const identity = row.querySelector(".agent-identity");
         const copy = row.querySelector(".agent-item-copy");
         const status = row.querySelector(".status-pill");
-        if (!identity || !copy || !status)
-          throw new Error("Missing Agent row content");
+        if (!copy || !status) throw new Error("Missing Agent row content");
         return {
           bottom: row.getBoundingClientRect().bottom,
           copyLeft: copy.getBoundingClientRect().left,
           copyRight: copy.getBoundingClientRect().right,
-          identityRight: identity.getBoundingClientRect().right,
           rowRight: row.getBoundingClientRect().right,
           statusLeft: status.getBoundingClientRect().left,
           statusRight: status.getBoundingClientRect().right,
@@ -1362,9 +1351,8 @@ test("Agent rows remain separated at sidebar width limits despite obsolete ratio
     });
     expect(bounds.scrollable).toBe(true);
     for (const [index, row] of bounds.items.entries()) {
-      expect(row.identityRight).toBeLessThanOrEqual(row.copyLeft);
-      expect(row.copyRight).toBeLessThanOrEqual(row.statusLeft);
-      expect(row.statusRight).toBeLessThanOrEqual(row.rowRight);
+      expect(row.statusRight).toBeLessThanOrEqual(row.copyLeft);
+      expect(row.copyRight).toBeLessThanOrEqual(row.rowRight);
       if (index > 0) {
         expect(row.top).toBeGreaterThanOrEqual(
           bounds.items[index - 1]?.bottom ?? 0,
@@ -1607,14 +1595,14 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await page.getByRole("button", { name: "Open navigation" }).click();
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("heading", { name: "Agents" })).toHaveCount(
-    0,
-  );
   await expect(
-    navigation.getByRole("list", { name: "herdr Agents" }),
+    navigation.getByRole("heading", { name: "Agents" }),
+  ).toBeVisible();
+  await expect(
+    navigation.getByRole("navigation", { name: "Detected Agents" }),
   ).toBeVisible();
   for (const target of [
-    navigation.getByRole("button", { name: /Open Attention Inbox/ }),
+    navigation.getByRole("button", { name: "Agent ordering: Grouped" }),
     navigation.getByRole("button", { name: "Open menu" }),
   ]) {
     const box = await target.boundingBox();

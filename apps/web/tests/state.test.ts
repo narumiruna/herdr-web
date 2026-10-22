@@ -52,6 +52,30 @@ describe("herdr state", () => {
     ]);
   });
 
+  test("keeps a renamed tab label available to the sidebar", () => {
+    const state = createDemoState();
+    const next = appReducer(state, {
+      type: "session.renamed",
+      agentId: "agent-review",
+      label: "  Compatibility review  ",
+    });
+    expect(next.agents.find(({ id }) => id === "agent-review")).toMatchObject({
+      label: "Compatibility review",
+      tabLabel: "Compatibility review",
+      tabCustomLabel: true,
+    });
+    expect(
+      state.agents.find(({ id }) => id === "agent-review")?.tabCustomLabel,
+    ).toBeUndefined();
+    expect(
+      appReducer(next, {
+        type: "session.renamed",
+        agentId: "agent-review",
+        label: "  ",
+      }),
+    ).toBe(next);
+  });
+
   test("remembers the selected tab independently for each workspace", () => {
     const state = createDemoState();
     const docsAgent = state.agents.find(({ id }) => id === "agent-docs");
