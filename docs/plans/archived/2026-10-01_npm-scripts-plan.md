@@ -10,7 +10,7 @@ Replace both `justfile` files with npm commands without duplicate aliases.
 - [x] Merge authenticated development startup into `dev` and production startup into `preview`; startup, CLI, and preview tests pass. Preview handles the bridge port override consistently. Launcher signals are forwarded, and listeners are removed after child failure or exit.
 - [x] Move Docker startup and shutdown into one repository script; `sh -n` and 11 isolated Docker/proxy tests pass, including malformed protocol, failed status, and missing project/socket paths.
 - [x] Add root `docker:up`, `docker:down`, `check:fix`, and `link:cli`; both justfiles are deleted, and documentation, UI messages, and package checks use npm.
-- [ ] Run final browser validation. `npm run ci` passes with 420 tests, package inspection, build, and font checks; 54 focused tests and `git diff --check` pass. Launcher-only SIGTERM smoke checks confirm generated credentials, printed URLs, HTTP 200 pages, bridge health, and server shutdown using temporary data homes and explicit unused ports. Final browser acceptance is pending clean GitHub CI: the default command reused a different worktree's server on port 4173, and isolated local retries reached theme timeouts.
+- [x] Complete final validation: `npm run ci` passes with 420 tests, package inspection, build, and font checks; 54 focused tests and `git diff --check` pass. Launcher-only SIGTERM smoke checks confirm generated credentials, printed URLs, HTTP 200 pages, bridge health, and server shutdown using temporary data homes and explicit unused ports. GitHub CI run [39807351727](https://github.com/narumiruna/herdr-web/actions/runs/39807351727) verifies implementation commit `306bfa9`: Linux repository checks pass, Linux and macOS each pass all 109 browser tests, and the Windows startup job passes.
 
 ## Completion Checklist
 
@@ -21,8 +21,9 @@ Replace both `justfile` files with npm commands without duplicate aliases.
 ## Review and Validation Limits
 
 - Source review covers correctness, security boundaries, process lifecycle, compatibility, regressions, and scope. The launcher signal issue found during review is fixed and tested.
-- The default browser command reused another worktree's server and failed. That service was not stopped. Isolated retries used temporary configurations, independent ports, and clipboard permissions for the new origin. Theme checks timed out at 60 seconds, and the focused contrast retry timed out at 120 seconds. The local full run was stopped; clean GitHub CI must verify browser acceptance. Temporary configurations are not part of the change.
-- Native Windows execution, real Docker operations, and global CLI linking are not run locally. Docker and npm failure paths use isolated mocks. Existing Docker signal/down-failure behavior and IPv4-versus-wildcard port probing are unchanged.
+- The default local browser command reused another worktree's server and failed. That service was not stopped. An isolated local run had 84 passes, two theme timeouts, one interruption, and 22 tests not run; a focused contrast retry also timed out. Clean Linux and macOS CI then passed the unchanged full browser suites. Temporary configurations are removed and are not part of the change.
+- One local pre-commit attempt had two test failures. Both files passed a focused rerun (58 tests), and the normal hook passed on retry; no hook was bypassed.
+- Native Windows execution is not run locally; the Windows CI build and startup-contract tests pass. Real Docker operations and global CLI linking are not run. Docker and npm failure paths use isolated mocks. Existing Docker signal/down-failure behavior and IPv4-versus-wildcard port probing are unchanged.
 - Biome reports 45 existing CSS warnings; the checks pass. No packages, version tags, or release workflows are published.
 
 ## Rollback / Recovery
