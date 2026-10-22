@@ -805,7 +805,8 @@ html[data-reduced-motion="true"] .workspace-chevron {
   transition: none;
 }
 html[data-reduced-motion="true"] .xterm-viewport,
-html[data-reduced-motion="true"] .sidebar-viewport {
+html[data-reduced-motion="true"] .sidebar-viewport,
+html[data-reduced-motion="true"] .agent-panel-viewport {
   scroll-behavior: auto;
 }
 

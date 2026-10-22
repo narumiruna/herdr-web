@@ -24,6 +24,7 @@ describe("mapLiveSnapshot", () => {
         agents: [
           {
             agent: "pi",
+            state_change_seq: 42,
             agent_status: "idle",
             cwd: "/Users/narumi/workspace/herdr-web",
             pane_id: "w5:p1",
@@ -80,6 +81,7 @@ describe("mapLiveSnapshot", () => {
           {
             agent_status: "idle",
             focused: true,
+            custom_label: true,
             label: "main",
             number: 1,
             pane_count: 2,
@@ -138,6 +140,9 @@ describe("mapLiveSnapshot", () => {
       status: "idle",
       tabId: "w5:t1",
       tabNumber: 1,
+      tabLabel: "main",
+      tabCustomLabel: true,
+      stateChangeSeq: 42,
     });
     expect(state.capabilities).toMatchObject({
       herdrVersion: "0.8.0",
@@ -320,6 +325,112 @@ describe("mapLiveSnapshot", () => {
     });
     expect(state.agents[0]?.contextPercent).toBe(expected);
   });
+
+  test.each([
+    [undefined, undefined],
+    [Number.NaN, undefined],
+    [Number.POSITIVE_INFINITY, undefined],
+    [-1, undefined],
+    [1.5, undefined],
+    [Number.MAX_SAFE_INTEGER + 1, undefined],
+    [0, 0],
+    [42, 42],
+  ])("maps state change sequence %j safely", (value, expected) => {
+    const pane = {
+      agent: "pi",
+      agent_status: "working",
+      pane_id: "w1:p1",
+      revision: 1,
+      state_change_seq: value,
+      tab_id: "w1:t1",
+      workspace_id: "w1",
+    };
+    const state = mapLiveSnapshot({
+      reads: {},
+      snapshot: {
+        agents: [pane],
+        focused_pane_id: pane.pane_id,
+        focused_workspace_id: pane.workspace_id,
+        layouts: [],
+        panes: [pane],
+        protocol: 19,
+        tabs: [],
+        version: "0.8.0",
+        workspaces: [],
+      },
+    });
+    expect(state.agents[0]?.stateChangeSeq).toBe(expected);
+    expect(state.agents[0]?.tabLabel).toBeUndefined();
+    expect(state.agents[0]?.tabCustomLabel).toBeUndefined();
+  });
+
+  test.each([
+    ["1", undefined, false],
+    ["Build", undefined, true],
+    ["Build", false, false],
+    ["1", true, true],
+  ] as const)(
+    "maps API tab label %s with custom flag %s",
+    (label, explicit, expected) => {
+      const pane = {
+        agent: "pi",
+        agent_status: "working",
+        pane_id: "w1:p1",
+        revision: 1,
+        tab_id: "w1:t9",
+        workspace_id: "w1",
+      };
+      const tab = {
+        agent_status: "working",
+        focused: true,
+        custom_label: explicit,
+        label,
+        number: 9,
+        pane_count: 1,
+        tab_id: "w1:t9",
+        workspace_id: "w1",
+      };
+      const state = mapLiveSnapshot({
+        reads: {},
+        snapshot: {
+          agents: [pane],
+          focused_pane_id: pane.pane_id,
+          focused_workspace_id: pane.workspace_id,
+          layouts: [],
+          panes: [pane],
+          protocol: 19,
+          tabs: [
+            { ...tab, workspace_id: "other", tab_id: "other:t1", label: "1" },
+            tab,
+            { ...tab, tab_id: "w1:t1", number: 1, label: "2" },
+          ],
+          version: "0.8.0",
+          workspaces: [],
+        },
+      });
+      expect(state.agents[0]).toMatchObject({
+        tabNumber: 9,
+        tabOrder: 0,
+        tabLabel: label,
+        tabCustomLabel: expected,
+      });
+      const moved = mapLiveSnapshot({
+        reads: {},
+        snapshot: {
+          agents: [pane],
+          focused_pane_id: pane.pane_id,
+          focused_workspace_id: pane.workspace_id,
+          layouts: [],
+          panes: [pane],
+          protocol: 19,
+          tabs: [{ ...tab, tab_id: "w1:t1", number: 1, label: "1" }, tab],
+          version: "0.8.0",
+          workspaces: [],
+        },
+      });
+      expect(moved.agents[0]?.tabOrder).toBe(1);
+    },
+  );
 
   test("gates blocked semantic prompts only for protocol 20", () => {
     const pane = {

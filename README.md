@@ -92,14 +92,14 @@ Run `npm run preview` to build the production application, select an available p
 
 ### Navigate and supervise
 
-The navigation rail groups detected Agents under their **Spaces**. Expand a Space to see its Agents; linked worktrees remain under their repository. The selected Space expands when you navigate to a session. The tab bar shows each detected Agent and each tab without an Agent as a standalone Terminal.
+The navigation rail follows Herdr's sidebar: **Spaces** above, **New** and **Menu** between sections, and an independent **Agents** list below. Linked worktrees remain under their repository. Agent rows show status, Space, an optional tab label, and runtime. Select **Grouped** or **Priority** beside the Agents heading to switch ordering. Grouped follows Space and tab order; Priority puts failures and work that needs input first. Drag the divider to resize the sections; ordering and panel size are saved in this browser. Both lists scroll independently. The tab bar keeps standalone Terminals available without counting them as Agents.
 
-- Use **Attention Inbox** to triage Needs input, Failed, and Recently done states without leaving the selected terminal.
+- Use **Menu → Attention Inbox** to triage Needs input, Failed, and Recently done states without leaving the selected terminal.
 - Use **Mission Control** for a cross-Space overview and controller-only summaries from saved SSH machines.
 - Use **Workflow templates** for browser-local or project-scoped batches of approved Agent launches.
 - Use **Viewer shares** to issue and revoke expiring read-only links to one Space, Agent, or pane.
 - Use `Cmd+K` or `Ctrl+K` to open the Action Palette.
-- Use the sidebar **Menu** for New Space, Mission Control, Workflow templates, Viewer shares, Settings, keybindings, Herdr reload, and the controller-only runtime center.
+- Use **New** to create a Space. Use the sidebar **Menu** for Attention Inbox, Mission Control, Workflow templates, Viewer shares, Settings, keybindings, Herdr reload, and the controller-only runtime center. A dot on Menu indicates attention items.
 - Use **More actions** (`⋯`) beside the tabs for session actions, appearance, and **Execution details**. Execution details contains the full current directory with a copy action, model, runtime, context percentage, and pane metadata.
 
 Remote machine summaries keep machine IDs isolated, omit SSH targets, and fail independently. They require local bridge mode and a Herdr build that supports `herdr --machine <id> api snapshot`; the Docker/TCP bridge cannot read the host machine catalog. Herdr does not forward interactive terminal sessions through `--machine`, so use the native Herdr client to control remote terminals.

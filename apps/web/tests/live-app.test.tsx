@@ -158,6 +158,9 @@ describe("live herdr-web app", { timeout: 30_000 }, () => {
     expect(
       screen.getByRole("button", { name: "New Agent in live-test" }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Open menu" }));
     expect(screen.getByRole("menuitem", { name: "New Space" })).toHaveAttribute(
       "aria-disabled",
@@ -253,10 +256,14 @@ describe("live herdr-web app", { timeout: 30_000 }, () => {
     expect(
       screen.getByRole("button", { name: "Open more actions" }),
     ).toBeVisible();
+    const agents = screen.getByRole("region", { name: "Agents" });
     expect(
-      screen.queryByRole("region", { name: "Agents" }),
+      within(agents).getByRole("navigation", { name: "Detected Agents" }),
+    ).toBeVisible();
+    expect(within(agents).getByText("No detected Agents")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /^(Expand|Collapse) live-test/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("No detected Agents")).toBeVisible();
   });
 
   test("creates a Space through the authenticated bridge and selects it", async () => {

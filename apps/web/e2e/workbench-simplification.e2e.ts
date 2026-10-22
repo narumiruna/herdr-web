@@ -130,25 +130,53 @@ for (const appearance of ["light", "dark"] as const) {
           ? page.getByRole("dialog", { name: "Navigate workbench" })
           : page.locator(".desktop-sidebar");
       await expect(
-        sidebar.getByRole("list", { name: "herdr Agents" }),
+        sidebar.getByRole("region", { name: "Agents" }),
       ).toBeVisible();
-      await expect(sidebar.getByRole("region", { name: "Agents" })).toHaveCount(
+      const agents = sidebar.getByRole("navigation", {
+        name: "Detected Agents",
+      });
+      await expect(agents.getByRole("button")).toHaveCount(5);
+      await expect(sidebar.locator(".workspace-list .agent-list")).toHaveCount(
         0,
       );
       await expect(
         sidebar.getByRole("separator", {
           name: "Resize Spaces and Agents panels",
         }),
-      ).toHaveCount(0);
+      ).toBeVisible();
+      await expect(
+        sidebar.getByRole("button", {
+          name: "Agent ordering: Grouped",
+        }),
+      ).toBeVisible();
       await expect(
         sidebar.getByRole("button", { name: /Open Attention Inbox/ }),
-      ).toHaveCount(1);
-      await sidebar
-        .getByRole("button", { name: "Expand herdr.dev Space" })
-        .click();
-      await expect(
-        sidebar.getByRole("list", { name: "herdr.dev Agents" }),
-      ).toBeVisible();
+      ).toHaveCount(0);
+      const hierarchy = await sidebar.evaluate((root) => {
+        const rect = (selector: string) => {
+          const element = root.querySelector(selector);
+          if (!element) throw new Error(`Missing ${selector}`);
+          return element.getBoundingClientRect();
+        };
+        const spaces = rect(".sidebar-scroll");
+        const actions = rect(".spaces-actions");
+        const agents = rect(".agent-panel");
+        const buttons = [
+          ...root.querySelectorAll(".spaces-actions button"),
+        ].map((button) => button.getBoundingClientRect());
+        return {
+          spacesAboveActions: spaces.bottom <= actions.top,
+          actionsAboveAgents: actions.bottom <= agents.top,
+          newLeftMenuRight:
+            buttons.length === 2 &&
+            (buttons[0]?.right ?? Infinity) <= (buttons[1]?.left ?? -Infinity),
+        };
+      });
+      expect(hierarchy).toEqual({
+        spacesAboveActions: true,
+        actionsAboveAgents: true,
+        newLeftMenuRight: true,
+      });
       await page.screenshot({
         path: testInfo.outputPath("navigation.png"),
         animations: "disabled",
@@ -169,15 +197,22 @@ for (const theme of [
   "classic-light",
   "classic-dark",
 ]) {
-  for (const width of [1440, 320]) {
-    test(`long names remain usable at ${width}px in ${theme}`, async ({
+  for (const { width, sidebarWidth } of [
+    { width: 1440, sidebarWidth: 180 },
+    { width: 1440, sidebarWidth: 320 },
+    { width: 320, sidebarWidth: 180 },
+  ]) {
+    test(`long names remain usable at ${width}px, sidebar ${sidebarWidth}px in ${theme}`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.addInitScript(
-        (value) => localStorage.setItem("herdr-web-theme", value),
-        theme,
+        ({ theme, sidebarWidth }) => {
+          localStorage.setItem("herdr-web-theme", theme);
+          localStorage.setItem("herdr-web-sidebar-width", String(sidebarWidth));
+        },
+        { theme, sidebarWidth },
       );
       await page.goto("/");
       await expect(page.getByRole("tab", { name: /api-review/ })).toBeVisible();
@@ -187,13 +222,19 @@ for (const theme of [
         width <= 840
           ? page.getByRole("dialog", { name: "Navigate workbench" })
           : page.locator(".desktop-sidebar");
+      await expect(
+        sidebar.getByRole("button", { name: "Open herdr Space" }),
+      ).toHaveAttribute("title", /herdr.*feat\/web-bridge/);
+      if (width > 840)
+        await expect(sidebar).toHaveCSS("width", `${sidebarWidth}px`);
       // Change only fixture text; the app's real row and control layout stays intact.
       await sidebar
-        .locator(".workspace-copy strong")
-        .first()
-        .evaluate((element) => {
-          element.textContent =
-            "herdr-web-project-with-a-long-distinguishing-name";
+        .locator(".workspace-copy strong, .workspace-copy small")
+        .evaluateAll((elements) => {
+          for (const element of elements) {
+            element.textContent =
+              "herdr-web-project-with-a-long-distinguishing-name";
+          }
         });
       await sidebar
         .locator(".agent-item-copy strong")
@@ -205,10 +246,12 @@ for (const theme of [
       const metrics = await sidebar.evaluate((root) => {
         const labels = [
           ...root.querySelectorAll(
-            ".workspace-copy strong, .agent-item-copy strong",
+            ".workspace-copy strong, .workspace-copy small, .agent-item-copy strong",
           ),
         ];
-        const heading = root.querySelector(".workspace-tree-heading");
+        const heading = root.querySelector(
+          ".workspace-tree-heading:has(.workspace-group-toggle)",
+        );
         const select = heading
           ?.querySelector(".workspace-item")
           ?.getBoundingClientRect();
@@ -222,27 +265,30 @@ for (const theme of [
         const status = row
           ?.querySelector(".status-pill")
           ?.getBoundingClientRect();
-        if (!select || !toggle || !name || !status)
-          throw new Error("Missing navigation fixture");
+        if (!name || !status) throw new Error("Missing navigation fixture");
         return {
           labelsFit: labels.every(
             (element) =>
-              element.scrollWidth <= element.clientWidth &&
-              element.getBoundingClientRect().width > 0,
+              element.getBoundingClientRect().width > 0 &&
+              getComputedStyle(element).textOverflow === "ellipsis" &&
+              getComputedStyle(element).whiteSpace === "nowrap",
           ),
-          wraps: labels[0]!.getBoundingClientRect().height > 24,
-          selectAndToggleSeparate: select.right <= toggle.left,
-          nameAndStatusSeparate: name.right <= status.left,
-          touchTarget: { width: toggle.width, height: toggle.height },
+          clipped: labels[0]!.scrollWidth > labels[0]!.clientWidth,
+          selectAndToggleSeparate:
+            !select || !toggle || select.right <= toggle.left,
+          nameAndStatusSeparate: status.right <= name.left,
+          touchTarget: toggle
+            ? { width: toggle.width, height: toggle.height }
+            : null,
           overflow: root.scrollWidth > root.clientWidth,
         };
       });
       expect(metrics.labelsFit).toBe(true);
-      expect(metrics.wraps).toBe(true);
+      expect(metrics.clipped).toBe(true);
       expect(metrics.selectAndToggleSeparate).toBe(true);
       expect(metrics.nameAndStatusSeparate).toBe(true);
       expect(metrics.overflow).toBe(false);
-      if (width <= 840) {
+      if (width <= 840 && metrics.touchTarget) {
         expect(metrics.touchTarget.width).toBeGreaterThanOrEqual(44);
         expect(metrics.touchTarget.height).toBeGreaterThanOrEqual(44);
       }

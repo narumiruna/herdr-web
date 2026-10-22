@@ -50,9 +50,12 @@ function agent(
     kind: "agent",
     workspaceId,
     label: id,
+    runtime: "Codex",
     status: "working",
     currentStep: "",
     summary: "",
+    tabId: id,
+    tabNumber: undefined,
     ...options,
   };
 }
@@ -94,8 +97,12 @@ function fixture(): HerdrState {
 function props(state = fixture()): SidebarProps {
   return {
     state,
+    agentSort: "grouped",
+    spacesRatio: 0.5,
     attentionCount: 2,
     canCreateSpace: true,
+    onAgentSortChange: vi.fn(),
+    onSpacesRatioChange: vi.fn(),
     onSelectWorkspace: vi.fn(),
     onSelectAgent: vi.fn(),
     onNewSpace: vi.fn(),
@@ -118,52 +125,354 @@ function sidebar(input: SidebarProps) {
   );
 }
 
-function workspaceRow(name: string) {
-  const row = screen.getByRole("button", { name }).closest("li");
-  if (!row) throw new Error(`Missing workspace row: ${name}`);
-  return within(row);
+function detectedAgents() {
+  return within(screen.getByRole("navigation", { name: "Detected Agents" }));
 }
 
-describe("Sidebar workspace navigation", () => {
-  test("uses one workspace hierarchy with only the selected workspace Agent list expanded", () => {
+function agentOrder() {
+  return detectedAgents()
+    .getAllByRole("button")
+    .map(
+      (button) =>
+        button.getAttribute("aria-label")?.match(/^Open (.+) Agent in /)?.[1],
+    );
+}
+
+describe("Sidebar panels", () => {
+  test("places independent Spaces and Agents around New / Menu and a divider", () => {
     const { container } = render(sidebar(props()));
-    expect(screen.getByRole("heading", { name: "Spaces" })).toBeInTheDocument();
+    const spaces = screen.getByRole("region", { name: "Spaces" });
+    const agents = screen.getByRole("region", { name: "Agents" });
+    const actions = screen.getByRole("button", {
+      name: "Create a new Space",
+    }).parentElement;
+    if (!actions) throw new Error("Missing Space actions");
+    const divider = screen.getByRole("separator", {
+      name: "Resize Spaces and Agents panels",
+    });
     expect(
-      screen.queryByRole("heading", { name: "Agents" }),
+      spaces.compareDocumentPosition(actions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      actions.compareDocumentPosition(divider) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      divider.compareDocumentPosition(agents) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      container.querySelectorAll(".sidebar-scroll, .agent-panel-scroll"),
+    ).toHaveLength(2);
+    expect(
+      within(spaces).queryByRole("button", { name: / Agent in / }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Open Attention Inbox/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("group", { name: "Agent ordering" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
-    expect(container.querySelectorAll(".sidebar-scroll")).toHaveLength(1);
+    expect(agentOrder()).toEqual([
+      "root-first",
+      "root-second",
+      "linked-agent",
+      "other-agent",
+      "orphan-agent",
+      "unknown-workspace-agent",
+    ]);
     expect(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
+      detectedAgents().getByRole("button", {
+        name: "Open unknown-workspace-agent Agent in Unknown Space, Working, Codex",
+      }),
+    ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Expand feature/linked Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.getByRole("button", { name: "Expand other-repository Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.getByRole("list", { name: "repository Agents" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("list", { name: "feature/linked Agents" }),
-    ).not.toBeInTheDocument();
-    const agents = within(
-      screen.getByRole("list", { name: "repository Agents" }),
-    ).getAllByRole("button");
-    expect(
-      agents.map((item) => item.querySelector("strong")?.textContent),
-    ).toEqual(["root-first", "root-second"]);
-    expect(
-      screen.queryByRole("button", { name: /unknown-workspace-agent/ }),
+      detectedAgents().queryByRole("button", { name: /standalone-terminal/ }),
     ).not.toBeInTheDocument();
   });
 
-  test("keeps linked Agents under their exact worktree and uses repository identity, not repository name", async () => {
+  test("shows Space and runtime, leaves task text in title, and puts status first", () => {
+    const state = fixture();
+    state.agents[1] = agent("root-first", "repository", {
+      tabNumber: 1,
+      currentStep: "A detailed task",
+      label: "Full Agent identity",
+    });
+    render(sidebar(props(state)));
+    const button = detectedAgents().getByRole("button", {
+      name: "Open Full Agent identity Agent in repository, Working, tab 1, Codex",
+    });
+    expect(within(button).getByText("repository · 1").tagName).toBe("STRONG");
+    expect(within(button).getByText("Codex").tagName).toBe("SMALL");
+    expect(
+      within(button).queryByText("A detailed task"),
+    ).not.toBeInTheDocument();
+    expect(button).toHaveAttribute(
+      "title",
+      expect.stringContaining("Full Agent identity — A detailed task"),
+    );
+    expect(button.firstElementChild).toHaveClass("agent-identity");
+    expect(
+      button.firstElementChild?.querySelector(".status-working"),
+    ).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-current", "page");
+  });
+
+  test.each([
+    ["single tab", [agent("a", "space", { tabNumber: 1 })], "space"],
+    [
+      "custom single tab",
+      [
+        agent("a", "space", {
+          tabNumber: 1,
+          tabLabel: "Review",
+          tabCustomLabel: true,
+        }),
+      ],
+      "space · Review",
+    ],
+    [
+      "multiple Agents on one tab",
+      [
+        agent("a", "space", { tabId: "shared", tabNumber: 1 }),
+        agent("b", "space", { tabId: "shared", tabNumber: 1 }),
+      ],
+      "space",
+    ],
+    [
+      "standalone Terminal tab",
+      [
+        agent("a", "space", { tabNumber: 1, tabLabel: "Build" }),
+        agent("terminal", "space", { kind: "terminal", tabNumber: 2 }),
+      ],
+      "space · Build",
+    ],
+    [
+      "fallback IDs",
+      [
+        agent("a", "space", { tabId: undefined, tabNumber: 1 }),
+        agent("b", "space", { tabId: undefined, tabNumber: 2 }),
+      ],
+      "space · 1",
+    ],
+    [
+      "missing tab metadata",
+      [agent("a", "space"), agent("b", "space")],
+      "space",
+    ],
+  ] as const)("uses tab context for %s", (_label, agents, expected) => {
+    render(
+      sidebar(
+        props({
+          ...fixture(),
+          workspaces: [workspace("space")],
+          agents: [...agents],
+        }),
+      ),
+    );
+    const row = detectedAgents().getByRole("button", { name: /Open a Agent/ });
+    expect(row.querySelector("strong")).toHaveTextContent(expected);
+    expect(row.querySelector("strong")?.textContent).toBe(expected);
+  });
+
+  test("uses highest detected Agent status for each Space and retains branch details", () => {
+    const state = fixture();
+    state.agents.push(agent("failed", "repository", { status: "failed" }));
+    render(sidebar(props(state)));
+    const root = screen.getByRole("button", { name: "Open repository Space" });
+    expect(within(root).getByText("main")).toBeVisible();
+    expect(root.querySelectorAll(".status-pill")).toHaveLength(1);
+    expect(root.querySelector(".status-failed")).toBeInTheDocument();
+    const blocked = screen.getByRole("button", {
+      name: "Open feature/linked worktree Space",
+    });
+    expect(blocked.querySelector(".status-blocked")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/needs input/i, { selector: "small" }),
+    ).not.toBeInTheDocument();
+    const terminalSpace = screen.getByRole("button", {
+      name: "Open terminal-space Space",
+    });
+    expect(terminalSpace.querySelector(".status-unknown")).toBeInTheDocument();
+    expect(
+      terminalSpace.querySelector(".status-blocked"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("shows both empty states without turning standalone Terminals into Agents", () => {
+    const input = props({
+      ...fixture(),
+      workspaces: [],
+      agents: [],
+      selectedAgentId: "",
+      selectedWorkspaceId: "",
+    });
+    const view = render(sidebar(input));
+    expect(screen.getByText("No Spaces")).toBeVisible();
+    expect(screen.getByText("No detected Agents")).toBeVisible();
+    view.rerender(
+      sidebar({
+        ...input,
+        state: {
+          ...input.state,
+          workspaces: [workspace("space")],
+          agents: [agent("terminal", "space", { kind: "terminal" })],
+        },
+      }),
+    );
+    expect(screen.getByText("No detected Agents")).toBeVisible();
+    expect(detectedAgents().queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  test("exposes full Space details and long Agent identities without hover", () => {
+    const name = "repository-with-a-complete-very-long-name";
+    const branch = "feature/a-complete-very-long-branch";
+    render(
+      sidebar(
+        props({
+          ...fixture(),
+          workspaces: [workspace("long", { name, branch })],
+          agents: [agent("full-agent-name", "long")],
+        }),
+      ),
+    );
+    const select = screen.getByRole("button", { name: `Open ${name} Space` });
+    expect(select).toHaveAccessibleDescription(
+      `${name} — /projects/long — ${branch} — Working`,
+    );
+    expect(within(select).getByText(branch)).toBeVisible();
+    expect(
+      detectedAgents().getByRole("button", {
+        name: `Open full-agent-name Agent in ${name}, Working, Codex`,
+      }),
+    ).toBeVisible();
+  });
+});
+
+describe("Agent ordering", () => {
+  test("toggles the compact text button in both directions", async () => {
     const user = userEvent.setup();
+    const input = props();
+    const view = render(sidebar(input));
+    await user.click(
+      screen.getByRole("button", { name: "Agent ordering: Grouped" }),
+    );
+    expect(input.onAgentSortChange).toHaveBeenLastCalledWith("priority");
+    view.rerender(sidebar({ ...input, agentSort: "priority" }));
+    const toggle = screen.getByRole("button", {
+      name: "Agent ordering: Priority",
+    });
+    expect(toggle).toHaveTextContent("Priority");
+    toggle.focus();
+    await user.keyboard(" ");
+    expect(input.onAgentSortChange).toHaveBeenLastCalledWith("grouped");
+  });
+
+  test("orders priority by state, then descending sequence, then workspace/tab/input order", () => {
+    const state = {
+      ...fixture(),
+      workspaces: [workspace("one"), workspace("two")],
+      agents: [
+        agent("unknown", "one", { status: "unknown", stateChangeSeq: 1000 }),
+        agent("idle", "one", { status: "idle" }),
+        agent("working", "one"),
+        agent("done", "one", { status: "done" }),
+        agent("blocked-old", "one", { status: "blocked" }),
+        agent("blocked-new", "two", { status: "blocked", stateChangeSeq: 10 }),
+        agent("failed", "one", { status: "failed" }),
+        agent("blocked-first-tab-a", "one", {
+          status: "blocked",
+          tabNumber: 1,
+        }),
+        agent("blocked-first-tab-b", "one", {
+          status: "blocked",
+          tabNumber: 1,
+        }),
+        agent("blocked-second-tab", "one", { status: "blocked", tabNumber: 2 }),
+        agent("blocked-other-space", "two", {
+          status: "blocked",
+          tabNumber: 1,
+        }),
+      ],
+    };
+    render(sidebar({ ...props(state), agentSort: "priority" }));
+    expect(agentOrder()).toEqual([
+      "failed",
+      "blocked-new",
+      "blocked-first-tab-a",
+      "blocked-first-tab-b",
+      "blocked-second-tab",
+      "blocked-old",
+      "blocked-other-space",
+      "done",
+      "working",
+      "idle",
+      "unknown",
+    ]);
+  });
+
+  test("groups moved tabs by snapshot position instead of stable tab number", () => {
+    const state = {
+      ...fixture(),
+      workspaces: [workspace("one")],
+      agents: [
+        agent("created-first", "one", { tabNumber: 1, tabOrder: 1 }),
+        agent("moved-first", "one", { tabNumber: 9, tabOrder: 0 }),
+      ],
+    };
+    render(sidebar(props(state)));
+    expect(agentOrder()).toEqual(["moved-first", "created-first"]);
+  });
+
+  test("exposes visible tab and runtime identity in accessible Agent names", () => {
+    const state = {
+      ...fixture(),
+      workspaces: [workspace("one")],
+      agents: [
+        agent("first", "one", {
+          label: "pi",
+          runtime: "pi",
+          tabLabel: "Build",
+        }),
+        agent("second", "one", {
+          label: "pi",
+          runtime: "pi",
+          tabLabel: "Review",
+        }),
+      ],
+    };
+    render(sidebar(props(state)));
+    expect(
+      detectedAgents().getByRole("button", {
+        name: "Open pi Agent in one, Working, tab Build, pi",
+      }),
+    ).toBeVisible();
+    expect(
+      detectedAgents().getByRole("button", {
+        name: "Open pi Agent in one, Working, tab Review, pi",
+      }),
+    ).toBeVisible();
+  });
+
+  test("grouped ordering ignores priority and sequence and preserves input ties", () => {
+    const state = {
+      ...fixture(),
+      workspaces: [workspace("one"), workspace("two")],
+      agents: [
+        agent("two", "two", { status: "failed", stateChangeSeq: 100 }),
+        agent("later-tab", "one", { tabNumber: 2 }),
+        agent("first-a", "one", { tabNumber: 1 }),
+        agent("first-b", "one", { tabNumber: 1, stateChangeSeq: 10 }),
+      ],
+    };
+    render(sidebar(props(state)));
+    expect(agentOrder()).toEqual(["first-a", "first-b", "later-tab", "two"]);
+  });
+});
+
+describe("Space worktrees", () => {
+  test("starts expanded, groups by repository identity, and only expands actual parents", () => {
     render(sidebar(props()));
     const worktrees = screen.getByRole("list", {
       name: "repository worktrees",
@@ -172,297 +481,157 @@ describe("Sidebar workspace navigation", () => {
       within(worktrees).getByRole("button", {
         name: "Open feature/linked worktree Space",
       }),
-    ).toBeInTheDocument();
+    ).toBeVisible();
     expect(
       within(worktrees).queryByRole("button", {
         name: "Open other-repository Space",
       }),
     ).not.toBeInTheDocument();
     expect(
-      within(worktrees).queryByRole("button", {
-        name: "Open orphan-checkout Space",
-      }),
-    ).not.toBeInTheDocument();
-    expect(
       screen.getByRole("button", { name: "Open orphan-checkout Space" }),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Expand feature/linked Space" }),
-    );
+    ).toBeVisible();
     expect(
-      within(
-        screen.getByRole("list", { name: "feature/linked Agents" }),
-      ).getByRole("button", { name: /Open linked-agent Agent/ }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("button", { name: /^(Expand|Collapse)/ }),
+    ).toHaveLength(1);
     expect(
-      within(
-        screen.getByRole("list", { name: "repository Agents" }),
-      ).queryByRole("button", { name: /linked-agent/ }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Expand other-repository Space" }),
-    );
-    expect(
-      within(
-        screen.getByRole("list", { name: "other-repository Agents" }),
-      ).getByRole("button", { name: /Open other-agent Agent/ }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "Collapse repository worktrees" }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
-  test("separates keyboard selection from expand and collapse", async () => {
+  test("shows hidden worktree attention on the collapsed parent Space", async () => {
     const user = userEvent.setup();
-    const input = props();
+    render(sidebar(props()));
+    const parent = screen.getByRole("button", {
+      name: "Open repository Space",
+    });
+    expect(parent.querySelector(".status-working")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Collapse repository worktrees" }),
+    );
+    expect(parent.querySelector(".status-blocked")).toBeInTheDocument();
+    expect(parent).toHaveAccessibleDescription(
+      expect.stringContaining("Needs input"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Expand repository worktrees" }),
+    );
+    expect(parent.querySelector(".status-working")).toBeInTheDocument();
+  });
+
+  test("keeps all Agents reachable while worktrees are collapsed, without selecting or dismissing", async () => {
+    const user = userEvent.setup();
+    const input = { ...props(), onDismiss: vi.fn() };
     render(sidebar(input));
     const toggle = screen.getByRole("button", {
-      name: "Collapse repository Space",
+      name: "Collapse repository worktrees",
     });
-    const controlledId = toggle.getAttribute("aria-controls");
-    expect(controlledId).toBeTruthy();
-    expect(document.getElementById(controlledId ?? "")).toContainElement(
-      screen.getByRole("list", { name: "repository Agents" }),
+    const controlled = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
+    );
+    expect(controlled).toContainElement(
+      screen.getByRole("list", { name: "repository worktrees" }),
     );
     toggle.focus();
     await user.keyboard("{Enter}");
     expect(toggle).toHaveFocus();
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(
-      screen.queryByRole("button", { name: /Open root-first Agent/ }),
+      screen.queryByRole("button", {
+        name: "Open feature/linked worktree Space",
+      }),
     ).not.toBeInTheDocument();
+    expect(
+      detectedAgents().getByRole("button", { name: /Open linked-agent Agent/ }),
+    ).toBeVisible();
     expect(input.onSelectWorkspace).not.toHaveBeenCalled();
     expect(input.onSelectAgent).not.toHaveBeenCalled();
+    expect(input.onDismiss).not.toHaveBeenCalled();
     await user.keyboard(" ");
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const select = screen.getByRole("button", {
-      name: "Open other-repository Space",
-    });
-    select.focus();
-    await user.keyboard("{Enter}");
-    expect(input.onSelectWorkspace).toHaveBeenCalledExactlyOnceWith(
-      "other-repository",
-    );
-    expect(
-      screen.getByRole("button", { name: "Expand other-repository Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    screen.getByRole("button", { name: /Open root-first Agent/ }).focus();
-    await user.keyboard(" ");
-    expect(input.onSelectAgent).toHaveBeenCalledExactlyOnceWith("root-first");
   });
 
-  test("reveals selected worktree ancestors on initial mount and mobile remount", () => {
-    const state = fixture();
-    state.selectedWorkspaceId = "linked-checkout";
-    state.selectedAgentId = "linked-agent";
-    const input = props(state);
-    const view = render(sidebar(input));
-    expect(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(
-      screen.getByRole("button", { name: "Collapse feature/linked Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(
-      screen.getByRole("button", { name: /Open linked-agent Agent/ }),
-    ).toHaveAttribute("aria-current", "page");
-    view.unmount();
-    state.selectedWorkspaceId = "other-repository";
-    state.selectedAgentId = "other-agent";
-    render(sidebar(input));
-    expect(
-      screen.getByRole("button", { name: /Open other-agent Agent/ }),
-    ).toHaveAttribute("aria-current", "page");
-    expect(
-      screen.getByRole("button", { name: "Expand repository Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByRole("button", { name: /Open linked-agent Agent/ }),
-    ).not.toBeInTheDocument();
-  });
-
-  test("reveals external search, tab, and attention selections after ancestors were collapsed", async () => {
+  test("preserves manual collapse on snapshot refresh and reopens on selection changes", async () => {
     const user = userEvent.setup();
     const input = props();
     const view = render(sidebar(input));
     await user.click(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
-    );
-    view.rerender(
-      sidebar({
-        ...input,
-        state: {
-          ...input.state,
-          selectedWorkspaceId: "linked-checkout",
-          selectedAgentId: "linked-agent",
-        },
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: /Open linked-agent Agent/ }),
-    ).toHaveAttribute("aria-current", "page");
-    await user.click(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
-    );
-    view.rerender(
-      sidebar({
-        ...input,
-        state: { ...input.state, selectedAgentId: "root-second" },
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: /Open root-second Agent/ }),
-    ).toHaveAttribute("aria-current", "page");
-    await user.click(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
-    );
-    view.rerender(
-      sidebar({
-        ...input,
-        state: {
-          ...input.state,
-          selectedWorkspaceId: "empty-space",
-          selectedAgentId: "",
-        },
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: "Collapse empty-space Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
-  });
-
-  test("does not reopen manually collapsed groups on live status updates", async () => {
-    const user = userEvent.setup();
-    const input = props();
-    const view = render(sidebar(input));
-    await user.click(
-      screen.getByRole("button", { name: "Collapse repository Space" }),
+      screen.getByRole("button", { name: "Collapse repository worktrees" }),
     );
     view.rerender(sidebar({ ...input, state: structuredClone(input.state) }));
     expect(
-      screen.getByRole("button", { name: "Expand repository Space" }),
+      screen.getByRole("button", { name: "Expand repository worktrees" }),
     ).toHaveAttribute("aria-expanded", "false");
-  });
-
-  test("supports empty workspaces and does not classify standalone Terminals as Agents", async () => {
-    const user = userEvent.setup();
-    render(sidebar(props()));
+    const selected = {
+      ...input,
+      state: {
+        ...input.state,
+        selectedWorkspaceId: "linked-checkout",
+        selectedAgentId: "linked-agent",
+      },
+    };
+    view.rerender(sidebar(selected));
+    expect(
+      screen.getByRole("button", { name: "Collapse repository worktrees" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      detectedAgents().getByRole("button", { name: /Open linked-agent Agent/ }),
+    ).toHaveAttribute("aria-current", "page");
     await user.click(
-      screen.getByRole("button", { name: "Expand empty-space Space" }),
+      screen.getByRole("button", { name: "Collapse repository worktrees" }),
+    );
+    view.rerender(
+      sidebar({ ...selected, state: structuredClone(selected.state) }),
     );
     expect(
-      workspaceRow("Open empty-space Space").getByText("No detected Agents"),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Expand terminal-space Space" }),
-    );
+      screen.getByRole("button", { name: "Expand repository worktrees" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    view.unmount();
+    render(sidebar(selected));
     expect(
-      workspaceRow("Open terminal-space Space").getByText("No detected Agents"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /standalone-terminal/ }),
-    ).not.toBeInTheDocument();
-  });
-
-  test("supports an empty workspace collection", () => {
-    render(
-      sidebar({
-        ...props({
-          ...fixture(),
-          workspaces: [],
-          agents: [],
-          selectedWorkspaceId: "",
-          selectedAgentId: "",
-        }),
-        attentionCount: 0,
-      }),
-    );
-    expect(screen.getByText("No Spaces")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "Open Attention Inbox, 0 items",
-      }),
-    ).toBeEnabled();
-  });
-
-  test("exposes complete long names and workspace details without hover", () => {
-    const longWorkspace =
-      "repository-with-a-complete-very-long-name-that-must-remain-accessible";
-    const longBranch =
-      "feature/a-very-long-branch-name-that-must-not-be-shortened-for-touch";
-    const longAgent =
-      "agent-with-a-complete-very-long-name-that-must-remain-accessible";
-    const state = fixture();
-    state.workspaces = [
-      workspace("long", { name: longWorkspace, branch: longBranch }),
-    ];
-    state.agents = [agent("long-agent", "long", { label: longAgent })];
-    state.selectedWorkspaceId = "long";
-    state.selectedAgentId = "long-agent";
-    render(sidebar(props(state)));
-    const select = screen.getByRole("button", {
-      name: `Open ${longWorkspace} Space`,
-    });
-    expect(select).toHaveAccessibleDescription(
-      `${longWorkspace} — /projects/long — ${longBranch}`,
-    );
-    expect(within(select).getByText(longWorkspace)).toBeVisible();
-    expect(within(select).getByText(longBranch)).toBeVisible();
-    expect(
-      screen.getByRole("button", {
-        name: `Open ${longAgent} Agent in ${longWorkspace}, Working`,
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(longAgent)).toBeVisible();
-  });
-
-  test("keeps attention compact, uses the supplied inbox count, and passes its focus target", async () => {
-    const user = userEvent.setup();
-    const input = { ...props(), onDismiss: vi.fn() };
-    render(sidebar(input));
-    const attention = screen.getByRole("button", {
-      name: "Open Attention Inbox, 2 items",
-    });
-    expect(within(attention).getByText("2")).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: /needing input/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      workspaceRow("Open feature/linked worktree Space").getByText(
-        "1 needs input",
-      ),
-    ).toBeInTheDocument();
-    await user.click(attention);
-    expect(input.onOpenAttention).toHaveBeenCalledExactlyOnceWith(attention);
-    expect(input.onSelectAgent).not.toHaveBeenCalled();
-    expect(input.onDismiss).toHaveBeenCalledOnce();
-  });
-
-  test("dismisses mobile navigation after workspace and Agent selection, not expansion", async () => {
-    const user = userEvent.setup();
-    const input = { ...props(), onDismiss: vi.fn() };
-    render(sidebar(input));
-    await user.click(
-      screen.getByRole("button", { name: "Expand feature/linked Space" }),
-    );
-    expect(input.onDismiss).not.toHaveBeenCalled();
-    await user.click(
       screen.getByRole("button", {
         name: "Open feature/linked worktree Space",
       }),
-    );
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  test("dismisses mobile navigation after keyboard Space and Agent selection", async () => {
+    const user = userEvent.setup();
+    const input = { ...props(), onDismiss: vi.fn() };
+    render(sidebar(input));
+    screen
+      .getByRole("button", { name: "Open feature/linked worktree Space" })
+      .focus();
+    await user.keyboard("{Enter}");
     expect(input.onSelectWorkspace).toHaveBeenCalledExactlyOnceWith(
       "linked-checkout",
     );
-    expect(input.onDismiss).toHaveBeenCalledTimes(1);
-    await user.click(
-      screen.getByRole("button", { name: /Open linked-agent Agent/ }),
-    );
+    detectedAgents()
+      .getByRole("button", { name: /Open linked-agent Agent/ })
+      .focus();
+    await user.keyboard(" ");
     expect(input.onSelectAgent).toHaveBeenCalledExactlyOnceWith("linked-agent");
     expect(input.onDismiss).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("Sidebar overflow menu", () => {
+describe("Sidebar actions", () => {
+  test("creates a Space directly and dismisses before opening the dialog with its focus target", async () => {
+    const user = userEvent.setup();
+    const input = { ...props(), onDismiss: vi.fn() };
+    render(sidebar(input));
+    const button = screen.getByRole("button", { name: "Create a new Space" });
+    expect(button).toHaveTextContent("New");
+    await user.click(button);
+    expect(input.onNewSpace).toHaveBeenCalledExactlyOnceWith(button);
+    expect(input.onDismiss).toHaveBeenCalledOnce();
+    expect(input.onDismiss.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(input.onNewSpace).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
   test.each([
     ["New Space", "onNewSpace"],
+    ["Open Attention Inbox, 2 items", "onOpenAttention"],
     ["Mission Control", "onOpenMissionControl"],
     ["Workflow templates", "onOpenWorkflows"],
     ["Viewer shares", "onOpenShares"],
@@ -470,18 +639,17 @@ describe("Sidebar overflow menu", () => {
     ["Herdr runtime", "onOpenRuntime"],
     ["Keybindings", "onOpenKeybindings"],
   ] as const)(
-    "moves %s into the menu and passes the persistent focus target",
+    "keeps %s in Menu and passes the persistent focus target",
     async (label, callback) => {
       const user = userEvent.setup();
       const input = { ...props(), onDismiss: vi.fn() };
       render(sidebar(input));
       expect(
-        screen.queryByRole("button", { name: "Create a new Space" }),
-      ).not.toBeInTheDocument();
-      expect(
         screen.queryByRole("menuitem", { name: label }),
       ).not.toBeInTheDocument();
       const trigger = screen.getByRole("button", { name: "Open menu" });
+      expect(trigger).toHaveAccessibleDescription("Attention Inbox, 2 items");
+      expect(trigger).toHaveAttribute("data-attention", "true");
       await user.click(trigger);
       await user.click(screen.getByRole("menuitem", { name: label }));
       expect(input[callback]).toHaveBeenCalledExactlyOnceWith(trigger);
@@ -489,10 +657,20 @@ describe("Sidebar overflow menu", () => {
     },
   );
 
+  test("uses the supplied inbox count rather than blocked Agent totals", () => {
+    render(sidebar({ ...props(), attentionCount: 0 }));
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    expect(trigger).toHaveAttribute("data-attention", "false");
+    expect(trigger).toHaveAccessibleDescription("Attention Inbox, 0 items");
+  });
+
   test("preserves viewer permissions but keeps supervision, navigation, and reload reachable", async () => {
     const user = userEvent.setup();
     const input = { ...props(), canCreateSpace: false };
     render(sidebar(input));
+    expect(
+      screen.getByRole("button", { name: "Create a new Space" }),
+    ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Open menu" }));
     for (const name of ["New Space", "Viewer shares", "Herdr runtime"]) {
       expect(screen.getByRole("menuitem", { name })).toHaveAttribute(
@@ -505,6 +683,7 @@ describe("Sidebar overflow menu", () => {
     expect(input.onOpenShares).not.toHaveBeenCalled();
     expect(input.onOpenRuntime).not.toHaveBeenCalled();
     for (const name of [
+      "Open Attention Inbox, 2 items",
       "Mission Control",
       "Workflow templates",
       "Settings",
@@ -516,14 +695,9 @@ describe("Sidebar overflow menu", () => {
         "true",
       );
     }
-    await user.keyboard("{Escape}");
-    await user.click(
-      screen.getByRole("button", { name: "Open repository Space" }),
-    );
-    expect(input.onSelectWorkspace).toHaveBeenCalledWith("repository");
   });
 
-  test("supports keyboard menu navigation and returns focus after cancellation", async () => {
+  test("supports keyboard Menu navigation and returns focus after cancellation", async () => {
     const user = userEvent.setup();
     render(sidebar(props()));
     const trigger = screen.getByRole("button", { name: "Open menu" });
@@ -532,7 +706,7 @@ describe("Sidebar overflow menu", () => {
     expect(screen.getByRole("menuitem", { name: "New Space" })).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(
-      screen.getByRole("menuitem", { name: "Mission Control" }),
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 2 items" }),
     ).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(trigger).toHaveFocus();

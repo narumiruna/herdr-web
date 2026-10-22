@@ -28,6 +28,7 @@ interface LiveWorkspace {
 
 interface LiveTab {
   agent_status: string;
+  custom_label?: boolean;
   focused: boolean;
   label: string;
   number: number;
@@ -47,6 +48,7 @@ interface LivePane {
   pane_id: string;
   revision: number;
   state_labels?: Record<string, string>;
+  state_change_seq?: number;
   tab_id: string;
   terminal_title_stripped?: string | null;
   title?: string | null;
@@ -186,8 +188,15 @@ function mapAgent(
   kind: Agent["kind"],
   protocol: number,
   previews: Record<string, LiveRead>,
-  tab: LiveTab | undefined,
+  tabs: LiveTab[],
 ): Agent {
+  const workspaceTabs = tabs.filter(
+    ({ workspace_id: id }) => id === pane.workspace_id,
+  );
+  const tabOrder = workspaceTabs.findIndex(
+    ({ tab_id: id }) => id === pane.tab_id,
+  );
+  const tab = workspaceTabs[tabOrder];
   const status = statusOf(pane.agent_status);
   const layout = layouts.find(({ tab_id: tabId }) => tabId === pane.tab_id);
   const panes = terminalPanes(pane, allPanes, reads, readErrors, layout);
@@ -237,6 +246,18 @@ function mapAgent(
     status,
     tabId: pane.tab_id,
     tabNumber: tab?.number,
+    tabOrder: tabOrder < 0 ? undefined : tabOrder,
+    tabLabel: tab?.label,
+    // The snapshot API omits custom_label. Herdr auto-labels tabs by position,
+    // not by their stable number. Preserve an explicit flag when available.
+    tabCustomLabel:
+      tab?.custom_label ??
+      (tab ? tab.label !== String(tabOrder + 1) : undefined),
+    stateChangeSeq:
+      Number.isSafeInteger(pane.state_change_seq) &&
+      (pane.state_change_seq ?? -1) >= 0
+        ? pane.state_change_seq
+        : undefined,
     summary: pane.tokens?.summary ?? "",
     updated: `revision ${pane.revision}`,
     workspaceId: pane.workspace_id,
@@ -298,7 +319,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
       "agent",
       snapshot.protocol,
       previews,
-      snapshot.tabs.find(({ tab_id: tabId }) => tabId === pane.tab_id),
+      snapshot.tabs,
     ),
   );
   const standaloneTerminals = snapshot.tabs
@@ -323,7 +344,7 @@ export function mapLiveSnapshot(payload: LiveSnapshotPayload): HerdrState {
               "terminal",
               snapshot.protocol,
               previews,
-              tab,
+              snapshot.tabs,
             ),
           ]
         : [];

@@ -140,12 +140,11 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
   test("labels desktop icon actions on keyboard focus", async () => {
     renderApp();
 
-    const inbox = screen.getByRole("button", {
-      name: /Open Attention Inbox/,
-    });
-    inbox.focus();
-    expect(inbox).toHaveFocus();
-    expect(inbox).toHaveTextContent("Attention Inbox");
+    const menu = screen.getByRole("button", { name: "Open menu" });
+    menu.focus();
+    expect(menu).toHaveFocus();
+    expect(menu).toHaveTextContent("Menu");
+    expect(menu).toHaveAccessibleDescription("Attention Inbox, 2 items");
 
     const actions = screen.getByRole("button", {
       name: "Open more actions",
@@ -229,99 +228,234 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     ).toBeVisible();
   });
 
-  test("keeps cross-workspace attention in one compact entry", () => {
-    renderApp();
+  test("keeps cross-workspace attention in the Menu", async () => {
+    const user = renderApp();
+    const menu = screen.getByRole("button", { name: "Open menu" });
+    expect(menu).toHaveAccessibleDescription("Attention Inbox, 2 items");
     expect(
-      screen.getAllByRole("button", {
-        name: "Open Attention Inbox, 2 items",
-      }),
-    ).toHaveLength(1);
+      screen.queryByRole("button", { name: /Open Attention Inbox/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "Needs input" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeVisible();
+    await user.click(menu);
+    expect(
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 2 items" }),
+    ).toHaveTextContent("Attention Inbox");
   });
 
-  test("nests Agents in one workspace tree with independent expanders", async () => {
+  test("separates Spaces from detected Agents across all Spaces", async () => {
     const user = renderApp();
     const nav = screen.getByRole("navigation", {
       name: "herdr-web navigation",
     });
-    expect(
-      screen.queryByRole("region", { name: "Agents" }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(nav).getByRole("list", { name: "herdr Agents" }),
-    ).toBeVisible();
-    expect(
-      within(nav).queryByRole("button", { name: /Open agent-guide Agent/ }),
-    ).not.toBeInTheDocument();
-    const expander = within(nav).getByRole("button", {
-      name: "Expand herdr.dev Space",
+    const agentsPanel = screen.getByRole("region", { name: "Agents" });
+    const agents = within(agentsPanel).getByRole("navigation", {
+      name: "Detected Agents",
     });
-    expander.focus();
-    await user.keyboard("{Enter}");
-    expect(expander).toHaveAttribute("aria-expanded", "true");
+    const newSpace = screen.getByRole("button", { name: "Create a new Space" });
+    const menu = screen.getByRole("button", { name: "Open menu" });
+    expect(newSpace.parentElement).toBe(menu.parentElement);
+    expect(nav.compareDocumentPosition(newSpace)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(newSpace.compareDocumentPosition(menu)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(menu.compareDocumentPosition(agentsPanel)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(within(nav).getAllByRole("list")).toHaveLength(1);
+    expect(within(nav).queryByRole("button", { name: /Agent in/ })).toBeNull();
+    expect(
+      within(nav).queryByRole("button", { name: /^(Expand|Collapse)/ }),
+    ).not.toBeInTheDocument();
+    expect(within(agents).getAllByRole("button")).toHaveLength(5);
+    expect(
+      within(agents).getByRole("button", { name: /Open plugin-index Agent/ }),
+    ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Open herdr Space" }),
     ).toHaveAttribute("aria-current", "page");
     await user.click(
-      within(nav).getByRole("button", {
-        name: /Open agent-guide Agent in herdr\.dev/,
+      within(agents).getByRole("button", {
+        name: "Open agent-guide Agent in herdr.dev, Idle, OpenCode",
       }),
     );
     expect(
       screen.getByRole("tab", { name: /agent-guide.*Idle/i }),
     ).toHaveAttribute("aria-selected", "true");
-    await user.click(
-      within(nav).getByRole("button", { name: "Collapse herdr.dev Space" }),
-    );
     expect(
-      within(nav).queryByRole("list", { name: "herdr.dev Agents" }),
-    ).not.toBeInTheDocument();
+      within(nav).getByRole("button", { name: "Open herdr.dev Space" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 
-  test("ignores obsolete panel and sort preferences without changing other storage", async () => {
+  test("restores panel and ordering preferences without changing other storage", async () => {
     window.localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.7");
     window.localStorage.setItem("herdr-web-agent-sort", "priority");
     window.localStorage.setItem("unrelated", "keep");
-    const user = renderApp();
+    const user = userEvent.setup();
+    const app = render(<App live={false} />);
+    const divider = screen.getByRole("separator", {
+      name: "Resize Spaces and Agents panels",
+    });
+    expect(divider).toHaveAttribute("aria-valuenow", "70");
     expect(
-      screen.queryByRole("separator", {
-        name: "Resize Spaces and Agents panels",
-      }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Agent ordering: Priority" }),
+    ).toBeVisible();
+    const agents = screen.getByRole("navigation", { name: "Detected Agents" });
     expect(
-      screen.queryByRole("radio", { name: "Priority" }),
-    ).not.toBeInTheDocument();
-    const list = screen.getByRole("list", { name: "herdr Agents" });
-    expect(
-      within(list)
+      within(agents)
         .getAllByRole("button")
-        .map((row) => row.textContent),
+        .map((row) => row.getAttribute("aria-label")),
     ).toEqual([
-      expect.stringContaining("web-bridge"),
-      expect.stringContaining("api-review"),
-      expect.stringContaining("integration-tests"),
+      "Open api-review Agent in herdr, Needs input, Claude Code",
+      "Open integration-tests Agent in herdr, Done, Pi",
+      "Open web-bridge Agent in herdr, Working, Codex",
+      "Open plugin-index Agent in plugin-marketplace, Working, Claude Code",
+      "Open agent-guide Agent in herdr.dev, Idle, OpenCode",
     ]);
     await user.click(
-      screen.getByRole("button", { name: "Collapse herdr Space" }),
+      screen.getByRole("button", { name: "Agent ordering: Priority" }),
     );
+    expect(window.localStorage.getItem("herdr-web-agent-sort")).toBe("grouped");
+    divider.focus();
+    await user.keyboard("{ArrowDown}");
+    const savedRatio = window.localStorage.getItem(
+      "herdr-web-sidebar-spaces-ratio",
+    );
+    expect(Number(savedRatio)).toBeGreaterThan(0.7);
+    expect(window.localStorage.getItem("unrelated")).toBe("keep");
+    app.unmount();
+    render(<App live={false} />);
+    expect(
+      screen.getByRole("button", { name: "Agent ordering: Grouped" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("separator", {
+        name: "Resize Spaces and Agents panels",
+      }),
+    ).toHaveAttribute(
+      "aria-valuenow",
+      String(Math.round(Number(savedRatio) * 100)),
+    );
+  });
+
+  test.each([
+    [null, "50"],
+    ["", "50"],
+    ["  ", "50"],
+    ["not-a-number", "50"],
+    ["NaN", "50"],
+    ["Infinity", "50"],
+    ["-Infinity", "50"],
+    ["-1", "10"],
+    ["0.05", "10"],
+    ["0.95", "90"],
+    ["2", "90"],
+  ])("normalizes saved panel ratio %s to %s percent", (saved, expected) => {
+    if (saved !== null) {
+      window.localStorage.setItem("herdr-web-sidebar-spaces-ratio", saved);
+    }
+    renderApp();
+    expect(
+      screen.getByRole("separator", {
+        name: "Resize Spaces and Agents panels",
+      }),
+    ).toHaveAttribute("aria-valuenow", expected);
     expect(window.localStorage.getItem("herdr-web-sidebar-spaces-ratio")).toBe(
-      "0.7",
+      String(Number(expected) / 100),
+    );
+  });
+
+  test.each([null, "invalid", "Grouped", ""])(
+    "defaults invalid or missing Agent ordering %s to Grouped",
+    (saved) => {
+      if (saved !== null)
+        window.localStorage.setItem("herdr-web-agent-sort", saved);
+      renderApp();
+      expect(
+        screen.getByRole("button", { name: "Agent ordering: Grouped" }),
+      ).toBeVisible();
+      expect(window.localStorage.getItem("herdr-web-agent-sort")).toBe(
+        "grouped",
+      );
+      const agents = screen.getByRole("navigation", {
+        name: "Detected Agents",
+      });
+      expect(
+        within(agents)
+          .getAllByRole("button")
+          .map((row) => row.getAttribute("aria-label")),
+      ).toEqual([
+        "Open web-bridge Agent in herdr, Working, Codex",
+        "Open api-review Agent in herdr, Needs input, Claude Code",
+        "Open integration-tests Agent in herdr, Done, Pi",
+        "Open agent-guide Agent in herdr.dev, Idle, OpenCode",
+        "Open plugin-index Agent in plugin-marketplace, Working, Claude Code",
+      ]);
+    },
+  );
+
+  test("shares and persists ordering and panel size across desktop and mobile navigation", async () => {
+    const user = renderApp();
+    await user.click(
+      screen.getByRole("button", { name: "Agent ordering: Grouped" }),
     );
     expect(window.localStorage.getItem("herdr-web-agent-sort")).toBe(
       "priority",
     );
-    expect(window.localStorage.getItem("unrelated")).toBe("keep");
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const navigation = screen.getByRole("dialog", {
+      name: "Navigate workbench",
+    });
+    await user.click(
+      within(navigation).getByRole("button", {
+        name: "Agent ordering: Priority",
+      }),
+    );
+    expect(window.localStorage.getItem("herdr-web-agent-sort")).toBe("grouped");
+    const mobileDivider = within(navigation).getByRole("separator", {
+      name: "Resize Spaces and Agents panels",
+    });
+    mobileDivider.focus();
+    await user.keyboard("{End}");
+    expect(mobileDivider).toHaveAttribute("aria-valuenow", "90");
+    expect(window.localStorage.getItem("herdr-web-sidebar-spaces-ratio")).toBe(
+      "0.9",
+    );
+    await user.click(
+      within(navigation).getByRole("button", { name: "Close dialog" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Agent ordering: Grouped" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("separator", {
+        name: "Resize Spaces and Agents panels",
+      }),
+    ).toHaveAttribute("aria-valuenow", "90");
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const reopened = screen.getByRole("dialog", { name: "Navigate workbench" });
+    expect(
+      within(reopened).getByRole("button", { name: "Agent ordering: Grouped" }),
+    ).toBeVisible();
+    expect(
+      within(reopened).getByRole("separator", {
+        name: "Resize Spaces and Agents panels",
+      }),
+    ).toHaveAttribute("aria-valuenow", "90");
   });
 
   test("groups linked worktree Spaces under collapsible repository Spaces", async () => {
     const state = createDemoState();
     const user = userEvent.setup();
-    state.selectedWorkspaceId = "linked-tree";
-    state.selectedAgentId = "";
-    state.selectedSessionByWorkspace = {};
+    state.selectedWorkspaceId = "repo-root";
+    state.selectedAgentId = "parent-agent";
+    state.selectedSessionByWorkspace = { "repo-root": "parent-agent" };
     const blockedAgent = state.agents[0];
     if (!blockedAgent) throw new Error("Demo state must include an Agent");
     state.agents = [
@@ -387,37 +521,27 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     const linkedWorktree = within(nav).getByRole("button", {
       name: "Open narumi/feat/tree worktree Space",
     });
-    expect(linkedWorktree).toHaveAttribute("aria-current", "page");
-    const parentAgents = within(nav).getByRole("list", {
-      name: "herdr-web Agents",
-    });
-    const childAgents = within(nav).getByRole("list", {
-      name: "narumi/feat/tree Agents",
-    });
+    expect(linkedWorktree).not.toHaveAttribute("aria-current");
+    const agents = screen.getByRole("navigation", { name: "Detected Agents" });
     expect(
-      within(parentAgents).getByRole("button", {
-        name: /Open parent-agent Agent/,
-      }),
+      within(agents).getByRole("button", { name: /Open parent-agent Agent/ }),
     ).toBeVisible();
+    const childAgent = within(agents).getByRole("button", {
+      name: /Open blocked-linked-tree Agent/,
+    });
+    expect(childAgent).toBeVisible();
+    expect(within(nav).queryByRole("button", { name: /Agent in/ })).toBeNull();
     expect(
-      within(parentAgents).queryByRole("button", {
-        name: /blocked-linked-tree/,
+      within(nav).queryByRole("button", {
+        name: /worktree-clear-valley-bcba worktrees/,
       }),
     ).not.toBeInTheDocument();
-    expect(
-      within(childAgents).getByRole("button", {
-        name: /Open blocked-linked-tree Agent/,
-      }),
-    ).toBeVisible();
-    expect(
-      within(childAgents).queryByRole("button", { name: /parent-agent/ }),
-    ).not.toBeInTheDocument();
-    expect(within(linkedWorktree).getByText("1 needs input")).toBeVisible();
+    expect(linkedWorktree.querySelector(".status-blocked")).toBeInTheDocument();
     expect(
       within(nav).getByRole("list", { name: "herdr-web worktrees" }),
     ).toBeVisible();
     expect(linkedWorktree).toHaveAccessibleDescription(
-      "worktree-clear-valley-bcba — /repo/.herdr/worktree-clear-valley-bcba — narumi/feat/tree",
+      "worktree-clear-valley-bcba — /repo/.herdr/worktree-clear-valley-bcba — narumi/feat/tree — Needs input",
     );
     expect(
       within(linkedWorktree).queryByText("worktree-clear-valley-bcba"),
@@ -425,18 +549,35 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
 
     await user.click(
       within(nav).getByRole("button", {
-        name: "Collapse herdr-web Space",
+        name: "Collapse herdr-web worktrees",
       }),
     );
     expect(
       within(nav).queryByRole("list", { name: "herdr-web worktrees" }),
     ).not.toBeInTheDocument();
-    await user.click(
-      within(nav).getByRole("button", { name: "Expand herdr-web Space" }),
-    );
+    expect(childAgent).toBeVisible();
+    await user.click(childAgent);
+    expect(
+      within(nav).getByRole("button", { name: "Collapse herdr-web worktrees" }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       within(nav).getByRole("list", { name: "herdr-web worktrees" }),
     ).toBeVisible();
+    expect(
+      within(nav).getByRole("button", {
+        name: "Open narumi/feat/tree worktree Space",
+      }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(childAgent).toHaveAttribute("aria-current", "page");
+    await user.click(
+      within(nav).getByRole("button", { name: "Collapse herdr-web worktrees" }),
+    );
+    const expander = within(nav).getByRole("button", {
+      name: "Expand herdr-web worktrees",
+    });
+    expander.focus();
+    await user.keyboard("{Enter}");
+    expect(expander).toHaveAttribute("aria-expanded", "true");
   });
 
   test("keeps similar long branches distinct and exposes exact values", async () => {
@@ -487,7 +628,7 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     expect(second).toHaveAttribute("aria-current", "page");
   });
 
-  test("shows scannable Agent identity, task, Space, selection, and status", async () => {
+  test("shows Agent Space, runtime, selection, and left status without task text", async () => {
     const state = createDemoState();
     const statuses = [
       "blocked",
@@ -517,7 +658,7 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     const user = userEvent.setup();
 
     const { container } = render(<App initialState={state} live={false} />);
-    const agents = screen.getByRole("list", { name: "herdr Agents" });
+    const agents = screen.getByRole("navigation", { name: "Detected Agents" });
     const rows = within(agents).getAllByRole("button");
 
     expect(rows).toHaveLength(statuses.length);
@@ -525,15 +666,24 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
       const row = within(agents).getByRole("button", {
         name: new RegExp(`Open ${status}-agent Agent`),
       });
-      expect(row.querySelector(".agent-identity")).toBeInTheDocument();
-      expect(row.querySelector(`.status-${status}`)).toBeInTheDocument();
-      expect(
-        within(row).getByText(
-          status === "blocked"
-            ? /Review the complete compatibility contract/
-            : `Current ${status} task`,
-        ),
-      ).toBeVisible();
+      const indicator = row.querySelector(`.status-${status}`);
+      expect(indicator).toBeInTheDocument();
+      const space = within(row).getByText(/herdr/);
+      expect(space).toBeVisible();
+      expect(indicator?.compareDocumentPosition(space)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(within(row).getByText(base.runtime)).toBeVisible();
+      const task =
+        status === "blocked"
+          ? "Review the complete compatibility contract and preserve the distinguishing outcome"
+          : `Current ${status} task`;
+      expect(within(row).queryByText(task)).not.toBeInTheDocument();
+      expect(row).toHaveAttribute("title", expect.stringContaining(task));
+      expect(row).toHaveAttribute(
+        "title",
+        expect.stringContaining(`${status}-agent`),
+      );
       expect(row).toHaveAccessibleName(
         expect.stringContaining("Agent in herdr"),
       );
@@ -556,19 +706,20 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
-  test("reveals a collapsed workspace when search selects its Agent", async () => {
+  test("selects an Agent in another Space from search without expanding Agent lists", async () => {
     const user = renderApp();
+    const agents = screen.getByRole("navigation", { name: "Detected Agents" });
     expect(
-      screen.getByRole("button", { name: "Expand plugin-marketplace Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
+      within(agents).getByRole("button", { name: /Open plugin-index Agent/ }),
+    ).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Open Action Palette" }),
     );
     await user.type(screen.getByRole("combobox"), "plugin-index");
     await user.keyboard("{Enter}");
     expect(
-      screen.getByRole("button", { name: "Collapse plugin-marketplace Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
+      screen.getByRole("button", { name: "Open plugin-marketplace Space" }),
+    ).toHaveAttribute("aria-current", "page");
     expect(
       screen.getByRole("button", { name: /Open plugin-index Agent/ }),
     ).toHaveAttribute("aria-current", "page");
@@ -576,10 +727,9 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
 
   test("previews, cancels, and creates a new Space safely", async () => {
     const user = renderApp();
-    const trigger = screen.getByRole("button", { name: "Open menu" });
+    const trigger = screen.getByRole("button", { name: "Create a new Space" });
 
     await user.click(trigger);
-    await user.click(screen.getByRole("menuitem", { name: "New Space" }));
     await user.type(screen.getByLabelText("Directory"), "/repo/cancelled");
     expect(
       within(screen.getByRole("region", { name: "Space preview" })).getByText(
@@ -593,7 +743,6 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     ).not.toBeInTheDocument();
 
     await user.click(trigger);
-    await user.click(screen.getByRole("menuitem", { name: "New Space" }));
     await user.type(screen.getByLabelText("Directory"), "/repo/web-tool/");
     await user.type(screen.getByLabelText(/Label/), "Web tool");
     await user.click(screen.getByRole("button", { name: "Create Space" }));
@@ -706,6 +855,104 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     expect(screen.getByText("review.png")).toBeVisible();
   });
 
+  test("preserves Agent drafts and images across Spaces, Agents, and mobile menu cycles", async () => {
+    const user = renderApp();
+    await user.type(
+      screen.getByRole("textbox", { name: "Message api-review" }),
+      "review across Spaces",
+    );
+    fireEvent.paste(window, {
+      clipboardData: {
+        files: [new File(["png"], "review-space.png", { type: "image/png" })],
+        items: [],
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Open herdr.dev Space" }),
+    );
+    const docsMessage = screen.getByRole("textbox", {
+      name: "Message agent-guide",
+    });
+    expect(docsMessage).toHaveValue("");
+    expect(screen.queryByText("review-space.png")).not.toBeInTheDocument();
+    await user.type(docsMessage, "docs across Spaces");
+    fireEvent.paste(window, {
+      clipboardData: {
+        files: [new File(["png"], "docs-space.png", { type: "image/png" })],
+        items: [],
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: /Open api-review Agent/ }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Message api-review" }),
+    ).toHaveValue("review across Spaces");
+    expect(screen.getByText("review-space.png")).toBeVisible();
+    expect(screen.queryByText("docs-space.png")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const navigation = screen.getByRole("dialog", {
+      name: "Navigate workbench",
+    });
+    await user.click(
+      within(navigation).getByRole("button", {
+        name: /Open agent-guide Agent/,
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Navigate workbench" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message agent-guide" }),
+    ).toHaveValue("docs across Spaces");
+    expect(screen.getByText("docs-space.png")).toBeVisible();
+    expect(screen.queryByText("review-space.png")).not.toBeInTheDocument();
+
+    for (const name of ["Settings", "Attention Inbox"]) {
+      await user.click(screen.getByRole("button", { name: "Open navigation" }));
+      const mobile = screen.getByRole("dialog", { name: "Navigate workbench" });
+      await user.click(
+        within(mobile).getByRole("button", { name: "Open menu" }),
+      );
+      await user.click(
+        screen.getByRole("menuitem", {
+          name:
+            name === "Attention Inbox" ? "Open Attention Inbox, 2 items" : name,
+        }),
+      );
+      expect(
+        screen.queryByRole("dialog", { name: "Navigate workbench" }),
+      ).not.toBeInTheDocument();
+      const dialog = screen.getByRole("dialog", { name });
+      await user.click(
+        within(dialog).getByRole("button", {
+          name: name === "Settings" ? "Cancel" : "Close dialog",
+        }),
+      );
+      expect(
+        screen.getByRole("textbox", { name: "Message agent-guide" }),
+      ).toHaveValue("docs across Spaces");
+      expect(screen.getByText("docs-space.png")).toBeVisible();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const reopened = screen.getByRole("dialog", { name: "Navigate workbench" });
+    await user.click(
+      within(reopened).getByRole("button", { name: "Open herdr Space" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    const actions = screen.getByRole("dialog", { name: "More actions" });
+    await user.click(
+      within(actions).getByRole("button", { name: "Close dialog" }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Message api-review" }),
+    ).toHaveValue("review across Spaces");
+    expect(screen.getByText("review-space.png")).toBeVisible();
+    expect(screen.queryByText("docs-space.png")).not.toBeInTheDocument();
+  });
+
   test("keeps drafts when navigation temporarily has no session to render", async () => {
     const state = createDemoState();
     state.workspaces.push({
@@ -805,10 +1052,11 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
   test("opens Attention Inbox previews and Mission Control without replacing the terminal", async () => {
     const user = renderApp();
 
-    const inboxTrigger = screen.getByRole("button", {
-      name: /Open Attention Inbox/,
-    });
+    const inboxTrigger = screen.getByRole("button", { name: "Open menu" });
     await user.click(inboxTrigger);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 2 items" }),
+    );
     const inbox = screen.getByRole("dialog", { name: "Attention Inbox" });
     expect(within(inbox).getByRole("document")).toHaveTextContent(
       "Decision needed",
@@ -1189,13 +1437,15 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     });
     const user = userEvent.setup();
     render(<App initialState={state} live={false} />);
-    const list = screen.getByRole("list", { name: "herdr Agents" });
+    const list = screen.getByRole("navigation", { name: "Detected Agents" });
     const row = within(list).getByRole("button", {
-      name: `Open ${label} Agent in herdr, Working`,
+      name: `Open ${label} Agent in herdr, Working, ${agent.runtime}`,
     });
     row.focus();
     expect(row).toHaveFocus();
-    expect(within(row).getByText(label)).toBeVisible();
+    expect(row).toHaveAttribute("title", expect.stringContaining(label));
+    expect(within(row).getByText(/herdr/)).toBeVisible();
+    expect(within(row).getByText(agent.runtime)).toBeVisible();
     expect(
       within(list).queryByRole("button", { name: /standalone shell/ }),
     ).not.toBeInTheDocument();
@@ -1242,10 +1492,11 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     const user = userEvent.setup();
     render(<App initialState={state} live={false} />);
     expect(
-      screen.getByRole("button", { name: "Expand herdr.dev Space" }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.getByRole("button", { name: /Open agent-guide Agent/ }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
     await user.click(
-      screen.getByRole("button", { name: "Open Attention Inbox, 3 items" }),
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 3 items" }),
     );
     const inbox = screen.getByRole("dialog", { name: "Attention Inbox" });
     await user.click(
@@ -1254,8 +1505,8 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     const open = within(inbox).getByRole("button", { name: "Open Agent" });
     await user.click(open);
     expect(
-      screen.getByRole("button", { name: "Collapse herdr.dev Space" }),
-    ).toHaveAttribute("aria-expanded", "true");
+      screen.getByRole("button", { name: "Open herdr.dev Space" }),
+    ).toHaveAttribute("aria-current", "page");
     expect(
       screen.getByRole("button", { name: /Open agent-guide Agent/ }),
     ).toHaveAttribute("aria-current", "page");
@@ -1263,8 +1514,9 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
 
   test("updates the compact attention count after review and snooze", async () => {
     const user = renderApp();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
     await user.click(
-      screen.getByRole("button", { name: "Open Attention Inbox, 2 items" }),
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 2 items" }),
     );
     const inbox = screen.getByRole("dialog", { name: "Attention Inbox" });
     await user.click(
@@ -1273,8 +1525,12 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
     await user.click(
       within(inbox).getByRole("button", { name: "Close dialog" }),
     );
+    expect(
+      screen.getByRole("button", { name: "Open menu" }),
+    ).toHaveAccessibleDescription("Attention Inbox, 1 items");
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
     await user.click(
-      screen.getByRole("button", { name: "Open Attention Inbox, 1 items" }),
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 1 items" }),
     );
     const reopened = screen.getByRole("dialog", { name: "Attention Inbox" });
     await user.click(
@@ -1284,7 +1540,11 @@ describe("herdr-web terminal-first workbench", { timeout: 30_000 }, () => {
       within(reopened).getByRole("button", { name: "Close dialog" }),
     );
     expect(
-      screen.getByRole("button", { name: "Open Attention Inbox, 0 items" }),
+      screen.getByRole("button", { name: "Open menu" }),
+    ).toHaveAccessibleDescription("Attention Inbox, 0 items");
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Open Attention Inbox, 0 items" }),
     ).toBeVisible();
   });
 

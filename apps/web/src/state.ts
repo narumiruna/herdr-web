@@ -65,6 +65,10 @@ export interface Agent {
   started: string;
   tabId?: string;
   tabNumber?: number;
+  tabOrder?: number;
+  tabLabel?: string;
+  tabCustomLabel?: boolean;
+  stateChangeSeq?: number;
   updated: string;
   contextPercent?: number;
   filesChanged: number;
@@ -527,6 +531,8 @@ export function appReducer(state: HerdrState, action: HerdrAction): HerdrState {
       return updateAgent(state, action.agentId, (agent) => ({
         ...agent,
         label,
+        tabLabel: label,
+        tabCustomLabel: true,
         panes: agent.panes.map((pane) =>
           pane.id === agent.activePaneId ? { ...pane, title: label } : pane,
         ),

@@ -337,6 +337,21 @@ for (const { browserColor, label, theme } of cleanThemes) {
         (element) => getComputedStyle(element).backgroundImage,
       ),
     ).toContain(colors.accent);
+    const sectionDivider = page.getByRole("separator", {
+      name: "Resize Spaces and Agents panels",
+    });
+    await sectionDivider.hover();
+    expect(
+      await sectionDivider.evaluate(
+        (element) => getComputedStyle(element).backgroundImage,
+      ),
+    ).toContain(colors.accent);
+    await sectionDivider.focus();
+    expect(
+      await sectionDivider.evaluate(
+        (element) => getComputedStyle(element).backgroundImage,
+      ),
+    ).toContain(colors.accent);
     const bounds = await navigation.boundingBox();
     if (!bounds) throw new Error("Navigation separator is not visible");
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 100);
