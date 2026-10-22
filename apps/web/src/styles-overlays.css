@@ -651,12 +651,33 @@
   align-items: center;
   gap: 6px;
   margin: 0;
-  overflow: hidden;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
   color: var(--ink-secondary);
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+}
+.details-directory code {
+  min-width: 0;
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+.details-directory .workspace-copy-cwd {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+.details-directory [role="alert"] {
+  color: var(--red-11);
 }
 .details-connection i {
   margin-left: 2px;

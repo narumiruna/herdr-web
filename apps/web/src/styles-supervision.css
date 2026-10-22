@@ -805,8 +805,7 @@ html[data-reduced-motion="true"] .workspace-chevron {
   transition: none;
 }
 html[data-reduced-motion="true"] .xterm-viewport,
-html[data-reduced-motion="true"] .sidebar-viewport,
-html[data-reduced-motion="true"] .agent-panel-viewport {
+html[data-reduced-motion="true"] .sidebar-viewport {
   scroll-behavior: auto;
 }
 
@@ -842,8 +841,5 @@ html[data-reduced-motion="true"] .agent-panel-viewport {
   }
   .mission-control-grid {
     grid-template-columns: 1fr;
-  }
-  .topbar-actions .desktop-mission-control {
-    display: none;
   }
 }

@@ -1,23 +1,3 @@
-@media (max-width: 1280px) {
-  :where(.session-tabs[data-combined="true"]) .work-status-summary {
-    display: none;
-  }
-}
-
-@media (max-width: 1100px) {
-  .connection-state,
-  .topbar-context > strong {
-    display: none;
-  }
-  .work-status-summary {
-    gap: 8px;
-  }
-  :where(.session-tabs[data-combined="true"]) > .topbar-context {
-    flex-basis: 0;
-    padding-left: 0;
-  }
-}
-
 @media (max-width: 840px) {
   .app-shell,
   .connection-screen,
@@ -44,48 +24,29 @@
   .session-tabs[data-combined="true"] .mobile-nav-trigger {
     display: inline-flex;
   }
-  :where(.session-tabs[data-combined="true"]) > .topbar-context {
-    max-width: none;
+  .session-tabs[data-combined="true"] > .topbar-context {
+    max-width: 180px;
+    flex: 0 1 180px;
+    gap: 4px;
+    padding-left: 8px;
+  }
+  .session-tabs[data-combined="true"] .mobile-nav-trigger {
     flex: 0 0 auto;
-    padding-left: 12px;
-  }
-  .session-tabs[data-combined="true"]
-    .topbar-actions
-    :is(.desktop-details, .desktop-appearance, .desktop-mission-control) {
-    display: none;
-  }
-  .topbar-context .mobile-brand-mark {
-    display: inline-flex;
-  }
-  .mobile-brand-mark .brand-mark {
-    width: 28px;
-    height: 28px;
-  }
-  .topbar-context {
-    gap: 7px;
-  }
-  .topbar-context > strong {
-    display: block;
-  }
-  .spaces-actions {
-    min-height: 52px;
   }
   .spaces-actions button,
-  .agent-sort-control .rt-SegmentedControlItem {
-    min-height: 44px;
-  }
-  .spaces-actions button {
+  .sidebar-menu .rt-DropdownMenuItem {
     min-width: 44px;
-    justify-content: center;
+    min-height: 44px;
   }
   .workspace-item,
   .worktree-item {
     min-height: 44px;
   }
-  .agent-panel-heading {
-    min-height: 52px;
+  .workspace-tree-heading {
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
-  .agent-sort-control {
+  .workspace-group-toggle {
+    width: 44px;
     height: 44px;
   }
   .main-workspace {
@@ -102,21 +63,6 @@
   }
 }
 
-@media (max-width: 700px) {
-  .topbar-action-group {
-    display: contents;
-  }
-  .topbar-actions .desktop-new-agent,
-  .topbar-actions .desktop-details,
-  .topbar-actions .desktop-appearance,
-  .topbar-actions .desktop-notifications {
-    display: none;
-  }
-  .topbar-actions .mobile-more-trigger {
-    display: inline-flex;
-  }
-}
-
 @media (max-width: 620px) {
   .dialog-content {
     max-width: calc(
@@ -129,15 +75,29 @@
     gap: 8px;
     padding: env(safe-area-inset-top) 8px 0;
   }
-  .topbar-context > strong,
-  .session-tabs[data-combined="true"] .topbar-context > .mobile-brand-mark {
+  .session-tabs[data-combined="true"] > .topbar-context {
+    max-width: 108px;
+    flex: 0 0 108px;
+    padding-left: 2px;
+  }
+  .session-tabs[data-combined="true"] > .topbar-actions {
+    gap: 2px;
+    padding-right: 4px;
+  }
+  .session-tabs[data-combined="true"] .session-tabs-list {
+    padding-inline: 4px;
+  }
+  .session-tabs[data-combined="true"] .session-tabs-controls {
     display: none;
   }
-  .topbar-actions {
-    gap: 5px;
+  .session-tabs[data-combined="true"] .session-tab {
+    max-width: calc(100vw - 210px);
+    gap: 4px;
+    padding-inline: 6px;
   }
-  .work-status-summary {
-    display: none;
+  .session-tabs .session-tab-status .status-pill {
+    gap: 0;
+    font-size: 0;
   }
   .topbar-actions > .rt-Button {
     min-height: 44px;
@@ -165,24 +125,9 @@
     gap: 8px;
     padding: 9px 8px max(8px, env(safe-area-inset-bottom));
   }
-  .workspace-copy-cwd {
-    width: 44px;
-    height: 44px;
-    padding: 0;
-  }
-  .terminal-toolbar-location {
-    max-width: none;
-  }
-  .terminal-toolbar-branch,
   .terminal-toolbar-title,
   .terminal-status-detail {
     display: none;
-  }
-  .workspace-cwd-full {
-    display: none;
-  }
-  .workspace-cwd-compact {
-    display: inline;
   }
   .attention-banner {
     min-height: 42px;
@@ -200,12 +145,9 @@
     min-height: 44px;
     padding-inline: 10px;
   }
-  .agent-progress-copy small {
-    display: none;
-  }
   .agent-progress-summary dl {
     grid-template-columns: minmax(0, 1fr);
-    padding-inline: 33px 10px;
+    padding-inline: 10px;
   }
   .terminal-shell {
     min-height: 0;
@@ -253,15 +195,6 @@
   }
   .connection-form {
     flex-direction: column;
-  }
-}
-
-@media (max-height: 600px) {
-  .sidebar-sections {
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-  }
-  .sidebar-section-resize-handle {
-    display: none;
   }
 }
 

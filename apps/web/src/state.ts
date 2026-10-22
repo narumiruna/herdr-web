@@ -66,7 +66,7 @@ export interface Agent {
   tabId?: string;
   tabNumber?: number;
   updated: string;
-  contextPercent: number;
+  contextPercent?: number;
   filesChanged: number;
   additions: number;
   deletions: number;

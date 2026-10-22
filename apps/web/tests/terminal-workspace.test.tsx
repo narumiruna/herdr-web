@@ -1,8 +1,15 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Theme } from "@radix-ui/themes";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { DropdownMenu } from "radix-ui";
+import { type ReactNode, useState } from "react";
 import { describe, expect, test, vi } from "vitest";
 import {
   type ComposerDraft,
@@ -17,8 +24,24 @@ import {
 import { HerdrMutationError } from "../src/use-herdr-runtime";
 
 vi.mock("../src/components/InteractiveTerminal", () => ({
-  InteractiveTerminal: ({ paneId }: { paneId: string }) => (
-    <div data-testid={`interactive-${paneId}`} />
+  InteractiveTerminal: ({
+    paneId,
+    toolbarContext,
+    overflowActions,
+  }: {
+    paneId: string;
+    toolbarContext: ReactNode;
+    overflowActions: ReactNode;
+  }) => (
+    <div data-testid={`interactive-${paneId}`}>
+      {toolbarContext}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>More terminal actions</DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>{overflowActions}</DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
   ),
 }));
 
@@ -30,6 +53,14 @@ function demoAgent(): Agent {
   return structuredClone(agent);
 }
 
+function deferredMutation() {
+  let reject = (_error: Error) => {};
+  const promise = new Promise<void>((_resolve, decline) => {
+    reject = decline;
+  });
+  return { promise, reject };
+}
+
 interface HarnessProps {
   actionsEnabled?: boolean;
   agent?: Agent;
@@ -38,6 +69,7 @@ interface HarnessProps {
     image?: File,
     uploadedPath?: string,
   ) => Promise<{ uploadedPath?: string }>;
+  onClosePane?: (paneId: string) => void | Promise<void>;
   onResizePanes?: (ratio: number) => void | Promise<void>;
   onRetryOutput?: () => void;
   onSelectPane?: (paneId: string) => void;
@@ -49,6 +81,7 @@ function Harness({
   actionsEnabled = true,
   agent = demoAgent(),
   onMessage = async () => ({}),
+  onClosePane = () => undefined,
   onResizePanes = () => undefined,
   onRetryOutput = () => undefined,
   onSelectPane = () => undefined,
@@ -98,7 +131,7 @@ function Harness({
           onSplitPane={onSplitPane}
           onTerminalFontSizeChange={() => undefined}
           onSelectPane={onSelectPane}
-          onClosePane={() => undefined}
+          onClosePane={onClosePane}
           onUploadImage={async () => ({
             mediaType: "image/png",
             path: "/home/user/.herdr-web/uploads/test.png",
@@ -203,7 +236,7 @@ describe("TerminalWorkspace snapshot frames", () => {
 });
 
 describe("TerminalWorkspace decision states", () => {
-  test("exposes branch text without action semantics and labels icon actions", async () => {
+  test("exposes branch text without action semantics and discloses pane actions", async () => {
     render(<Harness />);
 
     const branch = screen.getByTitle("Branch: feat/web-bridge");
@@ -212,21 +245,25 @@ describe("TerminalWorkspace decision states", () => {
     expect(branch).not.toHaveAttribute("tabindex");
     expect(branch).toHaveTextContent("Branch: feat/web-bridge");
 
-    const copy = screen.getByRole("button", {
-      name: "Copy current working directory",
-    });
-    copy.focus();
     expect(
-      await screen.findByRole("tooltip", {
-        name: "Copy current working directory",
-      }),
-    ).toBeVisible();
-
-    const split = screen.getByRole("button", { name: "Split pane" });
-    split.focus();
+      screen.queryByRole("button", { name: "Copy current working directory" }),
+    ).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("tooltip", { name: "Split pane" }),
+      screen.queryByRole("button", { name: "Split pane" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Current working directory:/),
+    ).not.toBeInTheDocument();
+    const more = screen.getByRole("button", { name: "More terminal actions" });
+    more.focus();
+    expect(
+      await screen.findByRole("tooltip", { name: "More terminal actions" }),
     ).toBeVisible();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(
+      screen.getByRole("menuitem", { name: "Focus this pane" }),
+    ).toHaveFocus();
+    expect(screen.getByRole("menuitem", { name: "Split right" })).toBeVisible();
   });
 
   test("prefers clipboard files, falls back to items, and leaves text paste alone", () => {
@@ -396,11 +433,303 @@ describe("TerminalWorkspace decision states", () => {
     render(<Harness onSplitPane={onSplitPane} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Split pane" }));
+    await user.click(
+      screen.getByRole("button", { name: "More terminal actions" }),
+    );
     expect(screen.getByRole("menuitem", { name: "Split right" })).toBeVisible();
     await user.click(screen.getByRole("menuitem", { name: "Split down" }));
 
     expect(onSplitPane).toHaveBeenCalledWith("down");
+  });
+
+  test("keeps pane mutations unavailable with viewer access", async () => {
+    const onSplitPane = vi.fn();
+    render(<Harness actionsEnabled={false} onSplitPane={onSplitPane} />);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "More terminal actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Split right" }),
+    ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByRole("menuitem", { name: "Split down" }),
+    ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByRole("menuitem", { name: "Focus this pane" }),
+    ).not.toHaveAttribute("data-disabled");
+    expect(onSplitPane).not.toHaveBeenCalled();
+  });
+
+  test("shows uncertain split failures without offering an automatic retry", async () => {
+    const onSplitPane = vi
+      .fn()
+      .mockRejectedValue(new HerdrMutationError("Network lost", "unknown"));
+    render(<Harness onSplitPane={onSplitPane} />);
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "More terminal actions" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Split right" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The split result could not be confirmed. Refresh before trying again.",
+    );
+    expect(onSplitPane).toHaveBeenCalledOnce();
+  });
+
+  test.each(["rejected", "unknown"] as const)(
+    "keeps a deferred %s split failure with its originating Agent",
+    async (outcome) => {
+      const first = demoAgent();
+      const second = { ...demoAgent(), id: "second-agent" };
+      const pending = deferredMutation();
+      const onSplitPane = vi.fn(() => pending.promise);
+      const { rerender } = render(
+        <Harness agent={first} onSplitPane={onSplitPane} terminalStreaming />,
+      );
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByRole("button", { name: "More terminal actions" }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: "Split right" }));
+      const terminal = screen.getByTestId(`interactive-${first.panes[0].id}`);
+
+      rerender(
+        <Harness agent={second} onSplitPane={onSplitPane} terminalStreaming />,
+      );
+      await act(async () => {
+        pending.reject(new HerdrMutationError("Split rejected", outcome));
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByTestId(`interactive-${first.panes[0].id}`)).toBe(
+        terminal,
+      );
+
+      rerender(
+        <Harness agent={first} onSplitPane={onSplitPane} terminalStreaming />,
+      );
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(
+        outcome === "unknown"
+          ? "The split result could not be confirmed. Refresh before trying again."
+          : "Split rejected",
+      );
+      expect(alert.querySelector("button")).toBeNull();
+      expect(onSplitPane).toHaveBeenCalledOnce();
+      expect(screen.getByTestId(`interactive-${first.panes[0].id}`)).toBe(
+        terminal,
+      );
+    },
+  );
+
+  test("isolates pending resize ratios and deferred failures across Agents", async () => {
+    const first = demoAgent();
+    first.panes.push({
+      id: "shell",
+      title: "shell",
+      command: "zsh",
+      lines: [],
+    });
+    first.paneSplit = { direction: "right", ratio: 0.5 };
+    const second: Agent = {
+      ...structuredClone(first),
+      id: "second-agent",
+      paneSplit: { direction: "right", ratio: 0.7 },
+    };
+    const firstPending = deferredMutation();
+    const secondPending = deferredMutation();
+    const onResizeFirst = vi.fn(() => firstPending.promise);
+    const onResizeSecond = vi.fn(() => secondPending.promise);
+    const view = (agent: Agent, onResizePanes: () => Promise<void>) => (
+      <Harness agent={agent} onResizePanes={onResizePanes} terminalStreaming />
+    );
+    const { rerender } = render(view(first, onResizeFirst));
+    const separator = () =>
+      screen.getByRole("separator", { name: "Resize terminal panes" });
+    const firstTerminal = screen.getByTestId(
+      `interactive-${first.panes[0].id}`,
+    );
+    const secondTerminal = screen.getByTestId("interactive-shell");
+    fireEvent.keyDown(separator(), { key: "ArrowRight" });
+    expect(separator()).toHaveAttribute("aria-valuenow", "55");
+    expect(separator()).toHaveAttribute("aria-disabled", "true");
+
+    rerender(view(second, onResizeSecond));
+    expect(separator()).toHaveAttribute("aria-valuenow", "70");
+    expect(separator()).toHaveAttribute("aria-disabled", "false");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    rerender(view(first, onResizeFirst));
+    expect(separator()).toHaveAttribute("aria-valuenow", "55");
+    expect(separator()).toHaveAttribute("aria-disabled", "true");
+    rerender(view(second, onResizeSecond));
+    fireEvent.keyDown(separator(), { key: "ArrowRight" });
+    expect(separator()).toHaveAttribute("aria-valuenow", "75");
+    expect(separator()).toHaveAttribute("aria-disabled", "true");
+
+    await act(async () => {
+      firstPending.reject(new HerdrMutationError("Network lost", "unknown"));
+    });
+    expect(separator()).toHaveAttribute("aria-valuenow", "75");
+    expect(separator()).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId(`interactive-${first.panes[0].id}`)).toBe(
+      firstTerminal,
+    );
+    expect(screen.getByTestId("interactive-shell")).toBe(secondTerminal);
+
+    await act(async () => {
+      secondPending.reject(new Error("Second resize rejected"));
+    });
+    expect(separator()).toHaveAttribute("aria-valuenow", "70");
+    expect(separator()).toHaveAttribute("aria-disabled", "false");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Second resize rejected",
+    );
+
+    rerender(view(first, onResizeFirst));
+    expect(separator()).toHaveAttribute("aria-valuenow", "50");
+    expect(separator()).toHaveAttribute("aria-disabled", "false");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The resize result could not be confirmed. Refresh before trying again.",
+    );
+    expect(screen.getByRole("alert").querySelector("button")).toBeNull();
+    expect(onResizeFirst).toHaveBeenCalledOnce();
+    expect(onResizeSecond).toHaveBeenCalledOnce();
+  });
+
+  test("ends a resize drag on Agent navigation without replacing terminals", () => {
+    const first = demoAgent();
+    first.panes.push({
+      id: "shell",
+      title: "shell",
+      command: "zsh",
+      lines: [],
+    });
+    first.paneSplit = { direction: "right", ratio: 0.5 };
+    const second: Agent = {
+      ...structuredClone(first),
+      id: "second-agent",
+      paneSplit: { direction: "right", ratio: 0.7 },
+    };
+    const onResizePanes = vi.fn();
+    const { rerender } = render(
+      <Harness agent={first} onResizePanes={onResizePanes} terminalStreaming />,
+    );
+    const terminal = screen.getByTestId("interactive-shell");
+    fireEvent.pointerDown(
+      screen.getByRole("separator", { name: "Resize terminal panes" }),
+      { button: 0, clientX: 0, pointerId: 1 },
+    );
+    expect(terminal.closest(".pane-grid")).toHaveAttribute(
+      "data-resizing",
+      "true",
+    );
+    rerender(
+      <Harness
+        agent={second}
+        onResizePanes={onResizePanes}
+        terminalStreaming
+      />,
+    );
+    const separator = screen.getByRole("separator", {
+      name: "Resize terminal panes",
+    });
+    expect(separator).toHaveAttribute("aria-valuenow", "70");
+    expect(separator).toHaveAttribute("aria-disabled", "false");
+    expect(terminal.closest(".pane-grid")).toHaveAttribute(
+      "data-resizing",
+      "false",
+    );
+    fireEvent.pointerUp(separator, { clientX: 0, pointerId: 1 });
+    expect(onResizePanes).not.toHaveBeenCalled();
+    expect(screen.getByTestId("interactive-shell")).toBe(terminal);
+    rerender(
+      <Harness agent={first} onResizePanes={onResizePanes} terminalStreaming />,
+    );
+    expect(
+      screen.getByRole("separator", { name: "Resize terminal panes" }),
+    ).toHaveAttribute("aria-valuenow", "50");
+    expect(terminal.closest(".pane-grid")).toHaveAttribute(
+      "data-resizing",
+      "false",
+    );
+  });
+
+  test.each([false, true])(
+    "keeps close confirmation and uncertain results reachable (streaming: %s)",
+    async (terminalStreaming) => {
+      const agent = demoAgent();
+      agent.panes.push({
+        id: "shell",
+        title: "shell",
+        command: "zsh",
+        lines: [],
+      });
+      const onClosePane = vi
+        .fn()
+        .mockRejectedValue(new HerdrMutationError("Network lost", "unknown"));
+      render(
+        <Harness
+          agent={agent}
+          onClosePane={onClosePane}
+          terminalStreaming={terminalStreaming}
+        />,
+      );
+      const user = userEvent.setup();
+      await user.click(
+        screen.getAllByRole("button", { name: "More terminal actions" })[0],
+      );
+      expect(
+        screen.getByRole("menuitem", { name: "Split right" }),
+      ).toHaveAttribute("data-disabled");
+      await user.click(
+        screen.getByRole("menuitem", {
+          name: `Close ${agent.panes[0].title} pane`,
+        }),
+      );
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      expect(cancel).toHaveFocus();
+      await user.click(
+        screen.getByRole("button", { name: "Confirm close pane" }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The close result could not be confirmed. Refresh before trying again.",
+      );
+      expect(onClosePane).toHaveBeenCalledWith(agent.panes[0].id);
+      await user.click(cancel);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
+
+  test("keeps branch only in the active streaming pane without replacing terminals", () => {
+    const agent = demoAgent();
+    agent.panes[0].cwd = "/repo/first";
+    agent.panes.push({
+      id: "shell",
+      title: "shell",
+      command: "zsh",
+      cwd: "/repo/second",
+      lines: [],
+    });
+    const { rerender } = render(<Harness agent={agent} terminalStreaming />);
+    const first = screen.getByTestId(`interactive-${agent.panes[0].id}`);
+    const second = screen.getByTestId("interactive-shell");
+    expect(screen.getAllByTitle("Branch: feat/web-bridge")).toHaveLength(1);
+    expect(first).toContainElement(
+      screen.getByTitle("Branch: feat/web-bridge"),
+    );
+    expect(screen.queryByText("/repo/first")).not.toBeInTheDocument();
+    expect(screen.queryByText("/repo/second")).not.toBeInTheDocument();
+    agent.activePaneId = "shell";
+    rerender(<Harness agent={{ ...agent }} terminalStreaming />);
+    expect(screen.getByTestId(`interactive-${agent.panes[0].id}`)).toBe(first);
+    expect(screen.getByTestId("interactive-shell")).toBe(second);
+    expect(second).toContainElement(
+      screen.getByTitle("Branch: feat/web-bridge"),
+    );
+    expect(screen.getAllByTitle("Branch: feat/web-bridge")).toHaveLength(1);
+    expect(
+      screen.getByRole("tablist", { name: "Session panes" }),
+    ).toBeVisible();
   });
 
   test("previews and commits a pane ratio with mouse dragging", async () => {
@@ -510,8 +839,9 @@ describe("TerminalWorkspace decision states", () => {
     const user = userEvent.setup();
 
     await user.click(
-      screen.getAllByRole("button", { name: "Focus this pane" })[0],
+      screen.getByRole("button", { name: "More terminal actions" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Focus this pane" }));
 
     expect(screen.getByRole("main")).toHaveAttribute("data-focus-mode", "true");
     expect(
@@ -554,6 +884,7 @@ describe("TerminalWorkspace decision states", () => {
       expect(separator).toHaveAttribute("aria-valuenow", "50"),
     );
     expect(onResizePanes).toHaveBeenCalledWith(0.55);
+    expect(screen.getByRole("alert")).toHaveTextContent("rejected");
   });
 
   test("uses a keyboard-accessible pane selector for externally-created extra panes", async () => {

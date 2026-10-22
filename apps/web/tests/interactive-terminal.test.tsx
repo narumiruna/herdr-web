@@ -1,9 +1,11 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { DropdownMenu } from "radix-ui";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { EMPTY_COMPOSER_DRAFT } from "../src/components/TerminalWorkspace";
+import { HerdrMutationError } from "../src/use-herdr-runtime";
 
 const xterm = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -211,7 +213,8 @@ async function renderTerminal(overrides: Record<string, unknown> = {}) {
   return { ...view, createTicket, onUploadImage, props, rerender, socket };
 }
 
-describe("InteractiveTerminal", () => {
+// Keep DOM integration checks bounded without failing on shared-host CPU load.
+describe("InteractiveTerminal", { timeout: 30_000 }, () => {
   test("waits for Unicode activation but not optional WebGL before connecting", async () => {
     let resolveUnicode: (() => void) | undefined;
     renderer.unicodeReady = new Promise<void>((resolve) => {
@@ -510,6 +513,112 @@ describe("InteractiveTerminal", () => {
       "herdr-pane-w5:p1",
       "popup,noopener,noreferrer",
     );
+  });
+
+  test("keeps supplied pane actions in the existing overflow without restarting the stream", async () => {
+    const onFocus = vi.fn();
+    const onSplit = vi.fn();
+    const onClose = vi.fn();
+    const { socket, props, rerender } = await renderTerminal({
+      overflowActions: (
+        <>
+          <DropdownMenu.Item onSelect={onFocus}>
+            Focus this pane
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={onSplit}>Split right</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={onClose}>Close pane</DropdownMenu.Item>
+        </>
+      ),
+    });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const user = userEvent.setup();
+    expect(
+      screen.queryByRole("button", { name: "Focus this pane" }),
+    ).not.toBeInTheDocument();
+    const more = screen.getByRole("button", { name: "More terminal actions" });
+    more.focus();
+    await user.keyboard("{Enter}");
+    expect(
+      screen.getByRole("menuitem", { name: "Focus this pane" }),
+    ).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onFocus).toHaveBeenCalledOnce();
+    expect(more).toHaveFocus();
+    await user.click(more);
+    await user.click(screen.getByRole("menuitem", { name: "Split right" }));
+    expect(onSplit).toHaveBeenCalledOnce();
+    await user.click(more);
+    await user.click(screen.getByRole("menuitem", { name: "Close pane" }));
+    expect(onClose).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Search terminal" }));
+    const search = screen.getByRole("textbox", {
+      name: "Search terminal output",
+    });
+    expect(search).toHaveFocus();
+    await user.type(search, "hello");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
+    rerender(
+      <InteractiveTerminal
+        {...props}
+        toolbarContext={<span>Updated branch</span>}
+      />,
+    );
+    socket.message({ ...frame("continued"), full: false, seq: 2 });
+    expect(xterm.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(xterm.instances[0]?.write).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps an uncertain structured prompt visible without clearing its draft or resending", async () => {
+    const onPrompt = vi
+      .fn()
+      .mockRejectedValue(
+        new HerdrMutationError("Network lost", "unknown", undefined, "prompt"),
+      );
+    const { props, socket } = await renderTerminal({
+      draft: { ...EMPTY_COMPOSER_DRAFT, message: "Review the change" },
+      onPrompt,
+    });
+    socket.message(frame());
+    await screen.findByText("Interactive");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Prompt Agent" }));
+    expect(screen.getByRole("textbox", { name: "Instruction" })).toHaveValue(
+      "Review the change",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Send structured prompt" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Delivery could not be confirmed. Check the terminal before sending this prompt again.",
+    );
+    expect(onPrompt).toHaveBeenCalledOnce();
+    expect(props.onDraftChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Instruction" })).toHaveValue(
+      "Review the change",
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  test("shows stream failure and keeps reconnect reachable", async () => {
+    const { createTicket, socket } = await renderTerminal();
+    socket.message({
+      code: "terminal_unavailable",
+      message: "Pane output failed",
+      recoverable: true,
+      type: "terminal.error",
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Pane output failed",
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(createTicket).toHaveBeenCalledTimes(2));
+    expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
   test("enables deliberate screen-reader and reduced-motion terminal options", async () => {

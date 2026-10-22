@@ -76,7 +76,8 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-describe("live herdr-web app", () => {
+// Keep DOM integration checks bounded without failing on shared-host CPU load.
+describe("live herdr-web app", { timeout: 30_000 }, () => {
   test("requires an access token before reading herdr", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -154,13 +155,15 @@ describe("live herdr-web app", () => {
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
-    expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "New Agent in live-test" }),
     ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Create a new Space" }),
-    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    expect(screen.getByRole("menuitem", { name: "New Space" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.keyboard("{Escape}");
     expect(screen.getByLabelText("Message π - live-test")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
 
@@ -246,11 +249,14 @@ describe("live herdr-web app", () => {
     expect(
       screen.getByRole("button", { name: "Open live-test Space" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "New agent" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Start Agent" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Agents" })).toHaveTextContent(
-      "No detected Agents",
-    );
+    expect(
+      screen.getByRole("button", { name: "Open more actions" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "Agents" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("No detected Agents")).toBeVisible();
   });
 
   test("creates a Space through the authenticated bridge and selects it", async () => {
@@ -306,9 +312,8 @@ describe("live herdr-web app", () => {
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
-    await user.click(
-      screen.getByRole("button", { name: "Create a new Space" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "New Space" }));
     await user.type(screen.getByLabelText("Directory"), "/repo/new");
     await user.type(screen.getByLabelText(/Label/), "new");
     await user.click(screen.getByRole("button", { name: "Create Space" }));
@@ -347,9 +352,8 @@ describe("live herdr-web app", () => {
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
-    await user.click(
-      screen.getByRole("button", { name: "Create a new Space" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "New Space" }));
     const directory = screen.getByRole("textbox", {
       name: /^Directory$/,
     });
@@ -394,7 +398,9 @@ describe("live herdr-web app", () => {
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
-    await user.click(screen.getByRole("button", { name: "New agent" }));
+    await user.click(
+      screen.getByRole("button", { name: "New Agent in live-test" }),
+    );
     await user.type(screen.getByLabelText("Agent name"), "background-agent");
     await user.click(screen.getByRole("button", { name: "Start agent" }));
 
@@ -434,10 +440,8 @@ describe("live herdr-web app", () => {
     render(<App live />);
 
     await screen.findByRole("tab", { name: /π - live-test.*Idle/i });
-    await user.click(
-      screen.getByRole("button", { name: "Session lifecycle actions" }),
-    );
-    await user.click(screen.getByText("Restart Agent"));
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    await user.click(screen.getByRole("button", { name: /^Restart Agent/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Restart blocked by Herdr",
@@ -461,6 +465,8 @@ describe("live herdr-web app", () => {
       ),
     );
 
+    const user = userEvent.setup();
+    const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     render(<App live />);
 
     expect(
@@ -472,7 +478,25 @@ describe("live herdr-web app", () => {
     expect(
       screen.queryByRole("tab", { name: /π - live-test.*Idle/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Message π - live-test")).toBeVisible();
+    const composer = screen.getByLabelText("Message π - live-test");
+    expect(composer).toBeVisible();
+    await user.type(composer, "detached draft");
+    const details = screen.getByRole("button", { name: "Execution details" });
+    await user.click(details);
+    const dialog = screen.getByRole("dialog", { name: "Execution details" });
+    expect(within(dialog).getByText("/repo")).toBeVisible();
+    expect(within(dialog).queryByText("Context")).not.toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Copy current working directory",
+      }),
+    );
+    expect(copy).toHaveBeenCalledWith("/repo");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close dialog" }),
+    );
+    await waitFor(() => expect(details).toHaveFocus());
+    expect(composer).toHaveValue("detached draft");
     expect(window.location.search).toBe("");
   });
 

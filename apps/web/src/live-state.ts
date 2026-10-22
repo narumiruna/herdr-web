@@ -165,6 +165,14 @@ function terminalPanes(
   });
 }
 
+function contextPercent(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const percent = Number(value);
+  return Number.isFinite(percent) && percent >= 0 && percent <= 100
+    ? percent
+    : undefined;
+}
+
 function currentStep(pane: LivePane, status: AgentStatus): string {
   return pane.state_labels?.[status] ?? pane.tokens?.summary ?? "";
 }
@@ -198,7 +206,9 @@ function mapAgent(
       Boolean(pane.agent) &&
       (status !== "blocked" || protocol < 20),
     contextPercent:
-      Number.parseInt(pane.tokens?.context_percent ?? "0", 10) || 0,
+      kind === "agent"
+        ? contextPercent(pane.tokens?.context_percent)
+        : undefined,
     currentStep: currentStep(pane, status),
     deletions: 0,
     filesChanged: 0,
@@ -227,7 +237,7 @@ function mapAgent(
     status,
     tabId: pane.tab_id,
     tabNumber: tab?.number,
-    summary: pane.tokens?.summary ?? label,
+    summary: pane.tokens?.summary ?? "",
     updated: `revision ${pane.revision}`,
     workspaceId: pane.workspace_id,
   };

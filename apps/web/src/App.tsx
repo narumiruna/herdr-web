@@ -2,10 +2,8 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
-  BellIcon,
   CheckCircledIcon,
   Cross2Icon,
-  DashboardIcon,
   DesktopIcon,
   DotsHorizontalIcon,
   HamburgerMenuIcon,
@@ -41,16 +39,12 @@ import { RadixDialog } from "./components/RadixDialog";
 import { RuntimeManagementDialog } from "./components/RuntimeManagementDialog";
 import { SessionDetails } from "./components/SessionDetails";
 import { SessionTabs } from "./components/SessionTabs";
-import { type AgentSortMode, Sidebar } from "./components/Sidebar";
+import { Sidebar } from "./components/Sidebar";
 import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR_WIDTH,
   SidebarResizeHandle,
 } from "./components/SidebarResizeHandle";
-import {
-  clampSidebarSpacesRatio,
-  DEFAULT_SIDEBAR_SPACES_RATIO,
-} from "./components/SidebarSectionResizeHandle";
 import {
   type ComposerDraft,
   EMPTY_COMPOSER_DRAFT,
@@ -168,13 +162,6 @@ export function App({
       return [];
     }
   });
-  const [agentSort, setAgentSort] = useState<AgentSortMode>(() => {
-    const saved =
-      typeof window.localStorage?.getItem === "function"
-        ? readProductStorage(window.localStorage, "agent-sort")
-        : null;
-    return saved === "priority" ? "priority" : "grouped";
-  });
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored =
       typeof window.localStorage?.getItem === "function"
@@ -184,16 +171,6 @@ export function App({
     return Number.isFinite(saved)
       ? clampSidebarWidth(saved)
       : DEFAULT_SIDEBAR_WIDTH;
-  });
-  const [sidebarSpacesRatio, setSidebarSpacesRatio] = useState(() => {
-    const stored =
-      typeof window.localStorage?.getItem === "function"
-        ? readProductStorage(window.localStorage, "sidebar-spaces-ratio")
-        : null;
-    const saved = stored === null ? Number.NaN : Number(stored);
-    return Number.isFinite(saved)
-      ? clampSidebarSpacesRatio(saved)
-      : DEFAULT_SIDEBAR_SPACES_RATIO;
   });
   const [terminalFontSize, setTerminalFontSize] = useState(() =>
     parseTerminalFontSize(
@@ -482,12 +459,6 @@ export function App({
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
-      writeProductStorage(window.localStorage, "agent-sort", agentSort);
-    }
-  }, [agentSort]);
-
-  useEffect(() => {
-    if (typeof window.localStorage?.setItem === "function") {
       writeProductStorage(
         window.localStorage,
         "platform-preferences",
@@ -535,16 +506,6 @@ export function App({
       );
     }
   }, [sidebarWidth]);
-
-  useEffect(() => {
-    if (typeof window.localStorage?.setItem === "function") {
-      writeProductStorage(
-        window.localStorage,
-        "sidebar-spaces-ratio",
-        String(sidebarSpacesRatio),
-      );
-    }
-  }, [sidebarSpacesRatio]);
 
   useEffect(() => {
     if (typeof window.localStorage?.setItem === "function") {
@@ -777,14 +738,6 @@ export function App({
     missionControlReturnFocus.current =
       returnFocus ?? (document.activeElement as HTMLElement | null);
     setMissionControlFilter(undefined);
-    setMissionControlOpen(true);
-  };
-  const openMissionControlFilter = (
-    filter: AgentStatus | "other",
-    returnFocus: HTMLElement,
-  ) => {
-    missionControlReturnFocus.current = returnFocus;
-    setMissionControlFilter(filter);
     setMissionControlOpen(true);
   };
   const openWorkflowsDialog = (returnFocus?: HTMLElement | null) => {
@@ -1299,6 +1252,28 @@ export function App({
     />
   );
 
+  const executionDetails = (session: NonNullable<typeof agent>) => {
+    const sessionWorkspace = state.workspaces.find(
+      ({ id }) => id === session.workspaceId,
+    );
+    if (!sessionWorkspace) return null;
+    return (
+      <RadixDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title="Execution details"
+        description="Real runtime and Space information for the focused session."
+        className="details-dialog"
+      >
+        <SessionDetails
+          agent={session}
+          workspace={sessionWorkspace}
+          connection={runtime.connection}
+        />
+      </RadixDialog>
+    );
+  };
+
   if (detachedAgent) {
     return (
       <Theme
@@ -1322,6 +1297,13 @@ export function App({
                 <strong>{detachedSession?.label}</strong>
                 <span>{detachedSelectedPane?.title}</span>
               </div>
+              <Button
+                variant="ghost"
+                color="gray"
+                onClick={(event) => openDetailsDialog(event.currentTarget)}
+              >
+                <InfoCircledIcon aria-hidden="true" /> Execution details
+              </Button>
               <span
                 className="connection-state"
                 data-state={runtime.connection}
@@ -1355,6 +1337,7 @@ export function App({
             )}
             {terminalWorkspace(detachedAgent)}
           </main>
+          {executionDetails(detachedAgent)}
         </Tooltip.Provider>
       </Theme>
     );
@@ -1372,122 +1355,15 @@ export function App({
       >
         <HamburgerMenuIcon />
       </IconButton>
-      <span className="mobile-brand-mark">
-        <HerdrWebLogo compact />
-      </span>
       <strong title={workspace?.name}>{workspace?.name ?? "herdr-web"}</strong>
+      <span className="context-separator" aria-hidden="true">
+        ›
+      </span>
     </div>
   );
 
   const workbenchHeaderActions = (
     <div className="topbar-actions">
-      <fieldset className="work-status-summary">
-        <legend className="sr-only">Agent status filters</legend>
-        <button
-          type="button"
-          data-kind="needs-input"
-          aria-label={`Filter Agents by Needs input, ${statusCounts.needsInput}`}
-          onClick={(event) =>
-            openMissionControlFilter("blocked", event.currentTarget)
-          }
-        >
-          <strong>{statusCounts.needsInput}</strong> needs input
-        </button>
-        {statusCounts.failed > 0 && (
-          <button
-            type="button"
-            data-kind="failed"
-            aria-label={`Filter Agents by Failed, ${statusCounts.failed}`}
-            onClick={(event) =>
-              openMissionControlFilter("failed", event.currentTarget)
-            }
-          >
-            <strong>{statusCounts.failed}</strong> failed
-          </button>
-        )}
-        <button
-          type="button"
-          data-kind="working"
-          aria-label={`Filter Agents by Working, ${statusCounts.working}`}
-          onClick={(event) =>
-            openMissionControlFilter("working", event.currentTarget)
-          }
-        >
-          <strong>{statusCounts.working}</strong> working
-        </button>
-        <button
-          type="button"
-          data-kind="completed"
-          aria-label={`Filter Agents by Done, ${statusCounts.completed}`}
-          onClick={(event) =>
-            openMissionControlFilter("done", event.currentTarget)
-          }
-        >
-          <strong>{statusCounts.completed}</strong> done
-        </button>
-        {statusCounts.unknown > 0 && (
-          <button
-            type="button"
-            data-kind="unknown"
-            aria-label={`Filter Agents by Other status, ${statusCounts.unknown}`}
-            onClick={(event) =>
-              openMissionControlFilter("other", event.currentTarget)
-            }
-          >
-            <strong>{statusCounts.unknown}</strong> other
-          </button>
-        )}
-      </fieldset>
-      <span className="topbar-action-group" data-kind="supervision">
-        <IconTooltip label="Attention Inbox">
-          <IconButton
-            type="button"
-            variant="soft"
-            color="gray"
-            className="desktop-notifications attention-inbox-trigger"
-            aria-label={`Open Attention Inbox, ${attention.groups.needsInput.length + attention.groups.failed.length + attention.groups.done.length} items`}
-            onClick={() => openAttentionDialog()}
-          >
-            <BellIcon />
-            {attention.groups.needsInput.length +
-              attention.groups.failed.length +
-              attention.groups.done.length >
-              0 && (
-              <span>
-                {attention.groups.needsInput.length +
-                  attention.groups.failed.length +
-                  attention.groups.done.length}
-              </span>
-            )}
-          </IconButton>
-        </IconTooltip>
-        <IconTooltip label="Mission Control">
-          <IconButton
-            type="button"
-            variant="soft"
-            color="gray"
-            className="desktop-mission-control"
-            aria-label="Open Mission Control"
-            onClick={() => openMissionControlDialog()}
-          >
-            <DashboardIcon />
-          </IconButton>
-        </IconTooltip>
-      </span>
-      {workspace && (
-        <span className="topbar-action-group" data-kind="creation">
-          <Button
-            type="button"
-            variant="soft"
-            color="gray"
-            className="desktop-new-agent"
-            disabled={!canStartAgent}
-            onClick={() => openSessionDialog()}
-          >
-            <PlusIcon /> New agent
-          </Button>
-        </span>
-      )}
       <button
         ref={commandTrigger}
         type="button"
@@ -1499,56 +1375,12 @@ export function App({
         <span>Actions</span>
         <kbd>⌘ K</kbd>
       </button>
-      <span className="topbar-action-group" data-kind="utilities">
-        {agent && (
-          <IconTooltip label="Session details">
-            <IconButton
-              type="button"
-              variant="soft"
-              color="gray"
-              className="desktop-details"
-              aria-label="Open details"
-              onClick={() => openDetailsDialog()}
-            >
-              <InfoCircledIcon />
-            </IconButton>
-          </IconTooltip>
-        )}
-        <IconTooltip
-          label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-        >
-          <IconButton
-            type="button"
-            variant="soft"
-            color="gray"
-            className="theme-toggle desktop-appearance"
-            aria-label={`Use ${appearance === "light" ? "dark" : "light"} appearance`}
-            onClick={() =>
-              setWorkbenchTheme((current) => toggleThemeAppearance(current))
-            }
-          >
-            {appearance === "light" ? <MoonIcon /> : <SunIcon />}
-          </IconButton>
-        </IconTooltip>
-        <span
-          className="connection-state"
-          data-state={runtime.connection}
-          title={
-            runtime.connection === "connected" ? "Connected" : "Reconnecting"
-          }
-        >
-          <i aria-hidden="true" />
-          <span className="sr-only">
-            {runtime.connection === "connected" ? "Connected" : "Reconnecting"}
-          </span>
-        </span>
-      </span>
       <IconButton
         ref={mobileMoreTrigger}
         type="button"
-        variant="soft"
+        variant="ghost"
         color="gray"
-        className="mobile-more-trigger"
+        className="workbench-more-trigger"
         aria-label="Open more actions"
         onClick={() => setMobileActionsOpen(true)}
       >
@@ -1576,11 +1408,12 @@ export function App({
           <div className="desktop-sidebar">
             <Sidebar
               state={state}
-              agentSort={agentSort}
+              attentionCount={
+                attention.groups.needsInput.length +
+                attention.groups.failed.length +
+                attention.groups.done.length
+              }
               canCreateSpace={canCreateSpace}
-              spacesRatio={sidebarSpacesRatio}
-              onAgentSortChange={setAgentSort}
-              onSpacesRatioChange={setSidebarSpacesRatio}
               onSelectWorkspace={selectWorkspace}
               onSelectAgent={selectAgent}
               onNewSpace={openNewSpaceDialog}
@@ -1750,14 +1583,7 @@ export function App({
                 sessions={workspaceTabs}
                 selectedId={agent.id}
                 canCreateSession={canStartAgent}
-                onAgentLifecycle={runAgentLifecycle}
-                onCloseSession={closeSession}
-                onMoveSession={moveSession}
                 onNewSession={openSessionDialog}
-                onNewTerminal={(returnFocus) =>
-                  void createTerminal(returnFocus)
-                }
-                onRenameSession={renameSession}
                 onSelect={selectAgent}
               >
                 {terminalWorkspace(agent)}
@@ -1939,11 +1765,12 @@ export function App({
         >
           <Sidebar
             state={state}
-            agentSort={agentSort}
+            attentionCount={
+              attention.groups.needsInput.length +
+              attention.groups.failed.length +
+              attention.groups.done.length
+            }
             canCreateSpace={canCreateSpace}
-            spacesRatio={sidebarSpacesRatio}
-            onAgentSortChange={setAgentSort}
-            onSpacesRatioChange={setSidebarSpacesRatio}
             onSelectWorkspace={selectWorkspace}
             onSelectAgent={selectAgent}
             onNewSpace={openNewSpaceDialog}
@@ -2135,7 +1962,7 @@ export function App({
                 >
                   <InfoCircledIcon aria-hidden="true" />
                   <span>
-                    <strong>Session details</strong>
+                    <strong>Execution details</strong>
                     <small>Runtime, current directory, and pane details.</small>
                   </span>
                 </button>
@@ -2157,21 +1984,7 @@ export function App({
             </button>
           </div>
         </RadixDialog>
-        {workspace && agent && (
-          <RadixDialog
-            open={detailsOpen}
-            onOpenChange={setDetailsOpen}
-            title="Session details"
-            description="Real runtime and Space information for the focused session."
-            className="details-dialog"
-          >
-            <SessionDetails
-              agent={agent}
-              workspace={workspace}
-              connection={runtime.connection}
-            />
-          </RadixDialog>
-        )}
+        {agent && executionDetails(agent)}
       </Tooltip.Provider>
     </Theme>
   );

@@ -111,6 +111,8 @@ describe("mapLiveSnapshot", () => {
       },
     });
 
+    expect(state.agents[0]?.currentStep).toBe("");
+    expect(state.agents[0]?.summary).toBe("");
     expect(state.selectedWorkspaceId).toBe("w5");
     expect(state.selectedAgentId).toBe("w5:p1");
     expect(state.selectedSessionByWorkspace).toEqual({ w5: "w5:p1" });
@@ -216,6 +218,7 @@ describe("mapLiveSnapshot", () => {
             pane_id: "w5:p3",
             revision: 1,
             tab_id: "w5:t2",
+            tokens: { context_percent: "0" },
             title: "monitor",
             workspace_id: "w5",
           },
@@ -271,6 +274,51 @@ describe("mapLiveSnapshot", () => {
     ]);
     expect(state.agents[0]?.panes).toHaveLength(2);
     expect(state.selectedAgentId).toBe("w5:p3");
+    expect(
+      state.agents.find(({ kind }) => kind === "terminal")?.contextPercent,
+    ).toBeUndefined();
+  });
+
+  test.each([
+    [undefined, undefined],
+    ["", undefined],
+    [" \t\n", undefined],
+    ["invalid", undefined],
+    ["31%", undefined],
+    ["31junk", undefined],
+    ["NaN", undefined],
+    ["Infinity", undefined],
+    ["-1", undefined],
+    ["100.1", undefined],
+    ["0", 0],
+    [" 0 ", 0],
+    ["31.5", 31.5],
+    ["100", 100],
+  ])("maps context token %j without inventing a value", (value, expected) => {
+    const pane = {
+      agent: "pi",
+      agent_status: "working",
+      pane_id: "w1:p1",
+      revision: 1,
+      tab_id: "w1:t1",
+      tokens: value === undefined ? undefined : { context_percent: value },
+      workspace_id: "w1",
+    };
+    const state = mapLiveSnapshot({
+      reads: {},
+      snapshot: {
+        agents: [pane],
+        focused_pane_id: pane.pane_id,
+        focused_workspace_id: pane.workspace_id,
+        layouts: [],
+        panes: [pane],
+        protocol: 20,
+        tabs: [],
+        version: "0.8.2",
+        workspaces: [],
+      },
+    });
+    expect(state.agents[0]?.contextPercent).toBe(expected);
   });
 
   test("gates blocked semantic prompts only for protocol 20", () => {
