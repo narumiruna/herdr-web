@@ -100,15 +100,15 @@ Vite prints the network URL. If the URL does not contain the token, the page ask
 
 ### Navigate and supervise
 
-The navigation rail lists **Spaces** and a global **Agents** panel. The tab bar shows each detected Agent and each tab without an Agent as a standalone Terminal.
+The navigation rail groups detected Agents under their **Spaces**. Expand a Space to see its Agents; linked worktrees remain under their repository. The selected Space expands when you navigate to a session. The tab bar shows each detected Agent and each tab without an Agent as a standalone Terminal.
 
-- Use **Grouped** to retain Space and tab order, or **Priority** to surface blocked and newly completed Agents.
 - Use **Attention Inbox** to triage Needs input, Failed, and Recently done states without leaving the selected terminal.
 - Use **Mission Control** for a cross-Space overview and controller-only summaries from saved SSH machines.
 - Use **Workflow templates** for browser-local or project-scoped batches of approved Agent launches.
 - Use **Viewer shares** to issue and revoke expiring read-only links to one Space, Agent, or pane.
 - Use `Cmd+K` or `Ctrl+K` to open the Action Palette.
-- Use **Menu** for Settings, keybindings, Herdr reload, and the controller-only plugin and integration runtime center.
+- Use the sidebar **Menu** for New Space, Mission Control, Workflow templates, Viewer shares, Settings, keybindings, Herdr reload, and the controller-only runtime center.
+- Use **More actions** (`⋯`) beside the tabs for session actions, appearance, and **Execution details**. Execution details contains the full current directory with a copy action, model, runtime, context percentage, and pane metadata.
 
 Remote machine summaries keep machine IDs isolated, omit SSH targets, and fail independently. They require local bridge mode and a Herdr build that supports `herdr --machine <id> api snapshot`; the Docker/TCP bridge cannot read the host machine catalog. Herdr does not forward interactive terminal sessions through `--machine`, so use the native Herdr client to control remote terminals.
 
@@ -118,9 +118,9 @@ Typing, paste, mouse input, terminal applications, and resize are forwarded thro
 
 The terminal toolbar provides output search, redacted transport diagnostics, image-path staging, and an optional **Prompt Agent** dialog. Use that dialog only when you want Herdr's semantic `agent.prompt` action instead of terminal input.
 
-Use the tab-strip **+** button to launch an approved Agent in the current Space. Launch continues as a visible background action if its setup dialog closes.
+Use the tab-strip **+** button or **More actions → Start Agent** to launch an approved Agent in the current Space. Launch continues as a visible background action if its setup dialog closes.
 
-Use **Split right** or **Split down** to create panes. Dividers support mouse and keyboard resizing, and closing a pane requires confirmation. herdr-web sends Herdr's native split directions and persists ratios through `layout.set_split_ratio`.
+Use **More terminal actions** (`⋯`) for **Split right**, **Split down**, pane focus, and pane closure. Dividers support mouse and keyboard resizing, and closing a pane requires confirmation. herdr-web sends Herdr's native split directions and persists ratios through `layout.set_split_ratio`.
 
 Per-Agent text and image drafts survive in-app navigation and clear only after Herdr accepts the prompt. Drafts remain in memory and do not survive a page reload. If delivery cannot be confirmed, inspect the terminal before choosing **Send again** because the original prompt may already have arrived.
 
@@ -258,10 +258,12 @@ Install Playwright's Chromium once if needed:
 npx playwright install chromium
 ```
 
-Visual baselines under `apps/web/e2e/` are platform-specific. After an intentional UI change, update and inspect all baseline images on Linux and macOS, then rerun the browser suite without snapshot updates:
+Workbench visual checks use text accessibility snapshots and explicit layout, font, and contrast assertions. PNG renders remain test artifacts, not tracked baselines. After an intentional UI change, inspect the renders on Linux and macOS and run the browser suite. Keep the header controls separate, the terminal output visible, and the composer inside the viewport. The simplification checks cover four viewport sizes in light and dark appearances, plus long navigation names in Editorial and Classic themes.
+
+Use one browser worker on a busy development host:
 
 ```sh
-npm run test:e2e -- --grep 'visual baseline' --update-snapshots=all
+npm run test:e2e -- --workers=1
 ```
 
 CI runs web checks on Linux, macOS, and Windows, and builds/tests iOS on macOS with an available iPhone Simulator; web checks do not need Xcode. Browser failure evidence is retained as a GitHub Actions artifact for seven days.

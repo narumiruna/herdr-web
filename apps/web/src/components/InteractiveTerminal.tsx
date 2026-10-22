@@ -38,6 +38,7 @@ import {
   clampTerminalFontSize,
   DEFAULT_TERMINAL_FONT_SIZE,
 } from "../terminal-preferences";
+import { HerdrMutationError } from "../use-herdr-runtime";
 import { IconTooltip } from "./IconTooltip";
 import { RadixDialog } from "./RadixDialog";
 import {
@@ -147,7 +148,7 @@ interface InteractiveTerminalProps {
   paneId: string;
   protocol?: number;
   reducedMotion?: boolean;
-  toolbarActions?: ReactNode;
+  overflowActions?: ReactNode;
   toolbarContext?: ReactNode;
 }
 
@@ -229,7 +230,7 @@ export function InteractiveTerminal({
   paneId,
   protocol = 0,
   reducedMotion = false,
-  toolbarActions,
+  overflowActions,
   toolbarContext,
 }: InteractiveTerminalProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -1092,9 +1093,12 @@ export function InteractiveTerminal({
       setPromptOpen(false);
     } catch (promptFailure) {
       setPromptError(
-        promptFailure instanceof Error
-          ? promptFailure.message
-          : "Prompt failed.",
+        promptFailure instanceof HerdrMutationError &&
+          promptFailure.outcome === "unknown"
+          ? "Delivery could not be confirmed. Check the terminal before sending this prompt again."
+          : promptFailure instanceof Error
+            ? promptFailure.message
+            : "Prompt failed.",
       );
     } finally {
       setPromptSending(false);
@@ -1202,11 +1206,6 @@ export function InteractiveTerminal({
           </span>
         </span>
         <span className="interactive-terminal-actions">
-          {toolbarActions && (
-            <span className="terminal-action-group" data-kind="pane">
-              {toolbarActions}
-            </span>
-          )}
           <span className="terminal-action-group" data-kind="primary">
             <IconTooltip label="Search terminal">
               <button
@@ -1274,6 +1273,10 @@ export function InteractiveTerminal({
                   align="end"
                   sideOffset={6}
                 >
+                  {overflowActions}
+                  {overflowActions && (
+                    <DropdownMenu.Separator className="terminal-actions-menu-separator" />
+                  )}
                   <DropdownMenu.Item
                     className="terminal-actions-menu-item"
                     onSelect={() => setDiagnosticsOpen(true)}

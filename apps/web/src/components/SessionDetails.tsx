@@ -1,9 +1,11 @@
 import {
   CodeIcon,
   Component1Icon,
+  CopyIcon,
   DesktopIcon,
   InfoCircledIcon,
 } from "@radix-ui/react-icons";
+import { useRef, useState } from "react";
 import type { Agent, Workspace } from "../state";
 import type { RuntimeConnection } from "../use-herdr-runtime";
 import { StatusPill } from "./StatusPill";
@@ -19,9 +21,57 @@ export function SessionDetails({
   connection,
   workspace,
 }: SessionDetailsProps) {
-  const activePane = agent.panes.find(({ id }) => id === agent.activePaneId);
+  const activePane =
+    agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
+  const cwd = activePane?.cwd || workspace.path;
+  const panel = useRef<HTMLDivElement>(null);
+  const copyContext = `${agent.id}\0${cwd}`;
+  const currentCopyContext = useRef(copyContext);
+  currentCopyContext.current = copyContext;
+  const [copyResult, setCopyResult] = useState({
+    context: "",
+    copied: false,
+    error: "",
+  });
+  const copyDirectory = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cwd);
+      } else {
+        const previousFocus = document.activeElement;
+        const target = document.createElement("textarea");
+        target.value = cwd;
+        target.style.position = "fixed";
+        target.style.opacity = "0";
+        // Keep the fallback inside the dialog focus scope.
+        (panel.current ?? document.body).append(target);
+        try {
+          target.select();
+          if (!document.execCommand("copy")) throw new Error("Copy failed");
+        } finally {
+          target.remove();
+          if (previousFocus instanceof HTMLElement) previousFocus.focus();
+        }
+      }
+      if (currentCopyContext.current !== copyContext) return;
+      setCopyResult({ context: copyContext, copied: true, error: "" });
+    } catch {
+      if (currentCopyContext.current !== copyContext) return;
+      setCopyResult({
+        context: copyContext,
+        copied: false,
+        error: "The current directory could not be copied.",
+      });
+    }
+  };
+  const hasContextPercent =
+    agent.kind === "agent" &&
+    agent.contextPercent !== undefined &&
+    Number.isFinite(agent.contextPercent) &&
+    agent.contextPercent >= 0 &&
+    agent.contextPercent <= 100;
   return (
-    <div className="details-panel">
+    <div ref={panel} className="details-panel">
       <section className="details-status" aria-label="Current status">
         <div className="details-session-icon" aria-hidden="true">
           {agent.kind === "agent" ? <CodeIcon /> : <DesktopIcon />}
@@ -47,19 +97,25 @@ export function SessionDetails({
             <Component1Icon aria-hidden="true" /> {workspace.name}
           </dd>
         </div>
-        {(activePane?.cwd || workspace.path) && (
+        {cwd && (
           <div>
             <dt>Current directory</dt>
-            <dd title={activePane?.cwd || workspace.path}>
-              {activePane?.cwd || workspace.path}
-            </dd>
-          </div>
-        )}
-        {workspace.branch && (
-          <div>
-            <dt>Branch</dt>
-            <dd>
-              <CodeIcon aria-hidden="true" /> {workspace.branch}
+            <dd className="details-directory">
+              <code>{cwd}</code>
+              <button
+                className="workspace-copy-cwd"
+                type="button"
+                aria-label="Copy current working directory"
+                onClick={() => void copyDirectory()}
+              >
+                <CopyIcon aria-hidden="true" /> Copy
+              </button>
+              {copyResult.context === copyContext && copyResult.copied && (
+                <span role="status">Current working directory copied</span>
+              )}
+              {copyResult.context === copyContext && copyResult.error && (
+                <span role="alert">{copyResult.error}</span>
+              )}
             </dd>
           </div>
         )}
@@ -83,20 +139,34 @@ export function SessionDetails({
             <dd>{agent.updated}</dd>
           </div>
         )}
-        <div>
-          <dt>Runtime</dt>
-          <dd>{agent.runtime}</dd>
-        </div>
-        {agent.model && agent.model !== agent.runtime && (
+        {agent.runtime?.trim() && (
+          <div>
+            <dt>Runtime</dt>
+            <dd>{agent.runtime}</dd>
+          </div>
+        )}
+        {agent.model?.trim() && agent.model !== agent.runtime && (
           <div>
             <dt>Model</dt>
             <dd>{agent.model}</dd>
           </div>
         )}
+        {hasContextPercent && (
+          <div>
+            <dt>Context</dt>
+            <dd>{agent.contextPercent}%</dd>
+          </div>
+        )}
         <div>
           <dt>Focused pane</dt>
-          <dd>{activePane?.title ?? "Unavailable"}</dd>
+          <dd>{activePane?.title || "Unavailable"}</dd>
         </div>
+        {activePane?.command && (
+          <div>
+            <dt>Command</dt>
+            <dd>{activePane.command}</dd>
+          </div>
+        )}
         <div>
           <dt>Panes</dt>
           <dd>{agent.panes.length}</dd>

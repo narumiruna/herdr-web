@@ -1,5 +1,18 @@
 import { expect, type Page, test } from "@playwright/test";
 
+async function openExecutionDetails(page: Page) {
+  await page.getByRole("button", { name: "Open more actions" }).click();
+  await page.getByRole("button", { name: /^Execution details/ }).click();
+}
+
+async function toggleAppearance(page: Page, appearance: "light" | "dark") {
+  await page.getByRole("button", { name: "Open more actions" }).click();
+  await page
+    .getByRole("button", { name: `Use ${appearance} appearance` })
+    .click();
+  await page.keyboard.press("Escape");
+}
+
 async function hasNoPageOverflow(page: Page) {
   return page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -15,15 +28,17 @@ test("defaults to dark and preserves an explicit light appearance", async ({
   await expect(page.locator("html")).toHaveClass(/theme-editorial/);
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/theme-editorial/);
+  await page.getByRole("button", { name: "Open more actions" }).click();
   await expect(
     page.getByRole("button", { name: "Use light appearance" }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
     "#11110f",
   );
 
-  await page.getByRole("button", { name: "Use light appearance" }).click();
+  await toggleAppearance(page, "light");
   await expect(page.locator("html")).toHaveClass(/light/);
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/light/);
   await expect
@@ -133,6 +148,7 @@ test("Editorial palette propagates into portalled Radix themes", async ({
       "color",
       expectedThemes[appearance].buttonText,
     );
+    await settings.getByRole("button", { name: "Cancel" }).click();
   }
 });
 
@@ -182,7 +198,7 @@ test("Settings offers ten themes and preserves style when toggling appearance", 
   expect(classicMetrics.tabBorder).toBe("0px");
   expect(classicMetrics.terminalRadius).toBe("10px");
 
-  await page.getByRole("button", { name: "Use dark appearance" }).click();
+  await toggleAppearance(page, "dark");
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("html")).toHaveClass(/theme-classic/);
   await expect
@@ -271,13 +287,13 @@ test("Classic themes retain accessible controls, focus, and dialogs", async ({
     expect(ratios.focus, `${theme} focus`).toBeGreaterThanOrEqual(3);
     expect(ratios.outlineStyle).toBe("solid");
 
-    await page.getByRole("button", { name: "Open details" }).click();
+    await openExecutionDetails(page);
     await expect(
-      page.getByRole("dialog", { name: "Session details" }),
+      page.getByRole("dialog", { name: "Execution details" }),
     ).toHaveCSS("box-shadow", /.+/);
     expect(
       await page
-        .getByRole("dialog", { name: "Session details" })
+        .getByRole("dialog", { name: "Execution details" })
         .evaluate((element) => getComputedStyle(element).boxShadow),
     ).not.toBe("none");
   }
@@ -299,7 +315,7 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.locator(".brand-type strong")).toHaveText("herdr-web");
   await expect(page.locator(".agent-title-line")).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "Needs input", exact: true }),
+    page.getByRole("button", { name: "Open Attention Inbox, 2 items" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Activity" })).toHaveCount(0);
   await expect(
@@ -313,10 +329,9 @@ test("desktop workbench gives the terminal priority", async ({
   await expect(page.getByRole("tab", { selected: true })).toContainText(
     "Needs input",
   );
-  await expect(page.locator(".workspace-cwd")).toContainText(
-    "~/Projects/herdr",
-  );
-  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+  await expect(page.locator(".workspace-cwd")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Agents" })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "herdr Agents" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Terminals" })).toHaveCount(0);
   expect(await hasNoPageOverflow(page)).toBe(true);
 
@@ -361,7 +376,6 @@ test("desktop workbench gives the terminal priority", async ({
       ),
       redundantPaneTitles: document.querySelectorAll(".pane-titlebar").length,
       terminalContextCenters: [
-        ".workspace-cwd",
         ".terminal-toolbar-branch",
         ".interactive-terminal-state",
       ].map((selector) => {
@@ -441,11 +455,11 @@ test("desktop workbench gives the terminal priority", async ({
         getComputedStyle(document.querySelector(".session-tabs") as Element)
           .backgroundColor,
       ),
-      primaryAction: pair(".desktop-new-agent", ".desktop-new-agent"),
+      primaryAction: pair(".session-tabs-new", ".session-tabs"),
       composerHint: pair(".composer-hint", ".message-composer"),
       needsInput: pair(".attention-banner", ".attention-banner"),
       workingStatus: pair(".session-tab .status-working", ".session-tabs"),
-      workspacePath: pair(".workspace-cwd", ".interactive-terminal-tools"),
+      branch: pair(".terminal-toolbar-branch", ".interactive-terminal-tools"),
     };
   });
   for (const [name, ratio] of Object.entries(contrastRatios)) {
@@ -464,7 +478,7 @@ test("desktop workbench gives the terminal priority", async ({
     fullPage: true,
   });
 
-  await page.getByRole("button", { name: "Use dark appearance" }).click();
+  await toggleAppearance(page, "dark");
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
   const darkTokens = await page.evaluate(() => {
     const styles = getComputedStyle(document.documentElement);
@@ -485,13 +499,13 @@ test("desktop workbench gives the terminal priority", async ({
   });
   await page.reload();
   await expect(page.locator(".herdr-web-theme")).toHaveClass(/dark/);
-  await page.getByRole("button", { name: "Open details" }).click();
+  await openExecutionDetails(page);
   await expect(
-    page.getByRole("dialog", { name: "Session details" }),
+    page.getByRole("dialog", { name: "Execution details" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Open details" }),
+    page.getByRole("button", { name: "Open more actions" }),
   ).toBeFocused();
 });
 
@@ -620,7 +634,7 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
 
   await expect(page.locator(".status-blocked svg").first()).toBeVisible();
   await expect(page.locator(".status-working svg").first()).toBeVisible();
-  await page.getByRole("button", { name: "Open details" }).click();
+  await openExecutionDetails(page);
   const fontState = await page.evaluate(async () => {
     const [medium, semibold] = await Promise.all([
       document.fonts.load('500 20px "Zen Old Mincho"'),
@@ -647,8 +661,80 @@ test("semantic editorial colors and focus meet contrast thresholds", async ({
   expect(fontState.semiboldFaces).toBeGreaterThan(0);
 });
 
-// Linux rasterization varies slightly between the Playwright image and hosted runners.
-const CROSS_PLATFORM_RENDERING_DIFF_PIXELS = 15_000;
+async function assertWorkbenchVisual(page: Page) {
+  await expect(
+    page.getByRole("tablist", { name: "herdr tabs" }),
+  ).toMatchAriaSnapshot(`
+    - tablist "herdr tabs":
+      - tab "web-bridge Working"
+      - tab "api-review Needs input" [selected]
+      - tab "integration-tests Done"
+  `);
+  await expect(page.locator('.session-tabs[data-combined="true"]')).toHaveCount(
+    1,
+  );
+  await expect(
+    page.getByRole("button", { name: "Open more actions" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Execution details" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(
+      ".workspace-cwd, .agent-panel, .sidebar-section-resize-handle",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".agent-progress-summary .status-pill"),
+  ).toHaveCount(0);
+  const geometry = await page.evaluate(() => {
+    const bounds = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`Missing ${selector}`);
+      return element.getBoundingClientRect();
+    };
+    const header = bounds(".session-tabs");
+    const terminal = bounds(".terminal-shell");
+    const composer = bounds(".message-composer");
+    const controls = [
+      ".command-button",
+      ".workbench-more-trigger",
+      ".session-tabs-new",
+    ]
+      .filter((selector) => bounds(selector).width > 0)
+      .map(bounds);
+    return {
+      controlsInsideHeader: controls.every(
+        (box) =>
+          box.width > 0 &&
+          box.height > 0 &&
+          box.left >= header.left &&
+          box.right <= header.right &&
+          box.top >= header.top &&
+          box.bottom <= header.bottom,
+      ),
+      controlsDoNotOverlap: controls.every((left, index) =>
+        controls
+          .slice(index + 1)
+          .every(
+            (right) => left.right <= right.left || right.right <= left.left,
+          ),
+      ),
+      viewportHeight: bounds(".terminal-viewport").height,
+      composerVisible: composer.bottom <= innerHeight && composer.height > 0,
+      terminalHeight: terminal.height,
+      terminalAfterHeader: terminal.top >= header.bottom,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  });
+  expect(geometry.controlsInsideHeader).toBe(true);
+  expect(geometry.controlsDoNotOverlap).toBe(true);
+  expect(geometry.viewportHeight).toBeGreaterThan(100);
+  expect(geometry.composerVisible).toBe(true);
+  expect(geometry.terminalAfterHeader).toBe(true);
+  expect(geometry.terminalHeight).toBeGreaterThan(200);
+  expect(geometry.overflow).toBe(false);
+}
 
 type VisualTheme =
   | "editorial-light"
@@ -675,7 +761,7 @@ async function prepareVisual(page: Page, theme: VisualTheme) {
 
 test.afterEach(async ({ page }, testInfo) => {
   if (!testInfo.title.endsWith("visual baseline")) return;
-  // Keep native renders for review even when a stale image passes the tolerance.
+  // Keep PNG artifacts for review without committing binary baselines.
   await page.screenshot({
     path: testInfo.outputPath("current-visual-baseline.png"),
     animations: "disabled",
@@ -687,56 +773,31 @@ test.afterEach(async ({ page }, testInfo) => {
 test("desktop light visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await prepareVisual(page, "editorial-light");
-  await expect(page).toHaveScreenshot("japanese-literary-desktop-light.png", {
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
-  });
+  await assertWorkbenchVisual(page);
 });
 
 test("desktop dark visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await prepareVisual(page, "editorial-dark");
-  await expect(page).toHaveScreenshot("japanese-literary-desktop-dark.png", {
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
-  });
+  await assertWorkbenchVisual(page);
 });
 
 test("mobile light visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await prepareVisual(page, "editorial-light");
-  await expect(page).toHaveScreenshot("japanese-literary-mobile-light.png", {
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
-  });
+  await assertWorkbenchVisual(page);
 });
 
 test("classic light visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await prepareVisual(page, "classic-light");
-  await expect(page).toHaveScreenshot("classic-desktop-light.png", {
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
-  });
+  await assertWorkbenchVisual(page);
 });
 
 test("classic dark visual baseline", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await prepareVisual(page, "classic-dark");
-  await expect(page).toHaveScreenshot("classic-desktop-dark.png", {
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    maxDiffPixels: CROSS_PLATFORM_RENDERING_DIFF_PIXELS,
-  });
+  await assertWorkbenchVisual(page);
 });
 
 test("compact Agent statuses leave names and metadata unobstructed", async ({
@@ -751,16 +812,16 @@ test("compact Agent statuses leave names and metadata unobstructed", async ({
       const copy = item.querySelector(".agent-item-copy");
       const title = item.querySelector("strong");
       const task = item.querySelector(".agent-item-task");
-      const space = item.querySelector("small");
       const status = item.querySelector('.status-pill[data-compact="true"]');
-      if (!identity || !copy || !title || !task || !space || !status)
+      if (!identity || !copy || !title || !task || !status)
         throw new Error("Missing Agent metadata");
       return {
         copyLeft: copy.getBoundingClientRect().left,
         copyRight: copy.getBoundingClientRect().right,
         identityRight: identity.getBoundingClientRect().right,
         rowRight: item.getBoundingClientRect().right,
-        spaceTop: space.getBoundingClientRect().top,
+        titleBottom: title.getBoundingClientRect().bottom,
+        taskTop: task.getBoundingClientRect().top,
         statusLeft: status.getBoundingClientRect().left,
         statusRight: status.getBoundingClientRect().right,
         taskBottom: task.getBoundingClientRect().bottom,
@@ -768,12 +829,12 @@ test("compact Agent statuses leave names and metadata unobstructed", async ({
       };
     }),
   );
-  expect(rows).toHaveLength(5);
+  expect(rows).toHaveLength(3);
   for (const row of rows) {
     expect(row.identityRight).toBeLessThanOrEqual(row.copyLeft);
     expect(row.copyRight).toBeLessThanOrEqual(row.statusLeft);
     expect(row.statusRight).toBeLessThanOrEqual(row.rowRight);
-    expect(row.taskBottom).toBeLessThanOrEqual(row.spaceTop);
+    expect(row.titleBottom).toBeLessThanOrEqual(row.taskTop);
     expect(row.titleClipped).toBe(false);
   }
 });
@@ -812,16 +873,25 @@ test("core workbench typography stays legible on desktop and mobile", async ({
         supporting: [
           ".section-label-row h2",
           ".agent-item-task",
-          ".session-tab-status .status-pill",
           ".interactive-terminal-tools",
-          ".agent-progress-copy small",
+          ".agent-progress-disclosure",
           ".composer-hint",
         ].map(fontSize),
+        statusFont: fontSize(".session-tab-status .status-pill"),
+        statusIconSize:
+          document
+            .querySelector(".session-tab-status svg")
+            ?.getBoundingClientRect().height ?? 0,
         taskFont: fontSize(".agent-item-task"),
         taskLine: lineHeight(".agent-item-task"),
       };
     });
 
+    if (viewport.width === 390) {
+      expect(metrics.statusIconSize).toBeGreaterThanOrEqual(11);
+    } else {
+      expect(metrics.statusFont).toBeGreaterThanOrEqual(11);
+    }
     for (const size of metrics.supporting)
       expect(size).toBeGreaterThanOrEqual(11);
     for (const size of metrics.actionable)
@@ -833,6 +903,9 @@ test("core workbench typography stays legible on desktop and mobile", async ({
         .getByRole("dialog", { name: "Navigate workbench" })
         .getByRole("button", { name: "Close dialog" })
         .click();
+      await expect(
+        page.getByRole("tab", { selected: true }),
+      ).toHaveAccessibleName(/Needs input/);
     }
   }
 });
@@ -847,12 +920,8 @@ test("selection, statuses, progress, and desktop action groups have distinct hie
     const root = document.querySelector(".herdr-web-theme") as HTMLElement;
     const probe = document.createElement("span");
     const worktree = document.createElement("button");
-    const dot = document.createElement("span");
     worktree.className = "workspace-item worktree-item";
     worktree.dataset.active = "true";
-    dot.className = "worktree-dot";
-    dot.dataset.active = "true";
-    worktree.append(dot);
     root.append(probe, worktree);
     const resolve = (token: string) => {
       probe.style.color = `var(${token})`;
@@ -870,8 +939,7 @@ test("selection, statuses, progress, and desktop action groups have distinct hie
       .filter((element) => getComputedStyle(element).display !== "none")
       .map((element) => element.getBoundingClientRect());
     const result = {
-      actionBottoms: actionBounds.map(({ bottom }) => bottom),
-      actionTops: actionBounds.map(({ top }) => top),
+      actionCenters: actionBounds.map(({ top, height }) => top + height / 2),
       actionsFit: actions.scrollWidth <= actions.clientWidth,
       agentMarker: getComputedStyle(
         document.querySelector('.agent-item[data-active="true"]') as Element,
@@ -881,8 +949,7 @@ test("selection, statuses, progress, and desktop action groups have distinct hie
       tabMarker: getComputedStyle(
         document.querySelector('.session-tab[data-state="active"]') as Element,
       ).borderBottomColor,
-      worktreeFill: getComputedStyle(dot).backgroundColor,
-      worktreeMarker: getComputedStyle(dot).borderColor,
+      worktreeMarker: getComputedStyle(worktree).borderLeftColor,
       workspaceMarker: getComputedStyle(
         document.querySelector(
           '.workspace-item[data-active="true"]',
@@ -902,13 +969,9 @@ test("selection, statuses, progress, and desktop action groups have distinct hie
   expect(audit.agentMarker).toBe(audit.selected);
   expect(audit.tabMarker).toBe(audit.selected);
   expect(audit.worktreeMarker).toBe(audit.selected);
-  expect(audit.worktreeFill).toBe(audit.selected);
   expect(audit.actionsFit).toBe(true);
   expect(
-    Math.max(...audit.actionTops) - Math.min(...audit.actionTops),
-  ).toBeLessThanOrEqual(1);
-  expect(
-    Math.max(...audit.actionBottoms) - Math.min(...audit.actionBottoms),
+    Math.max(...audit.actionCenters) - Math.min(...audit.actionCenters),
   ).toBeLessThanOrEqual(1);
 
   const progress = page.locator(".agent-progress-summary");
@@ -934,7 +997,7 @@ for (const theme of [
     page,
   }) => {
     await prepareVisual(page, theme);
-    const badge = page.locator(".attention-inbox-trigger > span");
+    const badge = page.locator(".sidebar-attention-count");
     await expect(badge).toBeVisible();
     const badgeColors = await badge.evaluate((element) => {
       const styles = getComputedStyle(element);
@@ -954,9 +1017,17 @@ for (const theme of [
           (values[2] ?? 0) * 0.0722
         );
       };
+      let background: Element | null = element;
+      while (
+        background &&
+        getComputedStyle(background).backgroundColor === "rgba(0, 0, 0, 0)"
+      ) {
+        background = background.parentElement;
+      }
+      if (!background) throw new Error("Missing opaque attention background");
       const [lighter, darker] = [
         luminance(styles.color),
-        luminance(styles.backgroundColor),
+        luminance(getComputedStyle(background).backgroundColor),
       ].sort((a, b) => b - a);
       return {
         token: styles.getPropertyValue("--amber-contrast").trim(),
@@ -974,7 +1045,7 @@ for (const theme of [
     for (const selector of [
       '.workspace-item[data-active="true"]',
       '.agent-item[data-active="true"]',
-      '.attention-item[data-active="true"]',
+      ".sidebar-attention",
       '.session-tab[data-state="active"]',
       ".workspace-glyph",
       ".command-button",
@@ -1093,72 +1164,37 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
 
-  const agents = page.getByRole("region", { name: "Agents" });
-  const agentList = agents.getByRole("navigation", {
-    name: "Detected Agents",
+  const navigation = page.getByRole("navigation", {
+    name: "herdr-web navigation",
   });
   await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible();
-  await expect(agentList.getByRole("button")).toHaveCount(5);
-  await expect(agents.getByRole("radio", { name: "Grouped" })).toHaveAttribute(
-    "data-state",
-    "on",
-  );
-  await agents.getByRole("radio", { name: "Priority" }).click();
-  await expect(agentList.getByRole("button").first()).toContainText(
-    "api-review",
-  );
-  await expect(agentList.getByRole("button").nth(1)).toContainText(
-    "integration-tests",
-  );
-  await expect
-    .poll(() =>
-      page.evaluate(() => localStorage.getItem("herdr-web-agent-sort")),
-    )
-    .toBe("priority");
-  await page.reload();
-  await expect(agents.getByRole("radio", { name: "Priority" })).toHaveAttribute(
-    "data-state",
-    "on",
-  );
+  await expect(page.getByRole("region", { name: "Agents" })).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Create a new Space" }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible();
+    navigation.getByRole("list", { name: "herdr Agents" }).getByRole("button"),
+  ).toHaveCount(3);
+  await expect(
+    navigation.getByRole("button", { name: /Open agent-guide Agent/ }),
+  ).toHaveCount(0);
+  const expand = navigation.getByRole("button", {
+    name: "Expand herdr.dev Space",
+  });
+  await expand.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    navigation.getByRole("button", { name: "Collapse herdr.dev Space" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    navigation.getByRole("button", { name: "Open herdr Space" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    navigation
+      .getByRole("list", { name: "herdr.dev Agents" })
+      .getByRole("button"),
+  ).toHaveCount(1);
 
-  const sections = await page.evaluate(() => ({
-    actionsBottom:
-      document.querySelector(".spaces-actions")?.getBoundingClientRect()
-        .bottom ?? 0,
-    agentsTop:
-      document.querySelector(".agent-panel")?.getBoundingClientRect().top ?? 0,
-    agentTitleBottom:
-      document.querySelector(".agent-panel-title")?.getBoundingClientRect()
-        .bottom ?? 0,
-    agentTitleRight:
-      document.querySelector(".agent-panel-title")?.getBoundingClientRect()
-        .right ?? 0,
-    agentSortLeft:
-      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
-        .left ?? 0,
-    agentSortTop:
-      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
-        .top ?? 0,
-    agentSortRight:
-      document.querySelector(".agent-sort-control")?.getBoundingClientRect()
-        .right ?? 0,
-    agentPanelRight:
-      document.querySelector(".agent-panel")?.getBoundingClientRect().right ??
-      0,
-  }));
-  expect(sections.actionsBottom).toBeLessThanOrEqual(sections.agentsTop + 1);
-  expect(
-    sections.agentTitleRight <= sections.agentSortLeft ||
-      sections.agentTitleBottom <= sections.agentSortTop,
-  ).toBe(true);
-  expect(sections.agentSortRight).toBeLessThanOrEqual(sections.agentPanelRight);
-
-  const newSpace = page.getByRole("button", { name: "Create a new Space" });
+  const newSpace = page.getByRole("button", { name: "Open menu" });
   await newSpace.click();
+  await page.getByRole("menuitem", { name: "New Space" }).click();
   await page
     .getByRole("textbox", { name: "Directory", exact: true })
     .fill("/repo/cancelled");
@@ -1181,7 +1217,7 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   );
   await page.getByRole("button", { name: "Close dialog" }).click();
 
-  await agents
+  await navigation
     .getByRole("button", { name: /agent-guide.*herdr\.dev/i })
     .click();
   await expect(
@@ -1190,114 +1226,85 @@ test("sidebar mirrors Herdr Spaces and Agents navigation", async ({ page }) => {
   expect(await hasNoPageOverflow(page)).toBe(true);
 });
 
-test("short mobile navigation keeps both panels usable", async ({ page }) => {
+test("short mobile navigation keeps one scrollable tree and menu usable", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 320 });
-  await page.addInitScript(() => {
-    localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.2");
-  });
+  await page.addInitScript(() =>
+    localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.2"),
+  );
   await page.goto("/");
   await page.getByRole("button", { name: "Open navigation" }).click();
-
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
-  await expect(navigation).toBeVisible();
-  const separator = navigation.locator(".sidebar-section-resize-handle");
-  await expect(separator).toHaveCount(1);
-  await expect(separator).toBeHidden();
-
+  await expect(
+    navigation.locator(".sidebar-section-resize-handle"),
+  ).toHaveCount(0);
+  await expect(
+    navigation.getByRole("button", { name: "Open menu" }),
+  ).toBeVisible();
   const bounds = await navigation.evaluate((element) => {
-    const rect = (selector: string) => {
-      const target = element.querySelector(selector);
-      if (!target) throw new Error(`Missing ${selector}`);
-      return target.getBoundingClientRect();
-    };
-    const sections = rect(".sidebar-sections");
-    const spaces = rect(".spaces-panel");
-    const spacesViewport = rect(".sidebar-viewport");
-    const spacesActions = rect(".spaces-actions");
-    const agents = rect(".agent-panel");
-    const agentsHeading = rect(".agent-panel-heading");
-    const agentsViewport = rect(".agent-panel-viewport");
+    const viewport = element.querySelector(".sidebar-viewport");
+    const menu = element.querySelector(".spaces-actions");
+    if (!viewport || !menu) throw new Error("Missing sidebar tree or menu");
     return {
-      agentsBottom: agents.bottom,
-      agentsHeight: agents.height,
-      agentsTop: agents.top,
-      agentsHeadingBottom: agentsHeading.bottom,
-      agentsViewportHeight: agentsViewport.height,
-      sectionsBottom: sections.bottom,
-      spacesActionsBottom: spacesActions.bottom,
-      spacesHeight: spaces.height,
-      spacesViewportHeight: spacesViewport.height,
+      height: viewport.getBoundingClientRect().height,
+      scrollable: viewport.scrollHeight > viewport.clientHeight,
+      menuBottom: menu.getBoundingClientRect().bottom,
+      dialogBottom: element.getBoundingClientRect().bottom,
     };
   });
-  const navigationBox = await navigation.boundingBox();
-  expect(navigationBox).not.toBeNull();
-  expect(
-    Math.abs(bounds.spacesHeight - bounds.agentsHeight),
-  ).toBeLessThanOrEqual(1);
-  expect(bounds.spacesActionsBottom).toBeLessThanOrEqual(bounds.agentsTop);
-  expect(bounds.agentsHeadingBottom).toBeLessThanOrEqual(bounds.agentsBottom);
-  expect(bounds.spacesViewportHeight).toBeGreaterThan(0);
-  expect(bounds.agentsViewportHeight).toBeGreaterThan(0);
-  expect(bounds.sectionsBottom).toBeLessThanOrEqual(
-    (navigationBox?.y ?? 0) + (navigationBox?.height ?? 0),
-  );
+  expect(bounds.height).toBeGreaterThan(0);
+  expect(bounds.scrollable).toBe(true);
+  expect(bounds.menuBottom).toBeLessThanOrEqual(bounds.dialogBottom);
+  await navigation
+    .getByRole("button", { name: "Expand herdr.dev Space" })
+    .click();
+  await navigation
+    .getByRole("button", { name: /Open agent-guide Agent/ })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: /agent-guide/, selected: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(
+    navigation.getByRole("button", { name: "Collapse herdr.dev Space" }),
+  ).toHaveAttribute("aria-expanded", "true");
 });
 
-test("mouse resizing persists Spaces and Agents proportions", async ({
+test("obsolete sidebar preferences do not affect tree navigation or unrelated storage", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/");
-
-  const separator = page.getByRole("separator", {
-    name: "Resize Spaces and Agents panels",
+  await page.addInitScript(() => {
+    localStorage.setItem("herdr-web-sidebar-spaces-ratio", "0.55");
+    localStorage.setItem("herdr-web-agent-sort", "priority");
+    localStorage.setItem("unrelated", "keep");
   });
-  const sections = page.locator(".desktop-sidebar .sidebar-sections");
-  const sectionBox = await sections.boundingBox();
-  const separatorBox = await separator.boundingBox();
-  if (!sectionBox || !separatorBox) {
-    throw new Error("Sidebar section separator is not visible");
-  }
-  const targetRatio = 0.55;
-  const targetY =
-    sectionBox.y +
-    (sectionBox.height - separatorBox.height) * targetRatio +
-    separatorBox.height / 2;
-  await page.mouse.move(
-    separatorBox.x + separatorBox.width / 2,
-    separatorBox.y + separatorBox.height / 2,
-  );
-  await page.mouse.down();
-  await page.mouse.move(separatorBox.x + separatorBox.width / 2, targetY);
-  await page.mouse.up();
-
-  await expect(separator).toHaveAttribute("aria-valuenow", "55");
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        Number(localStorage.getItem("herdr-web-sidebar-spaces-ratio")),
-      ),
-    )
-    .toBeCloseTo(targetRatio, 2);
-  const panelHeights = await page.evaluate(() => ({
-    agents:
-      document
-        .querySelector(".desktop-sidebar .agent-panel")
-        ?.getBoundingClientRect().height ?? 0,
-    spaces:
-      document
-        .querySelector(".desktop-sidebar .spaces-panel")
-        ?.getBoundingClientRect().height ?? 0,
-  }));
+  await page.goto("/");
+  await expect(
+    page.getByRole("separator", { name: "Resize Spaces and Agents panels" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Priority" })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("list", { name: "herdr Agents" })
+      .getByRole("button")
+      .first(),
+  ).toHaveAccessibleName(/web-bridge/);
+  await page.getByRole("button", { name: "Collapse herdr Space" }).click();
+  await expect(page.getByRole("list", { name: "herdr Agents" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Expand herdr Space" }).click();
+  await expect(page.getByRole("list", { name: "herdr Agents" })).toBeVisible();
   expect(
-    panelHeights.spaces / (panelHeights.spaces + panelHeights.agents),
-  ).toBeCloseTo(targetRatio, 2);
-
-  await page.reload();
-  await expect(separator).toHaveAttribute("aria-valuenow", "55");
+    await page.evaluate(() => [
+      localStorage.getItem("herdr-web-sidebar-spaces-ratio"),
+      localStorage.getItem("herdr-web-agent-sort"),
+      localStorage.getItem("unrelated"),
+    ]),
+  ).toEqual(["0.55", "priority", "keep"]);
 });
 
-test("Agent rows remain separated at sidebar width and panel-ratio limits", async ({
+test("Agent rows remain separated at sidebar width limits despite obsolete ratios", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1325,7 +1332,7 @@ test("Agent rows remain separated at sidebar width and panel-ratio limits", asyn
       page.getByRole("separator", {
         name: "Resize Spaces and Agents panels",
       }),
-    ).toHaveAttribute("aria-valuenow", String(ratio * 100));
+    ).toHaveCount(0);
 
     const bounds = await page.locator(".agent-item").evaluateAll((rows) => {
       const items = rows.map((row) => {
@@ -1346,7 +1353,7 @@ test("Agent rows remain separated at sidebar width and panel-ratio limits", asyn
         };
       });
       const viewport = document.querySelector(
-        ".agent-panel-viewport",
+        ".desktop-sidebar .sidebar-viewport",
       ) as HTMLElement;
       return {
         items,
@@ -1395,7 +1402,7 @@ test("mouse resizing persists navigation width and updates pane proportions", as
   await page.reload();
   await expect(page.locator(".desktop-sidebar")).toHaveCSS("width", "280px");
 
-  await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
   await page.getByRole("menuitem", { name: "Split right" }).click();
   const paneSeparator = page.getByRole("separator", {
     name: "Resize terminal panes",
@@ -1432,7 +1439,7 @@ test("split down stacks panes using Herdr's direction", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
   await expect(
     page.getByRole("menuitem", { name: "Split right" }),
   ).toBeVisible();
@@ -1543,9 +1550,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await expect(
     page.getByRole("textbox", { name: "Message api-review" }),
   ).toBeVisible();
-  await expect(page.locator(".workspace-cwd-compact")).toHaveText(
-    "…/Projects/herdr",
-  );
+  await expect(page.locator(".workspace-cwd-compact")).toHaveCount(0);
   expect(await hasNoPageOverflow(page)).toBe(true);
 
   const metrics = await page.evaluate(() => ({
@@ -1568,7 +1573,6 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   for (const target of [
     page.getByRole("button", { name: "Open navigation" }),
     page.getByRole("button", { name: "Open Action Palette" }),
-    page.getByRole("button", { name: "New Agent in herdr" }),
     page.getByRole("button", { name: "Open more actions" }),
     page.getByRole("button", { name: "Attach image" }),
     page.getByRole("button", { name: "Send message" }),
@@ -1588,7 +1592,7 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await expect(actions).toBeVisible();
   for (const target of [
     actions.getByRole("button", { name: /^Start Agent/i }),
-    actions.getByRole("button", { name: /Session details/i }),
+    actions.getByRole("button", { name: /^Execution details/i }),
     actions.getByRole("button", { name: /appearance/i }),
   ]) {
     const box = await target.boundingBox();
@@ -1603,18 +1607,27 @@ test("mobile layout keeps the terminal, composer, and touch targets reachable", 
   await page.getByRole("button", { name: "Open navigation" }).click();
   const navigation = page.getByRole("dialog", { name: "Navigate workbench" });
   await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("heading", { name: "Agents" })).toHaveCount(
+    0,
+  );
   await expect(
-    navigation.getByRole("heading", { name: "Agents" }),
+    navigation.getByRole("list", { name: "herdr Agents" }),
   ).toBeVisible();
   for (const target of [
-    navigation.getByRole("button", { name: "Create a new Space" }),
+    navigation.getByRole("button", { name: /Open Attention Inbox/ }),
     navigation.getByRole("button", { name: "Open menu" }),
   ]) {
     const box = await target.boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
   }
-  await navigation.getByRole("button", { name: "Create a new Space" }).click();
+  await navigation.getByRole("button", { name: "Open menu" }).click();
+  const newSpace = page.getByRole("menuitem", { name: "New Space" });
+  await expect(newSpace).toBeVisible();
+  await expect
+    .poll(async () => (await newSpace.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(44);
+  await newSpace.click();
   await expect(navigation).toBeHidden();
   await expect(
     page.getByRole("dialog", { name: "Create a new Space" }),
@@ -1780,7 +1793,7 @@ test("mobile split panes stay readable through a pane selector", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 700 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Split pane" }).click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
   await page.getByRole("menuitem", { name: "Split down" }).click();
 
   const paneTabs = page.getByRole("tablist", { name: "Session panes" });

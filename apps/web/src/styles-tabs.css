@@ -132,12 +132,13 @@
   background: var(--canvas);
 }
 .session-tabs[data-combined="true"] > .topbar-context {
-  max-width: 150px;
-  flex: 0 1 150px;
+  max-width: 180px;
+  flex: 0 1 180px;
   padding-left: 16px;
 }
 .session-tabs[data-combined="true"] > .topbar-context strong {
-  max-width: 120px;
+  min-width: 0;
+  max-width: 144px;
 }
 .session-tabs[data-combined="true"] .session-tabs-list,
 .session-tabs[data-combined="true"] .session-tab {

@@ -1,9 +1,8 @@
 import {
-  CheckIcon,
   CodeIcon,
   ColumnsIcon,
-  CopyIcon,
   Cross2Icon,
+  DotsHorizontalIcon,
   EnterFullScreenIcon,
   ExclamationTriangleIcon,
   ExitFullScreenIcon,
@@ -14,7 +13,8 @@ import {
   RowsIcon,
 } from "@radix-ui/react-icons";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { Button, DropdownMenu, IconButton } from "@radix-ui/themes";
+import { Button } from "@radix-ui/themes";
+import { DropdownMenu } from "radix-ui";
 import {
   type CSSProperties,
   type DragEvent,
@@ -72,6 +72,19 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
   sendError: "",
 };
 
+interface PaneActionState {
+  error: string;
+  ratio?: number;
+  dragging: boolean;
+  pending: boolean;
+}
+
+const EMPTY_PANE_ACTION_STATE: PaneActionState = {
+  error: "",
+  dragging: false,
+  pending: false,
+};
+
 interface TerminalWorkspaceProps {
   accessibilityMode?: boolean;
   actionsEnabled: boolean;
@@ -107,12 +120,6 @@ interface TerminalWorkspaceProps {
   terminalStreaming: boolean;
   protocol?: number;
   reducedMotion?: boolean;
-}
-
-function compactPath(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  if (parts.length <= 2) return path;
-  return `…/${parts.slice(-2).join("/")}`;
 }
 
 function lineClass(line: string): string {
@@ -362,13 +369,11 @@ export function TerminalWorkspace({
   const [closeError, setCloseError] = useState("");
   const [closing, setClosing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [copiedCwdPaneId, setCopiedCwdPaneId] = useState("");
+  const [paneActions, setPaneActions] = useState<
+    Record<string, PaneActionState>
+  >({});
+  const paneAction = paneActions[agent.id] ?? EMPTY_PANE_ACTION_STATE;
   const [sentAgentId, setSentAgentId] = useState("");
-  const [paneRatio, setPaneRatio] = useState(() =>
-    clampPaneRatio(agent.paneSplit?.ratio ?? 0.5),
-  );
-  const [paneResizeDragging, setPaneResizeDragging] = useState(false);
-  const [paneResizePending, setPaneResizePending] = useState(false);
   const dragDepth = useRef(0);
   const imageInput = useRef<HTMLInputElement>(null);
   const composerForm = useRef<HTMLFormElement>(null);
@@ -391,6 +396,10 @@ export function TerminalWorkspace({
   const activePane =
     agent.panes.find(({ id }) => id === agent.activePaneId) ?? agent.panes[0];
   const sourcePaneRatio = clampPaneRatio(agent.paneSplit?.ratio ?? 0.5);
+  const paneRatio =
+    paneAction.dragging || paneAction.pending
+      ? (paneAction.ratio ?? sourcePaneRatio)
+      : sourcePaneRatio;
   const paneSplitDirection = agent.paneSplit?.direction ?? "right";
   const visiblePanes = focusMode
     ? agent.panes.filter((pane) => pane.id === activePane?.id)
@@ -413,11 +422,23 @@ export function TerminalWorkspace({
     [onDraftChange],
   );
 
+  // Each callback keeps its originating Agent, including after navigation.
+  const updatePaneAction = useCallback(
+    (update: Partial<PaneActionState>) => {
+      setPaneActions((current) => ({
+        ...current,
+        [agent.id]: {
+          ...(current[agent.id] ?? EMPTY_PANE_ACTION_STATE),
+          ...update,
+        },
+      }));
+    },
+    [agent.id],
+  );
+
   useEffect(() => {
-    if (!paneResizeDragging && !paneResizePending) {
-      setPaneRatio(sourcePaneRatio);
-    }
-  }, [paneResizeDragging, paneResizePending, sourcePaneRatio]);
+    return () => updatePaneAction({ dragging: false });
+  }, [updatePaneAction]);
 
   useEffect(() => {
     if (activePane) return;
@@ -539,46 +560,56 @@ export function TerminalWorkspace({
     void sendDraft();
   };
 
-  const copyWorkingDirectory = async (path: string, paneId: string) => {
-    if (!path) return;
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(path);
-    } else {
-      const copyTarget = document.createElement("textarea");
-      copyTarget.value = path;
-      copyTarget.style.position = "fixed";
-      copyTarget.style.opacity = "0";
-      document.body.append(copyTarget);
-      copyTarget.select();
-      document.execCommand("copy");
-      copyTarget.remove();
-    }
-    setCopiedCwdPaneId(paneId);
-    window.setTimeout(
-      () =>
-        setCopiedCwdPaneId((current) => (current === paneId ? "" : current)),
-      1_500,
-    );
-  };
+  const splitPane = useCallback(
+    async (direction: PaneSplitDirection) => {
+      if (!actionsEnabled || agent.panes.length >= 2) return;
+      updatePaneAction({ error: "" });
+      try {
+        await onSplitPane(direction);
+      } catch (error) {
+        updatePaneAction({
+          error:
+            error instanceof HerdrMutationError && error.outcome === "unknown"
+              ? "The split result could not be confirmed. Refresh before trying again."
+              : error instanceof Error
+                ? error.message
+                : "Could not split the pane.",
+        });
+      }
+    },
+    [actionsEnabled, agent.panes.length, onSplitPane, updatePaneAction],
+  );
 
   const commitPaneResize = useCallback(
     async (ratio: number) => {
       const next = clampPaneRatio(ratio);
-      setPaneResizeDragging(false);
-      if (!actionsEnabled || paneResizePending || next === sourcePaneRatio) {
-        setPaneRatio(sourcePaneRatio);
+      updatePaneAction({ dragging: false });
+      if (!actionsEnabled || paneAction.pending || next === sourcePaneRatio) {
         return;
       }
-      setPaneResizePending(true);
+      updatePaneAction({ pending: true, ratio: next, error: "" });
       try {
         await onResizePanes(next);
-      } catch {
-        setPaneRatio(sourcePaneRatio);
+      } catch (error) {
+        updatePaneAction({
+          error:
+            error instanceof HerdrMutationError && error.outcome === "unknown"
+              ? "The resize result could not be confirmed. Refresh before trying again."
+              : error instanceof Error
+                ? error.message
+                : "Could not resize the panes.",
+        });
       } finally {
-        setPaneResizePending(false);
+        updatePaneAction({ pending: false });
       }
     },
-    [actionsEnabled, onResizePanes, paneResizePending, sourcePaneRatio],
+    [
+      actionsEnabled,
+      onResizePanes,
+      paneAction.pending,
+      sourcePaneRatio,
+      updatePaneAction,
+    ],
   );
 
   const confirmClose = async () => {
@@ -651,10 +682,10 @@ export function TerminalWorkspace({
         setFocusMode((current) => !current);
       } else if (event.altKey && event.key.toLowerCase() === "\\") {
         event.preventDefault();
-        if (actionsEnabled && agent.panes.length < 2) void onSplitPane("right");
+        void splitPane("right");
       } else if (event.altKey && event.key.toLowerCase() === "-") {
         event.preventDefault();
-        if (actionsEnabled && agent.panes.length < 2) void onSplitPane("down");
+        void splitPane("down");
       } else if (event.altKey && event.key.toLowerCase() === "w") {
         event.preventDefault();
         if (actionsEnabled && agent.panes.length > 1 && activePane) {
@@ -674,53 +705,15 @@ export function TerminalWorkspace({
     agent.panes.length,
     commitPaneResize,
     focusMode,
-    onSplitPane,
     paneRatio,
     selectRelativePane,
+    splitPane,
   ]);
 
   const terminalContext = (pane: TerminalPane) => {
-    const paneWorkingDirectory = pane.cwd || workspace.path;
     return (
       <>
-        {paneWorkingDirectory && (
-          <span className="terminal-toolbar-location">
-            <code className="workspace-cwd" title={paneWorkingDirectory}>
-              <span className="sr-only">
-                Current working directory: {paneWorkingDirectory}
-              </span>
-              <span className="workspace-cwd-full" aria-hidden="true">
-                {paneWorkingDirectory}
-              </span>
-              <span className="workspace-cwd-compact" aria-hidden="true">
-                {compactPath(paneWorkingDirectory)}
-              </span>
-            </code>
-            <IconTooltip
-              label={
-                copiedCwdPaneId === pane.id
-                  ? "Current working directory copied"
-                  : "Copy current working directory"
-              }
-            >
-              <button
-                type="button"
-                className="workspace-copy-cwd"
-                aria-label={
-                  copiedCwdPaneId === pane.id
-                    ? "Current working directory copied"
-                    : "Copy current working directory"
-                }
-                onClick={() =>
-                  void copyWorkingDirectory(paneWorkingDirectory, pane.id)
-                }
-              >
-                {copiedCwdPaneId === pane.id ? <CheckIcon /> : <CopyIcon />}
-              </button>
-            </IconTooltip>
-          </span>
-        )}
-        {workspace.branch && (
+        {pane.id === activePane?.id && workspace.branch && (
           <code
             className="terminal-toolbar-branch"
             title={`Branch: ${workspace.branch}`}
@@ -740,79 +733,45 @@ export function TerminalWorkspace({
     includeClose: boolean,
   ) => {
     const splitDisabled = !actionsEnabled || agent.panes.length >= 2;
-    const split = (direction: PaneSplitDirection) => {
-      void Promise.resolve(onSplitPane(direction)).catch(() => undefined);
-    };
     return (
       <>
-        <IconTooltip
-          label={focusMode ? "Exit pane focus mode" : "Focus this pane"}
+        <DropdownMenu.Item
+          className="terminal-actions-menu-item"
+          onSelect={() => {
+            onSelectPane(pane.id);
+            setFocusMode((current) => !current);
+          }}
         >
-          <IconButton
-            type="button"
-            variant="ghost"
-            color="gray"
-            aria-pressed={focusMode}
-            aria-label={focusMode ? "Exit pane focus mode" : "Focus this pane"}
-            onClick={() => {
-              onSelectPane(pane.id);
-              setFocusMode((current) => !current);
+          {focusMode ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
+          {focusMode ? "Exit pane focus mode" : "Focus this pane"}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          className="terminal-actions-menu-item"
+          disabled={splitDisabled}
+          onSelect={() => void splitPane("right")}
+        >
+          <ColumnsIcon aria-hidden="true" />
+          Split right
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          className="terminal-actions-menu-item"
+          disabled={splitDisabled}
+          onSelect={() => void splitPane("down")}
+        >
+          <RowsIcon aria-hidden="true" />
+          Split down
+        </DropdownMenu.Item>
+        {includeClose && actionsEnabled && (
+          <DropdownMenu.Item
+            className="terminal-actions-menu-item"
+            onSelect={() => {
+              setCloseError("");
+              setClosingPane(pane);
             }}
           >
-            {focusMode ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
-          </IconButton>
-        </IconTooltip>
-        <DropdownMenu.Root>
-          <IconTooltip
-            label={
-              agent.panes.length >= 2
-                ? "This session already has two panes"
-                : "Split pane"
-            }
-          >
-            <DropdownMenu.Trigger>
-              <IconButton
-                type="button"
-                variant="ghost"
-                color="gray"
-                aria-label="Split pane"
-                title={
-                  agent.panes.length >= 2
-                    ? "This session already has two panes."
-                    : "Split pane"
-                }
-                disabled={splitDisabled}
-              >
-                <ColumnsIcon />
-              </IconButton>
-            </DropdownMenu.Trigger>
-          </IconTooltip>
-          <DropdownMenu.Content align="end" sideOffset={6} size="1">
-            <DropdownMenu.Item onSelect={() => split("right")}>
-              <ColumnsIcon aria-hidden="true" />
-              Split right
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => split("down")}>
-              <RowsIcon aria-hidden="true" />
-              Split down
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-        {includeClose && actionsEnabled && (
-          <IconTooltip label={`Close ${pane.title} pane`}>
-            <IconButton
-              type="button"
-              variant="ghost"
-              color="gray"
-              aria-label={`Close ${pane.title} pane`}
-              onClick={() => {
-                setCloseError("");
-                setClosingPane(pane);
-              }}
-            >
-              <Cross2Icon />
-            </IconButton>
-          </IconTooltip>
+            <Cross2Icon aria-hidden="true" />
+            Close {pane.title} pane
+          </DropdownMenu.Item>
         )}
       </>
     );
@@ -832,6 +791,11 @@ export function TerminalWorkspace({
 
       <section className="terminal-shell" aria-label={`${agent.label} session`}>
         <AgentProgressSummary agent={agent} />
+        {paneAction.error && (
+          <div className="terminal-inline-error" role="alert">
+            {paneAction.error}
+          </div>
+        )}
         {!terminalStreaming && activePane && (
           <div className="interactive-terminal-tools terminal-fallback-tools">
             <span className="terminal-toolbar-context">
@@ -848,7 +812,27 @@ export function TerminalWorkspace({
               </span>
             </span>
             <span className="interactive-terminal-actions">
-              {terminalStructureActions(activePane, false)}
+              <DropdownMenu.Root>
+                <IconTooltip label="More terminal actions">
+                  <DropdownMenu.Trigger asChild>
+                    <button type="button" aria-label="More terminal actions">
+                      <DotsHorizontalIcon />
+                    </button>
+                  </DropdownMenu.Trigger>
+                </IconTooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="terminal-actions-menu"
+                    align="end"
+                    sideOffset={6}
+                  >
+                    {terminalStructureActions(
+                      activePane,
+                      agent.panes.length > 1,
+                    )}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </span>
           </div>
         )}
@@ -878,7 +862,7 @@ export function TerminalWorkspace({
           className="pane-grid"
           data-direction={paneSplitDirection}
           data-many={!terminalStreaming && agent.panes.length > 2}
-          data-resizing={paneResizeDragging}
+          data-resizing={paneAction.dragging}
           data-split={showsPaneSplit}
           style={paneGridStyle}
         >
@@ -886,16 +870,14 @@ export function TerminalWorkspace({
             <Fragment key={pane.id}>
               {index === 1 && showsPaneSplit && (
                 <PaneResizeHandle
+                  key={agent.id}
                   direction={paneSplitDirection}
-                  disabled={!actionsEnabled || paneResizePending}
+                  disabled={!actionsEnabled || paneAction.pending}
                   ratio={paneRatio}
-                  onCancel={() => {
-                    setPaneResizeDragging(false);
-                    setPaneRatio(sourcePaneRatio);
-                  }}
+                  onCancel={() => updatePaneAction({ dragging: false })}
                   onCommit={(ratio) => void commitPaneResize(ratio)}
-                  onDragStart={() => setPaneResizeDragging(true)}
-                  onPreview={setPaneRatio}
+                  onDragStart={() => updatePaneAction({ dragging: true })}
+                  onPreview={(ratio) => updatePaneAction({ ratio })}
                 />
               )}
               {terminalStreaming ? (
@@ -926,7 +908,7 @@ export function TerminalWorkspace({
                     protocol={protocol}
                     reducedMotion={reducedMotion}
                     toolbarContext={terminalContext(pane)}
-                    toolbarActions={terminalStructureActions(
+                    overflowActions={terminalStructureActions(
                       pane,
                       agent.panes.length > 1,
                     )}

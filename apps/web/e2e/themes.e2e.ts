@@ -246,9 +246,12 @@ for (const { browserColor, label, theme } of cleanThemes) {
       WORKBENCH_THEMES.map((option) => option.browserColor),
     );
     await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Open more actions" }).click();
     await page
       .getByRole("button", {
-        name: `Use ${themeAppearance(theme) === "light" ? "dark" : "light"} appearance`,
+        name: new RegExp(
+          `^Use ${themeAppearance(theme) === "light" ? "dark" : "light"} appearance`,
+        ),
       })
       .click();
     expect(
@@ -350,7 +353,7 @@ for (const { browserColor, label, theme } of cleanThemes) {
     for (const direction of ["right", "down"] as const) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.reload();
-      await page.getByRole("button", { name: "Split pane" }).click();
+      await page.getByRole("button", { name: "More terminal actions" }).click();
       await page.getByRole("menuitem", { name: `Split ${direction}` }).click();
       const resize = page.getByRole("separator", {
         name: "Resize terminal panes",

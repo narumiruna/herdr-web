@@ -35,15 +35,16 @@ describe("AgentProgressSummary", () => {
     ["working", "Working"],
     ["done", "Done"],
     ["failed", "Failed"],
-  ] as const)("shows %s as a semantic status", (status, label) => {
+  ] as const)("does not repeat the %s status", (status, label) => {
     const agent = demoAgent();
     agent.status = status;
     const { container } = render(<AgentProgressSummary agent={agent} />);
 
-    expect(container.querySelector(`.status-${status}`)).toBeInTheDocument();
     expect(
-      container.querySelector(".agent-progress-copy small"),
-    ).toHaveTextContent(label);
+      container.querySelector(`.status-${status}`),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
+    expect(screen.getByText(agent.currentStep)).toBeVisible();
   });
 
   test("uses a summary as the task and omits an empty disclosure", () => {
@@ -61,7 +62,7 @@ describe("AgentProgressSummary", () => {
     const emptyAgent = demoAgent();
     emptyAgent.currentStep = "";
     emptyAgent.summary = "";
-    emptyAgent.updated = "";
+    emptyAgent.updated = "just now";
     const empty = render(<AgentProgressSummary agent={emptyAgent} />);
     expect(empty.container).toBeEmptyDOMElement();
     empty.unmount();
