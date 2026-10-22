@@ -24,7 +24,7 @@ import { WorkflowTemplateStore } from "./workflow-template-store.js";
 const token = process.env.HERDR_WEB_TOKEN?.trim();
 if (!token) {
   console.error(
-    "HERDR_WEB_TOKEN is required; use `just run` or set it explicitly.",
+    "HERDR_WEB_TOKEN is required; use `npm run dev` or set it explicitly.",
   );
   process.exit(1);
 }

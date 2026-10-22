@@ -12,8 +12,18 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const projectRoot = process.cwd();
+const projectRoot = await realpath(process.cwd());
 const cliPath = resolve(projectRoot, "scripts/herdr-web.mjs");
+const devArgs = [
+  "exec",
+  "--",
+  "concurrently",
+  "--kill-others",
+  "--names",
+  "web,bridge",
+  "vite",
+  "tsx watch server/index.ts",
+];
 const directories: string[] = [];
 
 afterEach(async () => {
@@ -127,7 +137,7 @@ describe("herdr-web CLI", () => {
         ],
         cwd: result.root,
       },
-      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
+      { command: "npm", args: devArgs, cwd: projectRoot },
     ]);
   });
 
@@ -159,7 +169,7 @@ describe("herdr-web CLI", () => {
 
     expect(result.status).toBe(0);
     expect(result.invocations).toEqual([
-      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
+      { command: "npm", args: devArgs, cwd: projectRoot },
     ]);
   });
 
@@ -216,7 +226,7 @@ describe("herdr-web CLI", () => {
         ],
         cwd: result.root,
       },
-      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
+      { command: "npm", args: devArgs, cwd: projectRoot },
     ]);
   });
 
@@ -226,7 +236,7 @@ describe("herdr-web CLI", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("development server exited with status 9");
     expect(result.invocations).toEqual([
-      { command: "npm", args: ["run", "dev"], cwd: projectRoot },
+      { command: "npm", args: devArgs, cwd: projectRoot },
     ]);
   });
 
