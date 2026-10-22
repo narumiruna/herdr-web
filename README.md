@@ -22,7 +22,6 @@ Supported Agent presets are Claude Code, Codex, Muse, OpenCode, Pi, and Qwen Cod
 - Node.js 22 or newer.
 - Herdr 0.8 or newer, installed and running with `herdr terminal session control` and `observe` support.
 - Herdr 0.9 or newer for saved SSH machine profiles.
-- [`just`](https://github.com/casey/just) for convenience commands and the Docker workflow.
 - Docker only when using the container workflow.
 
 Confirm that the local Herdr server is available:
@@ -70,13 +69,13 @@ On Windows, herdr-web discovers Herdr's named pipe through `herdr status --json`
 Install dependencies and start Vite with the authenticated bridge:
 
 ```sh
-just install
-just run
+npm install
+npm run dev
 ```
 
-To link the `herdr-web` CLI from this checkout, run `just install-cli`.
+To install dependencies and link the `herdr-web` CLI from this checkout, run `npm run link:cli`.
 
-`just run` selects available ports, creates an access token, and prints local and LAN URLs. Open the `network` URL from another device only on a trusted network.
+`npm run dev` selects available ports, creates an access token, and prints local and LAN URLs. Open the `network` URL from another device only on a trusted network.
 
 To use stable credentials or a named Herdr socket:
 
@@ -84,17 +83,10 @@ To use stable credentials or a named Herdr socket:
 HERDR_WEB_TOKEN=my-long-random-controller-token \
 HERDR_WEB_VIEW_TOKEN=my-different-read-only-token \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
-just run
+npm run dev
 ```
 
-The CLI does not require `just`. To run the development processes manually, set a token explicitly:
-
-```sh
-npm install
-HERDR_WEB_TOKEN=my-long-random-token npm run dev
-```
-
-Vite prints the network URL. If the URL does not contain the token, the page asks for it.
+Run `npm run preview` to build the production application, select an available port, and start the bridge with an access token. Use `npm start` to serve an existing build with an explicitly configured `HERDR_WEB_TOKEN`.
 
 ## Workbench guide
 
@@ -181,7 +173,7 @@ Common environment variables:
 | `HERDR_WEB_HOME` | Product data directory; defaults to `$HOME/.herdr-web`. |
 | `HERDR_SOCKET_PATH` | Herdr-owned Unix socket or Windows named-pipe override. |
 | `HERDR_WEB_VAPID_CONTACT` | Optional `mailto:` or HTTPS contact for generated Web Push identity. |
-| `HERDR_WEB_PORT` | Fixed host port for `just up`. |
+| `HERDR_WEB_PORT` | Fixed host port for `npm run docker:up`. |
 | `HERDR_PROJECTS_ROOT` | Narrowest common host directory containing Docker-accessible projects. |
 
 Herdr continues to own `$HOME/.config/herdr/`, its socket, API, and `HERDR_*` settings. herdr-web does not edit Herdr configuration, plugin registries, or Agent integration files directly.
@@ -193,8 +185,10 @@ Browser preferences and session values use `herdr-web-*` keys. Compatible values
 Build and start the production container:
 
 ```sh
-just up
+npm run docker:up
 ```
+
+These Docker helper commands require a POSIX shell (macOS, Linux, or WSL) and Docker Compose.
 
 The command:
 
@@ -210,15 +204,15 @@ HERDR_WEB_PORT=4173 \
 HERDR_WEB_HOME="$HOME/.herdr-web" \
 HERDR_SOCKET_PATH="$HOME/.config/herdr/sessions/work/herdr.sock" \
 HERDR_PROJECTS_ROOT="$HOME/workspace" \
-just up
+npm run docker:up
 ```
 
-`just up` bind-mounts `HERDR_PROJECTS_ROOT` and `HERDR_WEB_HOME` at the same absolute paths and runs the container with the host UID and GID. This keeps uploads readable by host-side Agents. The default project root is `$HOME`; use the narrowest common parent of all required projects. Uploads fail safely when an Agent's active directory is outside the mounted root.
+`npm run docker:up` bind-mounts `HERDR_PROJECTS_ROOT` and `HERDR_WEB_HOME` at the same absolute paths and runs the container with the host UID and GID. This keeps uploads readable by host-side Agents. The default project root is `$HOME`; use the narrowest common parent of all required projects. Uploads fail safely when an Agent's active directory is outside the mounted root.
 
 Stop the container and proxies:
 
 ```sh
-just down
+npm run docker:down
 ```
 
 The production process serves the SPA and authenticated API. `/healthz` checks the web process; authenticated `/api/herdr/state` also proves access to the live Herdr server.
@@ -239,17 +233,20 @@ Treat every printed or shared URL like a password. Use direct LAN access only on
 
 ## Development
 
-This repository is a monorepo. `apps/web/` contains the browser workbench, Node bridge, published `herdr-web` CLI, and their tests. The root package is private and uses npm workspaces with a single root lockfile; run the commands below and the `just` recipes from the repository root. npm publishes only the `apps/web` workspace. The native iPhone supervisor is in [`apps/ios/`](apps/ios/README.md) and is not an npm workspace. It connects to a directly reachable herdr-web bridge using a separate token field (not a browser token URL). See its README for Xcode/Simulator setup, HTTPS and LAN safety, signing, build/test commands, and v1 limits.
+This repository is a monorepo. `apps/web/` contains the browser workbench, Node bridge, published `herdr-web` CLI, and their tests. The root package is private and uses npm workspaces with a single root lockfile; run the npm commands below from the repository root. Run `npm run` to list the available scripts. npm publishes only the `apps/web` workspace. The native iPhone supervisor is in [`apps/ios/`](apps/ios/README.md) and is not an npm workspace. It connects to a directly reachable herdr-web bridge using a separate token field (not a browser token URL). See its README for Xcode/Simulator setup, HTTPS and LAN safety, signing, build/test commands, and v1 limits.
 
 Run the repository checks:
 
 ```sh
-npm run check          # Biome formatting and lint rules
-npm run check:package  # npm package metadata and runtime contents
-npm test               # Vitest unit and integration tests
-npm run test:e2e       # Playwright desktop and mobile checks
-npm run build          # Browser and Node production bundles
-npm run ci             # checks, package inspection, tests, and build
+npm run check              # Biome formatting and lint rules
+npm run check:fix          # Apply formatting and safe lint fixes
+npm run check:package      # npm package metadata and runtime contents
+npm test                   # Vitest unit and integration tests
+npm run test:watch         # Vitest watch mode
+npm run test:e2e           # Playwright desktop and mobile checks
+npm run build              # Browser and Node production bundles
+npm run check:font-assets  # Bundled terminal fonts (after build)
+npm run ci                 # Checks, package inspection, tests, build, and fonts
 ```
 
 Install Playwright's Chromium once if needed:

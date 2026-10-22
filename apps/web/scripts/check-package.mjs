@@ -73,10 +73,10 @@ const packed = JSON.parse(
 const files = new Set(packed.files.map(({ path }) => path));
 for (const path of [
   "index.html",
-  "justfile",
   "LICENSE",
   "README.md",
   "scripts/herdr-web.mjs",
+  "scripts/preview.mjs",
   "scripts/start-workbench.mjs",
   "scripts/startup-environment.mjs",
   "scripts/startup-environment.d.mts",

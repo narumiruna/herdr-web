@@ -63,8 +63,8 @@ export function ConnectionScreen({
             <LockClosedIcon className="connection-lock" aria-hidden="true" />
             <h1>Enter the access token</h1>
             <p>
-              Use the token printed by <code>just run</code> or{" "}
-              <code>just up</code>.
+              Use the token printed by <code>npm run dev</code> or{" "}
+              <code>npm run docker:up</code>.
             </p>
             <form className="connection-form" onSubmit={submit}>
               <TextField.Root
